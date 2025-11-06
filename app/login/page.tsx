@@ -26,11 +26,20 @@ export default function LoginPage() {
 
       const data = await response.json()
 
+      console.log('📥 Login response:', { 
+        success: data.success, 
+        error: data.error,
+        status: response.status 
+      })
+
       if (!data.success) {
-        setError(data.error || 'Login failed')
+        const errorMessage = data.error || 'Login failed'
+        console.error('❌ Login failed:', errorMessage)
+        setError(errorMessage)
         return
       }
 
+      console.log('✅ Login successful, redirecting...')
       router.push('/dashboard')
       router.refresh()
     } catch (err: any) {

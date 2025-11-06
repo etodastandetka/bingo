@@ -36,13 +36,29 @@ export async function authenticateUser(username: string, password: string) {
     where: { username },
   })
 
-  if (!user || !user.isActive) {
+  console.log('🔍 User lookup:', { 
+    username, 
+    found: !!user, 
+    isActive: user?.isActive,
+    hasPassword: !!user?.password 
+  })
+
+  if (!user) {
+    console.log('❌ User not found:', username)
+    return null
+  }
+
+  if (!user.isActive) {
+    console.log('❌ User is not active:', username)
     return null
   }
 
   const isValid = await verifyPassword(password, user.password)
 
+  console.log('🔑 Password verification:', { username, isValid })
+
   if (!isValid) {
+    console.log('❌ Invalid password for user:', username)
     return null
   }
 
