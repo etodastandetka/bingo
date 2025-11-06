@@ -34,10 +34,16 @@ export async function POST(request: NextRequest) {
     )
 
     // Устанавливаем cookie с правильными параметрами
-    const isProduction = process.env.NODE_ENV === 'production'
+    // Проверяем, используется ли HTTPS по заголовку
+    const protocol = request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '')
+    const isHttps = protocol === 'https'
+    
+    // Secure только для HTTPS, иначе cookie не установится на HTTP
+    const secureFlag = isHttps
+    
     response.cookies.set('auth_token', result.token, {
       httpOnly: true,
-      secure: isProduction, // HTTPS только в production
+      secure: secureFlag, // Secure только для HTTPS
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/', // Важно: cookie должен быть доступен для всего сайта
@@ -45,9 +51,11 @@ export async function POST(request: NextRequest) {
 
     console.log('🍪 Cookie установлен:', {
       hasToken: !!result.token,
-      secure: isProduction,
+      secure: secureFlag,
       sameSite: 'lax',
-      path: '/'
+      path: '/',
+      protocol: protocol,
+      isHttps: isHttps
     })
 
     return response

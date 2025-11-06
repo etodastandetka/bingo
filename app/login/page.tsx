@@ -41,9 +41,21 @@ export default function LoginPage() {
 
       console.log('✅ Login successful, redirecting...')
       
+      // Проверяем, что cookie установился
+      const cookies = document.cookie
+      console.log('🍪 Cookies after login:', cookies)
+      
+      if (!cookies.includes('auth_token')) {
+        console.warn('⚠️ Cookie не найден в document.cookie (это нормально для httpOnly cookies)')
+      }
+      
+      // Небольшая задержка, чтобы cookie успел установиться
       // Используем window.location для полного перезагрузки страницы
       // Это гарантирует, что cookie будет прочитан middleware
-      window.location.href = '/dashboard'
+      setTimeout(() => {
+        console.log('🔄 Redirecting to /dashboard...')
+        window.location.href = '/dashboard'
+      }, 200)
     } catch (err: any) {
       setError(err.message || 'Login failed')
     } finally {

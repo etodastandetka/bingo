@@ -4,14 +4,14 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value
 
-  // Логируем для отладки (только в development)
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('🔐 Middleware check:', {
-      path: request.nextUrl.pathname,
-      hasToken: !!token,
-      cookies: request.cookies.getAll().map(c => c.name)
-    })
-  }
+  // Логируем для отладки (включаем всегда для диагностики)
+  console.log('🔐 Middleware check:', {
+    path: request.nextUrl.pathname,
+    hasToken: !!token,
+    tokenPreview: token ? token.substring(0, 20) + '...' : null,
+    cookies: request.cookies.getAll().map(c => `${c.name}=${c.value.substring(0, 10)}...`),
+    allCookies: request.cookies.getAll().map(c => c.name)
+  })
 
   // Public routes that don't require authentication
   const publicRoutes = ['/login', '/api/auth/login']
@@ -49,19 +49,14 @@ export function middleware(request: NextRequest) {
   // Protect dashboard pages
   if (request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname === '/') {
     if (!token) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('❌ No token, redirecting to /login')
-      }
+      console.log('❌ No token, redirecting to /login from:', request.nextUrl.pathname)
+      console.log('   Available cookies:', request.cookies.getAll().map(c => c.name).join(', ') || 'none')
       const loginUrl = new URL('/login', request.url)
-      // Добавляем параметр для отладки
-      if (process.env.NODE_ENV !== 'production') {
-        loginUrl.searchParams.set('redirected', 'true')
-      }
+      loginUrl.searchParams.set('redirected', 'true')
+      loginUrl.searchParams.set('from', request.nextUrl.pathname)
       return NextResponse.redirect(loginUrl)
     } else {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('✅ Token found, allowing access to dashboard')
-      }
+      console.log('✅ Token found, allowing access to dashboard')
     }
   }
 
