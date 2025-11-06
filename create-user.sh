@@ -21,17 +21,32 @@ echo "👤 Создаем пользователя администратора.
 echo "Логин: $USERNAME"
 echo "Email: $EMAIL"
 
-# Создаем временный скрипт для создания пользователя
-cat > /tmp/create-user-temp.ts << EOF
+# Убеждаемся, что зависимости установлены
+if [ ! -d "node_modules" ]; then
+    echo "📦 Устанавливаем зависимости..."
+    npm install
+fi
+
+# Генерируем Prisma клиент
+echo "🗄️ Генерируем Prisma клиент..."
+npm run db:generate
+
+# Создаем скрипт в текущей директории (не в /tmp)
+cat > create-user-temp.ts << 'SCRIPT_EOF'
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
 async function main() {
-  const username = '$USERNAME'
-  const password = '$PASSWORD'
-  const email = '$EMAIL'
+  const username = process.argv[2]
+  const password = process.argv[3]
+  const email = process.argv[4] || 'admin@bingo.com'
+
+  if (!username || !password) {
+    console.error('❌ Ошибка: не указаны username и password')
+    process.exit(1)
+  }
 
   // Хешируем пароль
   const hashedPassword = await bcrypt.hash(password, 10)
@@ -47,10 +62,11 @@ async function main() {
       where: { username },
       data: {
         password: hashedPassword,
-        email: email || null
+        email: email || null,
+        isActive: true
       }
     })
-    console.log(\`✅ Пользователь \${username} обновлен!\`)
+    console.log(`✅ Пользователь ${username} обновлен!`)
   } else {
     // Создаем нового пользователя
     await prisma.adminUser.create({
@@ -58,10 +74,11 @@ async function main() {
         username,
         password: hashedPassword,
         email: email || null,
+        isActive: true,
         isSuperAdmin: true
       }
     })
-    console.log(\`✅ Пользователь \${username} создан!\`)
+    console.log(`✅ Пользователь ${username} создан!`)
   }
 }
 
@@ -71,15 +88,15 @@ main()
     process.exit(1)
   })
   .finally(async () => {
-    await prisma.\$disconnect()
+    await prisma.$disconnect()
   })
-EOF
+SCRIPT_EOF
 
-# Запускаем скрипт
-npx tsx /tmp/create-user-temp.ts
+# Запускаем скрипт с аргументами
+npx tsx create-user-temp.ts "$USERNAME" "$PASSWORD" "$EMAIL"
 
 # Удаляем временный файл
-rm -f /tmp/create-user-temp.ts
+rm -f create-user-temp.ts
 
 echo ""
 echo "✅ Готово! Теперь можно войти с:"
