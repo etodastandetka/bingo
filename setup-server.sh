@@ -12,13 +12,36 @@ echo "📁 Создаем директорию проекта..."
 sudo mkdir -p /var/www/bingo
 sudo chown -R $USER:$USER /var/www/bingo
 
+# Создаем директорию для логов PM2
+echo "📁 Создаем директорию для логов..."
+sudo mkdir -p /var/log/pm2
+sudo chown -R $USER:$USER /var/log/pm2
+
 # Клонируем репозиторий
 echo "📥 Клонируем репозиторий..."
 cd /var/www/bingo
 if [ -d "admin_nextjs" ]; then
     echo "⚠️ Директория уже существует, пропускаем клонирование"
+    cd admin_nextjs
+    echo "🔄 Обновляем существующий репозиторий..."
+    git pull origin main || echo "⚠️ Не удалось обновить (возможно, нет сети или изменений)"
 else
-    git clone https://github.com/etodastandetka/bingo.git admin_nextjs
+    echo "📥 Клонируем репозиторий..."
+    git clone https://github.com/etodastandetka/bingo.git admin_nextjs || {
+        echo "❌ Ошибка при клонировании репозитория!"
+        echo "💡 Возможные причины:"
+        echo "   - Нет подключения к интернету"
+        echo "   - Проблемы с DNS (не может разрешить github.com)"
+        echo "   - Проблемы с доступом к GitHub"
+        echo ""
+        echo "🔧 Решения:"
+        echo "   1. Проверьте подключение к интернету: ping github.com"
+        echo "   2. Проверьте DNS: nslookup github.com"
+        echo "   3. Попробуйте использовать SSH вместо HTTPS:"
+        echo "      git clone git@github.com:etodastandetka/bingo.git admin_nextjs"
+        exit 1
+    }
+    cd admin_nextjs
 fi
 
 cd admin_nextjs
