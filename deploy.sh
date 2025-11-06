@@ -30,8 +30,20 @@ cd /var/www/bingo/admin_nextjs
 # Получаем последние изменения из GitHub
 if [ "$SKIP_PULL" = false ]; then
     echo "📥 Получаем изменения из GitHub..."
-    git stash 2>/dev/null || true  # Сохраняем локальные изменения если есть
-    git pull origin main || echo "⚠️ Не удалось получить изменения (возможно, нет сети)"
+    
+    # Проверяем, есть ли локальные изменения
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        echo "⚠️ Обнаружены локальные изменения, сохраняем их..."
+        git stash push -m "Auto-stash before deploy $(date +%Y-%m-%d_%H:%M:%S)" 2>/dev/null || true
+    fi
+    
+    # Пытаемся получить обновления
+    if git pull origin main; then
+        echo "✅ Обновления получены успешно"
+    else
+        echo "⚠️ Не удалось получить изменения (возможно, конфликт или нет сети)"
+        echo "   Продолжаем с текущей версией..."
+    fi
 fi
 
 # Устанавливаем зависимости (если нужно)
