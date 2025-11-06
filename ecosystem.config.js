@@ -8,7 +8,7 @@ module.exports = {
       interpreter: 'none',
       env: {
         NODE_ENV: 'production',
-        PORT: 3001
+        PORT: 3002
       },
       error_file: '/var/log/pm2/bingo-admin-error.log',
       out_file: '/var/log/pm2/bingo-admin-out.log',
