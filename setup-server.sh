@@ -26,21 +26,31 @@ if [ -d "admin_nextjs" ]; then
     echo "🔄 Обновляем существующий репозиторий..."
     git pull origin main || echo "⚠️ Не удалось обновить (возможно, нет сети или изменений)"
 else
-    echo "📥 Клонируем репозиторий..."
-    git clone https://github.com/etodastandetka/bingo.git admin_nextjs || {
-        echo "❌ Ошибка при клонировании репозитория!"
-        echo "💡 Возможные причины:"
-        echo "   - Нет подключения к интернету"
-        echo "   - Проблемы с DNS (не может разрешить github.com)"
-        echo "   - Проблемы с доступом к GitHub"
-        echo ""
-        echo "🔧 Решения:"
-        echo "   1. Проверьте подключение к интернету: ping github.com"
-        echo "   2. Проверьте DNS: nslookup github.com"
-        echo "   3. Попробуйте использовать SSH вместо HTTPS:"
-        echo "      git clone git@github.com:etodastandetka/bingo.git admin_nextjs"
-        exit 1
-    }
+    echo "📥 Клонируем репозиторий через HTTPS..."
+    if git clone https://github.com/etodastandetka/bingo.git admin_nextjs; then
+        echo "✅ Репозиторий успешно склонирован!"
+    else
+        echo "❌ Ошибка при клонировании репозитория через HTTPS!"
+        echo "💡 Попробуем через SSH..."
+        if git clone git@github.com:etodastandetka/bingo.git admin_nextjs; then
+            echo "✅ Репозиторий успешно склонирован через SSH!"
+        else
+            echo "❌ Ошибка при клонировании репозитория!"
+            echo "💡 Возможные причины:"
+            echo "   - Нет подключения к интернету"
+            echo "   - Проблемы с DNS (не может разрешить github.com)"
+            echo "   - Проблемы с доступом к GitHub"
+            echo "   - Для SSH: нет настроенного SSH ключа"
+            echo ""
+            echo "🔧 Решения:"
+            echo "   1. Проверьте подключение: ping github.com"
+            echo "   2. Проверьте DNS: nslookup github.com"
+            echo "   3. Используйте HTTPS (не требует ключей):"
+            echo "      git clone https://github.com/etodastandetka/bingo.git admin_nextjs"
+            echo "   4. Или настройте SSH ключ (см. CLONE_REPO.md)"
+            exit 1
+        fi
+    fi
     cd admin_nextjs
 fi
 
