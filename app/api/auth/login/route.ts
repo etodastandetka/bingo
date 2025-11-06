@@ -33,11 +33,21 @@ export async function POST(request: NextRequest) {
       createApiResponse({ user: result.user, message: 'Login successful' })
     )
 
+    // Устанавливаем cookie с правильными параметрами
+    const isProduction = process.env.NODE_ENV === 'production'
     response.cookies.set('auth_token', result.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProduction, // HTTPS только в production
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/', // Важно: cookie должен быть доступен для всего сайта
+    })
+
+    console.log('🍪 Cookie установлен:', {
+      hasToken: !!result.token,
+      secure: isProduction,
+      sameSite: 'lax',
+      path: '/'
     })
 
     return response

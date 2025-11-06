@@ -4,6 +4,15 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value
 
+  // Логируем для отладки (только в development)
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('🔐 Middleware check:', {
+      path: request.nextUrl.pathname,
+      hasToken: !!token,
+      cookies: request.cookies.getAll().map(c => c.name)
+    })
+  }
+
   // Public routes that don't require authentication
   const publicRoutes = ['/login', '/api/auth/login']
   const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route))
@@ -40,7 +49,19 @@ export function middleware(request: NextRequest) {
   // Protect dashboard pages
   if (request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname === '/') {
     if (!token) {
-      return NextResponse.redirect(new URL('/login', request.url))
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('❌ No token, redirecting to /login')
+      }
+      const loginUrl = new URL('/login', request.url)
+      // Добавляем параметр для отладки
+      if (process.env.NODE_ENV !== 'production') {
+        loginUrl.searchParams.set('redirected', 'true')
+      }
+      return NextResponse.redirect(loginUrl)
+    } else {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('✅ Token found, allowing access to dashboard')
+      }
     }
   }
 

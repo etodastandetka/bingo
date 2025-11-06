@@ -40,8 +40,10 @@ export default function LoginPage() {
       }
 
       console.log('✅ Login successful, redirecting...')
-      router.push('/dashboard')
-      router.refresh()
+      
+      // Используем window.location для полного перезагрузки страницы
+      // Это гарантирует, что cookie будет прочитан middleware
+      window.location.href = '/dashboard'
     } catch (err: any) {
       setError(err.message || 'Login failed')
     } finally {
