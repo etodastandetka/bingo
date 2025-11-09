@@ -1,216 +1,194 @@
-# Инструкция по настройке сервера для BINGO Admin Panel
+# Инструкция по настройке на сервере
 
-## Шаг 1: Создание директорий
-
-Выполните на сервере:
+## 1. Клонирование/Обновление репозитория
 
 ```bash
-# Создаем директории
-sudo mkdir -p /var/www/bingo
-sudo mkdir -p /var/log/pm2
-
-# Устанавливаем права доступа
-sudo chown -R $USER:$USER /var/www/bingo
-sudo chown -R $USER:$USER /var/log/pm2
+cd /var/www/bingo
+git pull origin main
 ```
 
-Или используйте готовый скрипт (если уже склонировали репозиторий):
+## 2. Обновление зависимостей
 
+### Админка (Next.js):
 ```bash
 cd /var/www/bingo/admin_nextjs
-chmod +x create-directories.sh
-sudo ./create-directories.sh
-```
-
-## Шаг 2: Клонирование репозитория
-
-### Если есть доступ к GitHub:
-
-```bash
-cd /var/www/bingo
-git clone https://github.com/etodastandetka/bingo.git admin_nextjs
-cd admin_nextjs
-```
-
-### Если нет доступа к GitHub (проблемы с сетью):
-
-**Вариант 1: Использовать SSH (если настроен SSH ключ)**
-```bash
-cd /var/www/bingo
-git clone git@github.com:etodastandetka/bingo.git admin_nextjs
-cd admin_nextjs
-```
-
-**Вариант 2: Загрузить архив вручную**
-1. Скачайте ZIP архив с GitHub на локальный компьютер
-2. Загрузите на сервер через SCP/SFTP:
-```bash
-scp bingo-main.zip user@server:/var/www/bingo/
-```
-3. Распакуйте на сервере:
-```bash
-cd /var/www/bingo
-unzip bingo-main.zip
-mv bingo-main admin_nextjs
-cd admin_nextjs
-```
-
-**Вариант 3: Исправить DNS/сеть**
-```bash
-# Проверьте DNS
-nslookup github.com
-
-# Если не работает, добавьте в /etc/hosts
-echo "140.82.121.3 github.com" | sudo tee -a /etc/hosts
-
-# Или используйте другой DNS
-echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
-```
-
-## Шаг 3: Установка зависимостей
-
-```bash
-cd /var/www/bingo/admin_nextjs
-
-# Устанавливаем Node.js (если не установлен)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# Или для CentOS/RHEL
-# curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
-# sudo yum install -y nodejs
-
-# Устанавливаем зависимости проекта
 npm install
-```
-
-## Шаг 4: Настройка переменных окружения
-
-```bash
-cd /var/www/bingo/admin_nextjs
-
-# Создаем .env файл
-cat > .env << EOF
-DATABASE_URL="postgresql://gen_user:dastan10dz@92.51.38.85:5432/default_db?schema=public"
-JWT_SECRET="luxon-admin-secret-key-2025-change-in-production"
-NODE_ENV="production"
-ADMIN_USERNAME="dastan"
-ADMIN_PASSWORD="dastan10dz"
-ADMIN_EMAIL="admin@luxon.com"
-EOF
-```
-
-## Шаг 5: Настройка базы данных
-
-```bash
-cd /var/www/bingo/admin_nextjs
-
-# Генерируем Prisma клиент
-npm run db:generate
-
-# Применяем схему БД
-npm run db:push
-
-# Создаем администратора
-npm run create-admin
-```
-
-## Шаг 6: Сборка приложения
-
-```bash
-cd /var/www/bingo/admin_nextjs
 npm run build
 ```
 
-## Шаг 7: Установка и настройка PM2
-
+### Сайт оплаты (Flask):
 ```bash
-# Устанавливаем PM2 глобально
-sudo npm install -g pm2
-
-# Запускаем приложение
-cd /var/www/bingo/admin_nextjs
-pm2 start ecosystem.config.js
-
-# Сохраняем конфигурацию
-pm2 save
-
-# Настраиваем автозапуск
-pm2 startup
-# Выполните команду, которую выведет PM2
+cd /var/www/bingo/payment_site
+pip3 install -r requirements.txt
 ```
 
-## Шаг 8: Настройка Nginx
+### Бот (Python):
+```bash
+cd /var/www/bingo/telegram_bot
+pip3 install -r requirements.txt
+```
+
+## 3. Настройка переменных окружения
+
+### Админка (`/var/www/bingo/admin_nextjs/.env`):
+```env
+DATABASE_URL=postgresql://gen_user:dastan10dz@92.51.38.85:5432/default_db
+BOT_TOKEN=your_bot_token_here
+NEXTAUTH_SECRET=your_secret_here
+NODE_ENV=production
+PORT=3002
+```
+
+### Бот (`/var/www/bingo/telegram_bot/.env`):
+```env
+BOT_TOKEN=your_bot_token_here
+API_BASE_URL=https://fqxgmrzplndwsyvkeu.ru/api
+PAYMENT_SITE_URL=https://gldwueprxkmbtqsnva.ru
+```
+
+### Сайт оплаты (`/var/www/bingo/payment_site/.env`):
+```env
+API_BASE_URL=https://fqxgmrzplndwsyvkeu.ru/api
+FLASK_ENV=production
+PORT=3003
+```
+
+## 4. Получение SSL сертификатов
 
 ```bash
-cd /var/www/bingo/admin_nextjs
+# Остановите nginx временно
+sudo systemctl stop nginx
 
-# Копируем конфигурацию Nginx
-sudo cp nginx.conf /etc/nginx/sites-available/bingo-admin
+# Получите сертификаты
+sudo certbot certonly --standalone -d fqxgmrzplndwsyvkeu.ru
+sudo certbot certonly --standalone -d gldwueprxkmbtqsnva.ru
 
-# Создаем символическую ссылку
-sudo ln -sf /etc/nginx/sites-available/bingo-admin /etc/nginx/sites-enabled/
+# Запустите nginx обратно
+sudo systemctl start nginx
+```
 
-# Удаляем дефолтную конфигурацию (если нужно)
-sudo rm -f /etc/nginx/sites-enabled/default
+## 5. Настройка Nginx
 
-# Проверяем конфигурацию
+### Создайте `/etc/nginx/sites-available/bingo-admin`:
+```nginx
+server {
+    listen 80;
+    server_name fqxgmrzplndwsyvkeu.ru;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name fqxgmrzplndwsyvkeu.ru;
+
+    ssl_certificate /etc/letsencrypt/live/fqxgmrzplndwsyvkeu.ru/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/fqxgmrzplndwsyvkeu.ru/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    location / {
+        proxy_pass http://127.0.0.1:3002;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header Cookie $http_cookie;
+        proxy_pass_header Set-Cookie;
+    }
+}
+```
+
+### Создайте `/etc/nginx/sites-available/bingo-payment`:
+```nginx
+server {
+    listen 80;
+    server_name gldwueprxkmbtqsnva.ru;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name gldwueprxkmbtqsnva.ru;
+
+    ssl_certificate /etc/letsencrypt/live/gldwueprxkmbtqsnva.ru/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/gldwueprxkmbtqsnva.ru/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    location / {
+        proxy_pass http://127.0.0.1:3003;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+### Активация конфигов:
+```bash
+sudo ln -s /etc/nginx/sites-available/bingo-admin /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/bingo-payment /etc/nginx/sites-enabled/
 sudo nginx -t
-
-# Перезапускаем Nginx
 sudo systemctl reload nginx
 ```
 
-## Шаг 9: Получение SSL сертификата
+## 6. Запуск через PM2
 
 ```bash
-# Устанавливаем Certbot
-sudo apt update
-sudo apt install certbot python3-certbot-nginx -y
+cd /var/www/bingo
 
-# Получаем сертификат
-sudo certbot --nginx -d fqxgmrzplndwsyvkeu.ru -d www.fqxgmrzplndwsyvkeu.ru
-```
+# Обновите ecosystem.config.js для сервера (пути должны быть /var/www/bingo)
+# Или используйте существующий, но проверьте пути
 
-## Шаг 10: Проверка работы
+# Запустите приложения
+pm2 start ecosystem.config.js
 
-```bash
-# Проверяем статус PM2
-pm2 status
-
-# Проверяем логи
-pm2 logs bingo-admin
-
-# Проверяем Nginx
-sudo systemctl status nginx
-
-# Проверяем доступность сайта
-curl http://localhost:3001
-```
-
-## Полезные команды
-
-### Обновление приложения:
-```bash
-cd /var/www/bingo/admin_nextjs
-./deploy.sh
-```
-
-### Просмотр логов:
-```bash
-pm2 logs bingo-admin
-pm2 logs bingo-email-watcher
-```
-
-### Перезапуск приложения:
-```bash
-pm2 restart bingo-admin
+# Или если уже запущены - перезапустите
 pm2 restart all
+
+# Сохраните конфигурацию
+pm2 save
+
+# Настройте автозапуск
+pm2 startup
 ```
 
-### Проверка статуса:
+## 7. Проверка работы
+
 ```bash
+# Проверьте статус PM2
 pm2 status
-pm2 monit
+
+# Проверьте логи
+pm2 logs bingo-admin
+pm2 logs bingo-payment
+pm2 logs bingo-bot
+
+# Проверьте сайты
+curl -I https://fqxgmrzplndwsyvkeu.ru
+curl -I https://gldwueprxkmbtqsnva.ru
 ```
 
+## Быстрая команда для обновления:
+
+```bash
+cd /var/www/bingo && \
+git pull origin main && \
+cd admin_nextjs && npm install && npm run build && \
+cd ../payment_site && pip3 install -r requirements.txt && \
+cd ../telegram_bot && pip3 install -r requirements.txt && \
+cd .. && pm2 restart all
+```
