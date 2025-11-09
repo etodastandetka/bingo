@@ -15,8 +15,8 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: var(--tg-theme-bg-color, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
-            color: var(--tg-theme-text-color, #1a1a1a);
+            background: var(--tg-theme-bg-color, linear-gradient(135deg, #0a1a2e 0%, #16213e 25%, #1a237e 50%, #0d47a1 75%, #1565c0 100%));
+            color: var(--tg-theme-text-color, #ffffff);
             min-height: 100vh;
             display: flex;
             justify-content: center;
@@ -26,12 +26,14 @@
         }
         
         .container {
-            background: var(--tg-theme-secondary-bg-color, white);
+            background: var(--tg-theme-secondary-bg-color, rgba(15, 30, 60, 0.95));
             border-radius: 24px;
             padding: 32px;
             max-width: 480px;
             width: 100%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         
         .header {
@@ -40,7 +42,7 @@
         }
         
         .header h1 {
-            color: var(--tg-theme-text-color, #1a1a1a);
+            color: var(--tg-theme-text-color, #ffffff);
             font-size: 24px;
             font-weight: 600;
             margin-bottom: 12px;
@@ -49,8 +51,9 @@
         .amount {
             font-size: 32px;
             font-weight: 700;
-            color: var(--tg-theme-button-color, #667eea);
+            color: var(--tg-theme-button-color, #64b5f6);
             margin: 16px 0;
+            text-shadow: 0 2px 10px rgba(100, 181, 246, 0.5);
         }
         
         .timer {
@@ -62,16 +65,18 @@
         }
         
         .block {
-            background: var(--tg-theme-bg-color, #f8f9fa);
+            background: var(--tg-theme-bg-color, rgba(26, 35, 126, 0.3));
             border-radius: 16px;
             padding: 20px;
             margin: 20px 0;
+            border: 1px solid rgba(100, 181, 246, 0.2);
+            backdrop-filter: blur(5px);
         }
         
         .block-title {
             font-size: 14px;
             font-weight: 600;
-            color: var(--tg-theme-hint-color, #666);
+            color: var(--tg-theme-hint-color, #90caf9);
             margin-bottom: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -104,32 +109,35 @@
         
         .bank-button {
             padding: 12px;
-            border: 2px solid var(--tg-theme-hint-color, #e0e0e0);
+            border: 2px solid var(--tg-theme-hint-color, rgba(100, 181, 246, 0.3));
             border-radius: 12px;
-            background: var(--tg-theme-secondary-bg-color, white);
+            background: var(--tg-theme-secondary-bg-color, rgba(15, 30, 60, 0.6));
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s;
             text-align: center;
             text-decoration: none;
-            color: var(--tg-theme-text-color, #333);
+            color: var(--tg-theme-text-color, #ffffff);
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 6px;
             font-size: 13px;
             font-weight: 500;
+            backdrop-filter: blur(5px);
         }
         
         .bank-button:hover {
-            border-color: var(--tg-theme-button-color, #667eea);
-            background: var(--tg-theme-bg-color, #f0f4ff);
-            transform: translateY(-1px);
+            border-color: var(--tg-theme-button-color, #64b5f6);
+            background: var(--tg-theme-bg-color, rgba(26, 35, 126, 0.5));
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(100, 181, 246, 0.3);
         }
         
         .bank-button.active {
-            border-color: var(--tg-theme-button-color, #667eea);
-            background: var(--tg-theme-button-color, #667eea);
+            border-color: var(--tg-theme-button-color, #64b5f6);
+            background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
             color: var(--tg-theme-button-text-color, white);
+            box-shadow: 0 4px 20px rgba(100, 181, 246, 0.5);
         }
         
         .warning {
@@ -147,23 +155,26 @@
         }
         
         .upload-area {
-            border: 2px dashed var(--tg-theme-hint-color, #ddd);
+            border: 2px dashed var(--tg-theme-hint-color, rgba(100, 181, 246, 0.4));
             border-radius: 12px;
             padding: 24px;
             text-align: center;
             cursor: pointer;
-            transition: all 0.2s;
-            background: var(--tg-theme-secondary-bg-color, white);
+            transition: all 0.3s;
+            background: var(--tg-theme-secondary-bg-color, rgba(15, 30, 60, 0.4));
+            backdrop-filter: blur(5px);
         }
         
         .upload-area:hover {
-            border-color: var(--tg-theme-button-color, #667eea);
-            background: var(--tg-theme-bg-color, #f8f9ff);
+            border-color: var(--tg-theme-button-color, #64b5f6);
+            background: var(--tg-theme-bg-color, rgba(26, 35, 126, 0.5));
+            box-shadow: 0 4px 15px rgba(100, 181, 246, 0.2);
         }
         
         .upload-area.dragover {
-            border-color: var(--tg-theme-button-color, #667eea);
-            background: var(--tg-theme-bg-color, #f0f4ff);
+            border-color: var(--tg-theme-button-color, #64b5f6);
+            background: var(--tg-theme-bg-color, rgba(26, 35, 126, 0.6));
+            box-shadow: 0 4px 20px rgba(100, 181, 246, 0.4);
         }
         
         .upload-icon {

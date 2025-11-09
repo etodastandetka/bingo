@@ -191,10 +191,10 @@ async def deposit_amount_received(message: Message, state: FSMContext):
         # Передаем user_id для Mini App
         payment_url += f"&user_id={message.from_user.id}"
         
-        # Отправляем ссылку на оплату
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        # Отправляем кнопку WebApp для оплаты
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='💳 Перейти к оплате', url=payment_url)]
+            [InlineKeyboardButton(text='💳 Перейти к оплате', web_app=WebAppInfo(url=payment_url))]
         ])
         
         await message.answer(
