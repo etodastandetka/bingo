@@ -1,6 +1,12 @@
 import aiohttp
+import ssl
 from config import Config
 from typing import Optional, Dict, Any
+
+# Отключаем проверку SSL для внутренних запросов
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
 
 class APIClient:
     @staticmethod
@@ -19,7 +25,8 @@ class APIClient:
         withdrawal_code: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Создать заявку на пополнение или вывод"""
-        async with aiohttp.ClientSession() as session:
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
             data = {
                 'telegram_user_id': str(telegram_user_id),
                 'type': request_type,
@@ -54,7 +61,8 @@ class APIClient:
     @staticmethod
     async def generate_qr(amount: float, bank: str) -> Dict[str, Any]:
         """Генерировать QR код для оплаты"""
-        async with aiohttp.ClientSession() as session:
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
             async with session.post(
                 f'{Config.API_BASE_URL}/public/generate-qr',
                 json={'amount': amount, 'bank': bank}
@@ -64,7 +72,8 @@ class APIClient:
     @staticmethod
     async def get_payment_settings() -> Dict[str, Any]:
         """Получить настройки платежей из админки"""
-        async with aiohttp.ClientSession() as session:
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
             try:
                 async with session.get(
                     f'{Config.API_BASE_URL}/public/payment-settings'
