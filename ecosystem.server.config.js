@@ -19,8 +19,7 @@ module.exports = {
     {
       name: 'bingo-payment',
       cwd: '/var/www/bingo/payment_site',
-      script: 'python',
-      args: 'app.py',
+      script: 'app.py',
       interpreter: 'python3',
       env: {
         FLASK_ENV: 'production',
@@ -36,8 +35,7 @@ module.exports = {
     {
       name: 'bingo-bot',
       cwd: '/var/www/bingo/telegram_bot',
-      script: 'python',
-      args: 'bot.py',
+      script: 'bot.py',
       interpreter: 'python3',
       error_file: '/var/log/pm2/bingo-bot-error.log',
       out_file: '/var/log/pm2/bingo-bot-out.log',
