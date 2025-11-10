@@ -765,8 +765,6 @@
             }
         };
         
-        // Инициализация данных только если открыто в Telegram
-        if (tg && tg.initDataUnsafe?.user) {
         // Инициализация при загрузке страницы
         if (tg && tg.initDataUnsafe?.user) {
             console.log('✅ Telegram WebApp initialized');
@@ -774,7 +772,7 @@
             console.warn('⚠️ Not in Telegram WebApp, but continuing anyway');
         }
         
-        // Инициализируем все компоненты
+        // Инициализируем все компоненты (всегда, независимо от Telegram)
         initReceiptUpload();
         setupBankButtons(); // Показываем банки сразу
         loadQR(); // Загружаем QR код
