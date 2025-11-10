@@ -18,6 +18,7 @@ interface Request {
   status: string
   status_detail: string | null
   createdAt: string
+  photoFileUrl: string | null
 }
 
 export default function DashboardPage() {
@@ -305,10 +306,22 @@ export default function DashboardPage() {
                 className="block bg-gray-800 bg-opacity-50 rounded-xl p-4 border border-gray-700 hover:border-blue-500 transition-colors backdrop-blur-sm"
               >
                   <div className="flex items-start justify-between">
-                    {/* Левая часть: Иконка банка и информация о пользователе */}
+                    {/* Левая часть: Иконка банка/ELQR и информация о пользователе */}
                     <div className="flex items-start space-x-3 flex-1">
-                      {/* Иконка банка */}
-                      {getBankImage(request.bank) ? (
+                      {/* Иконка: для пополнений - ELQR фото, для выводов - фото банка */}
+                      {isDeposit && request.photoFileUrl ? (
+                        // Для пополнений показываем фото ELQR
+                        <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border border-gray-600 bg-gray-900 relative">
+                          <Image
+                            src={request.photoFileUrl}
+                            alt="ELQR"
+                            fill
+                            className="object-cover"
+                            unoptimized={request.photoFileUrl.startsWith('data:')}
+                          />
+                        </div>
+                      ) : !isDeposit && getBankImage(request.bank) ? (
+                        // Для выводов показываем фото банка
                         <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border border-gray-600 bg-gray-900 relative">
                           <Image
                             src={getBankImage(request.bank) || ''}
@@ -318,6 +331,7 @@ export default function DashboardPage() {
                           />
                         </div>
                       ) : (
+                        // Дефолтная иконка
                         <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center flex-shrink-0">
                           <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
                             <svg className="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">

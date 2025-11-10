@@ -17,6 +17,7 @@ interface Transaction {
   bookmaker: string
   bank: string
   created_at: string
+  photoFileUrl: string | null
 }
 
 export default function HistoryPage() {
@@ -249,8 +250,20 @@ export default function HistoryPage() {
                 <div className="flex items-start justify-between">
                   {/* Левая часть: Аватар и информация о пользователе */}
                   <div className="flex items-start space-x-3 flex-1">
-                    {/* Иконка банка */}
-                    {getBankImage(tx.bank) ? (
+                    {/* Иконка: для пополнений - ELQR фото, для выводов - фото банка */}
+                    {isDeposit && tx.photoFileUrl ? (
+                      // Для пополнений показываем фото ELQR
+                      <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border border-gray-600 bg-gray-900 relative">
+                        <Image
+                          src={tx.photoFileUrl}
+                          alt="ELQR"
+                          fill
+                          className="object-cover"
+                          unoptimized={tx.photoFileUrl.startsWith('data:')}
+                        />
+                      </div>
+                    ) : !isDeposit && getBankImage(tx.bank) ? (
+                      // Для выводов показываем фото банка
                       <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border border-gray-600 bg-gray-900 relative">
                         <Image
                           src={getBankImage(tx.bank) || ''}
@@ -260,6 +273,7 @@ export default function HistoryPage() {
                         />
                       </div>
                     ) : (
+                      // Дефолтная иконка
                       <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center flex-shrink-0">
                         <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
                           <svg className="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
