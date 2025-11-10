@@ -135,19 +135,6 @@ async def deposit_amount_received(message: Message, state: FSMContext):
         import random
         amount_with_cents = amount + (random.randint(1, 99) / 100)
         
-        # Генерируем QR код
-        qr_hash = None
-        try:
-            qr_data = await APIClient.generate_qr(amount_with_cents, 'mbank')
-            if not qr_data.get('success'):
-                raise Exception(qr_data.get('error', 'Failed to generate QR'))
-            
-            qr_hash = qr_data.get('qr_hash')
-        except Exception as e:
-            print(f"QR generation error: {e}")
-            # Если не удалось сгенерировать QR, продолжаем без него
-            qr_hash = None
-        
         # Создаем заявку
         request_id = None
         try:
@@ -183,9 +170,8 @@ async def deposit_amount_received(message: Message, state: FSMContext):
             return
         
         # Формируем URL для оплаты
+        # QR код будет сгенерирован на форме оплаты
         payment_url = f"{Config.PAYMENT_SITE_URL}/pay?amount={amount_with_cents}"
-        if qr_hash:
-            payment_url += f"&qr={qr_hash}"
         if request_id:
             payment_url += f"&request_id={request_id}"
         # Передаем user_id для Mini App
