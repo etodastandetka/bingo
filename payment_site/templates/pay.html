@@ -348,46 +348,45 @@
     <script>
         // Инициализация Telegram WebApp
         let tg = window.Telegram?.WebApp;
-        if (tg) {
+        
+        // Проверка, открыто ли приложение в Telegram
+        if (!tg || !tg.initDataUnsafe?.user) {
+            // Если открыто не в Telegram, показываем предупреждение
+            document.body.innerHTML = `
+                <div style="
+                    background: var(--tg-theme-bg-color, #ffffff);
+                    color: var(--tg-theme-text-color, #000000);
+                    padding: 40px 20px;
+                    height: 100vh;
+                    width: 100vw;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    text-align: center;
+                ">
+                    <img src="https://telegram.org/img/t_logo.png" alt="Telegram" style="width: 120px; height: 120px; margin-bottom: 20px;">
+                    <p style="font-size: 18px; margin: 8px 0;"><strong>Упс!</strong></p>
+                    <p style="font-size: 18px; margin: 8px 0;">Это приложение должно быть запущено <strong>внутри Telegram!</strong></p>
+                </div>
+            `;
+        } else {
+            // Если открыто в Telegram, инициализируем приложение
             tg.expand(); // Расширяем на все окно
             tg.ready(); // Говорим Telegram, что приложение готово
         }
         
-        // Получаем ID пользователя из Telegram WebApp или из URL
+        // Получаем ID пользователя из Telegram WebApp
         function getUserId() {
-            // Пробуем разные способы получения ID из Telegram WebApp
-            if (tg) {
-                // Способ 1: initDataUnsafe.user.id (основной способ)
-                if (tg.initDataUnsafe?.user?.id) {
-                    console.log('✅ Got user ID from initDataUnsafe.user.id:', tg.initDataUnsafe.user.id);
-                    return tg.initDataUnsafe.user.id.toString();
-                }
-                
-                // Способ 2: initData (если доступен)
-                if (tg.initData) {
-                    try {
-                        const initData = new URLSearchParams(tg.initData);
-                        const userData = initData.get('user');
-                        if (userData) {
-                            const user = JSON.parse(decodeURIComponent(userData));
-                            if (user.id) {
-                                console.log('✅ Got user ID from initData:', user.id);
-                                return user.id.toString();
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('Failed to parse initData:', e);
-                    }
-                }
-                
-                // Способ 3: WebAppUser (если доступен)
-                if (tg.WebAppUser?.id) {
-                    console.log('✅ Got user ID from WebAppUser.id:', tg.WebAppUser.id);
-                    return tg.WebAppUser.id.toString();
-                }
+            // Основной способ: initDataUnsafe.user.id
+            if (tg?.initDataUnsafe?.user?.id) {
+                const userId = tg.initDataUnsafe.user.id.toString();
+                console.log('✅ Got user ID from initDataUnsafe.user.id:', userId);
+                return userId;
             }
             
-            // Если не в Telegram, пытаемся получить из URL параметров
+            // Fallback: пытаемся получить из URL параметров (если передано)
             const urlParams = new URLSearchParams(window.location.search);
             const userIdFromUrl = urlParams.get('user_id');
             if (userIdFromUrl) {
@@ -395,40 +394,40 @@
                 return userIdFromUrl;
             }
             
-            console.warn('⚠️ Could not get user ID from Telegram WebApp or URL');
+            console.warn('⚠️ Could not get user ID from Telegram WebApp');
             return null;
         }
         
-        const amount = parseFloat('{{ amount }}');
-        const requestId = '{{ request_id }}';
-        const expiresAt = parseInt('{{ expires_timestamp }}');
-        const telegramUserId = getUserId();
-        let bankUrls = {};
-        let selectedBank = 'omoney'; // По умолчанию O!Money
-        let receiptFile = null;
+        // Инициализация данных только если открыто в Telegram
+        if (tg && tg.initDataUnsafe?.user) {
+            const amount = parseFloat('{{ amount }}');
+            const requestId = '{{ request_id }}';
+            const expiresAt = parseInt('{{ expires_timestamp }}');
+            const telegramUserId = getUserId();
+            let bankUrls = {};
+            let selectedBank = 'omoney'; // По умолчанию O!Money
+            let receiptFile = null;
+            
+            console.log('📊 Payment Form Data:', {
+                telegramUserId: telegramUserId,
+                requestId: requestId,
+                amount: amount,
+                expiresAt: expiresAt,
+                user: tg.initDataUnsafe.user
+            });
         
-        console.log('📊 Payment Form Data:', {
-            telegramUserId: telegramUserId,
-            requestId: requestId,
-            amount: amount,
-            expiresAt: expiresAt,
-            tgAvailable: !!tg,
-            initDataUnsafe: tg?.initDataUnsafe ? 'available' : 'not available',
-            initData: tg?.initData ? 'available' : 'not available'
-        });
-        
-        // Банки
-        const banks = [
-            { id: 'omoney', name: 'O!Money' },
-            { id: 'mbank', name: 'MBank' },
-            { id: 'bakai', name: 'Bakai' },
-            { id: 'demirbank', name: 'DemirBank' },
-            { id: 'balance', name: 'Balance.kg' },
-            { id: 'megapay', name: 'MegaPay' }
-        ];
-        
-        // Таймер обратного отсчета
-        function updateTimer() {
+            // Банки
+            const banks = [
+                { id: 'omoney', name: 'O!Money' },
+                { id: 'mbank', name: 'MBank' },
+                { id: 'bakai', name: 'Bakai' },
+                { id: 'demirbank', name: 'DemirBank' },
+                { id: 'balance', name: 'Balance.kg' },
+                { id: 'megapay', name: 'MegaPay' }
+            ];
+            
+            // Таймер обратного отсчета
+            function updateTimer() {
             const now = Date.now();
             const remaining = expiresAt - now;
             
@@ -733,8 +732,9 @@
             }
         }
         
-        // Загружаем QR код при загрузке страницы
-        loadQR();
+            // Загружаем QR код при загрузке страницы
+            loadQR();
+        } // Конец проверки if (tg && tg.initDataUnsafe?.user)
     </script>
 </body>
 </html>
