@@ -6,12 +6,18 @@ import qrcode
 import io
 import base64
 import os
+import ssl
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
 CORS(app)
 
-API_BASE_URL = 'http://fqxgmrzplndwsyvkeu.ru/api'
+API_BASE_URL = 'https://fqxgmrzplndwsyvkeu.ru/api'
+
+# Отключаем проверку SSL для внутренних запросов
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
 
 # Путь к изображениям банков (из admin панели)
 # Если изображения не найдены, можно использовать относительный путь
@@ -33,7 +39,8 @@ BANKS = [
 
 async def generate_qr_async(amount, bank):
     """Асинхронная генерация QR кода"""
-    async with aiohttp.ClientSession() as session:
+    connector = aiohttp.TCPConnector(ssl=ssl_context)
+    async with aiohttp.ClientSession(connector=connector) as session:
         async with session.post(
             f'{API_BASE_URL}/public/generate-qr',
             json={'amount': amount, 'bank': bank}
