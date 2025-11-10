@@ -394,15 +394,18 @@
             return null;
         }
         
+        // Глобальные переменные для функции submitPayment
+        let amount, requestId, expiresAt, telegramUserId, bankUrls, selectedBank, receiptFile;
+        
         // Инициализация данных только если открыто в Telegram
         if (tg && tg.initDataUnsafe?.user) {
-            const amount = parseFloat('{{ amount }}');
-            const requestId = '{{ request_id }}';
-            const expiresAt = parseInt('{{ expires_timestamp }}');
-            const telegramUserId = getUserId();
-            let bankUrls = {};
-            let selectedBank = 'omoney'; // По умолчанию O!Money
-            let receiptFile = null;
+            amount = parseFloat('{{ amount }}');
+            requestId = '{{ request_id }}';
+            expiresAt = parseInt('{{ expires_timestamp }}');
+            telegramUserId = getUserId();
+            bankUrls = {};
+            selectedBank = 'omoney'; // По умолчанию O!Money
+            receiptFile = null;
             
             console.log('📊 Payment Form Data:', {
                 telegramUserId: telegramUserId,
@@ -618,8 +621,22 @@
             fileInput.value = '';
         }
         
-        // Отправка заявки с чеком при нажатии "Я оплатил"
-        async function submitPayment() {
+        // Отправка заявки с чеком при нажатии "Я оплатил" (глобальная функция)
+        window.submitPayment = async function() {
+            // Проверяем, что открыто в Telegram
+            if (!tg || !tg.initDataUnsafe?.user) {
+                if (tg) {
+                    tg.showPopup({
+                        title: 'Ошибка',
+                        message: 'Приложение должно быть открыто в Telegram',
+                        buttons: [{ type: 'ok' }]
+                    });
+                } else {
+                    alert('Приложение должно быть открыто в Telegram');
+                }
+                return;
+            }
+            
             const paidButton = document.getElementById('paidButton');
             
             if (!requestId) {
@@ -726,11 +743,13 @@
                     alert('Ошибка: ' + (error.message || 'Не удалось отправить заявку'));
                 }
             }
-        }
+        };
         
+        // Инициализация данных только если открыто в Telegram
+        if (tg && tg.initDataUnsafe?.user) {
             // Загружаем QR код при загрузке страницы
             loadQR();
-        } // Конец проверки if (tg && tg.initDataUnsafe?.user)
+        }
     </script>
 </body>
 </html>
