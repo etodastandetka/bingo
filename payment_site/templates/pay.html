@@ -394,59 +394,66 @@
             return null;
         }
         
-        // Глобальные переменные для функции submitPayment
+        // Глобальные переменные
         let amount, requestId, expiresAt, telegramUserId, bankUrls, selectedBank, receiptFile;
         
-        // Инициализация данных только если открыто в Telegram
-        if (tg && tg.initDataUnsafe?.user) {
-            amount = parseFloat('{{ amount }}');
-            requestId = '{{ request_id }}';
-            expiresAt = parseInt('{{ expires_timestamp }}');
-            telegramUserId = getUserId();
-            bankUrls = {};
-            selectedBank = 'omoney'; // По умолчанию O!Money
-            receiptFile = null;
-            
-            console.log('📊 Payment Form Data:', {
-                telegramUserId: telegramUserId,
-                requestId: requestId,
-                amount: amount,
-                expiresAt: expiresAt,
-                user: tg.initDataUnsafe.user
-            });
+        // Инициализация данных (всегда, независимо от Telegram)
+        amount = parseFloat('{{ amount }}') || 0;
+        requestId = '{{ request_id }}' || '';
+        expiresAt = parseInt('{{ expires_timestamp }}') || (Date.now() + 300000);
+        telegramUserId = getUserId();
+        bankUrls = {};
+        selectedBank = 'omoney';
+        receiptFile = null;
         
-            // Банки
-            const banks = [
-                { id: 'omoney', name: 'O!Money' },
-                { id: 'mbank', name: 'MBank' },
-                { id: 'bakai', name: 'Bakai' },
-                { id: 'demirbank', name: 'DemirBank' },
-                { id: 'balance', name: 'Balance.kg' },
-                { id: 'megapay', name: 'MegaPay' }
-            ];
-            
-            // Таймер обратного отсчета
-            function updateTimer() {
+        // Банки (глобальная переменная)
+        const banks = [
+            { id: 'omoney', name: 'O!Money' },
+            { id: 'mbank', name: 'MBank' },
+            { id: 'bakai', name: 'Bakai' },
+            { id: 'demirbank', name: 'DemirBank' },
+            { id: 'balance', name: 'Balance.kg' },
+            { id: 'megapay', name: 'MegaPay' }
+        ];
+        
+        console.log('📊 Payment Form Data:', {
+            telegramUserId: telegramUserId,
+            requestId: requestId,
+            amount: amount,
+            expiresAt: expiresAt,
+            tgAvailable: !!tg,
+            userAvailable: !!tg?.initDataUnsafe?.user
+        });
+        
+        // Таймер обратного отсчета (глобальная функция)
+        function updateTimer() {
             const now = Date.now();
             const remaining = expiresAt - now;
             
             if (remaining <= 0) {
-                document.getElementById('timer').textContent = '00:00';
-                document.getElementById('timer').style.color = '#e74c3c';
+                const timerEl = document.getElementById('timer');
+                if (timerEl) {
+                    timerEl.textContent = '00:00';
+                    timerEl.style.color = '#e74c3c';
+                }
                 return;
             }
             
             const minutes = Math.floor(remaining / 60000);
             const seconds = Math.floor((remaining % 60000) / 1000);
             
-            document.getElementById('timer').textContent = 
-                `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            const timerEl = document.getElementById('timer');
+            if (timerEl) {
+                timerEl.textContent = 
+                    `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
         }
         
+        // Запускаем таймер
         setInterval(updateTimer, 1000);
         updateTimer();
         
-        // Генерация QR кода (один раз, не меняется при смене банка)
+        // Генерация QR кода (глобальная функция)
         async function loadQR() {
             try {
                 // Прямой запрос к API админки
@@ -490,10 +497,11 @@
             }
         }
         
-        // Генерация QR изображения из ссылки
+        // Генерация QR изображения из ссылки (глобальная функция)
         function generateQRImage(url) {
-            // Генерируем QR код из полной ссылки банка
             const qrContainer = document.getElementById('qrContainer');
+            if (!qrContainer) return;
+            
             qrContainer.innerHTML = `
                 <div class="qr-code">
                     <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(url)}" alt="QR Code">
@@ -502,9 +510,14 @@
             `;
         }
         
-        // Настройка кнопок банков
+        // Настройка кнопок банков (глобальная функция)
         function setupBankButtons() {
             const bankButtonsContainer = document.getElementById('bankButtons');
+            if (!bankButtonsContainer) {
+                console.warn('bankButtons container not found');
+                return;
+            }
+            
             bankButtonsContainer.innerHTML = '';
             
             banks.forEach(bank => {
@@ -543,41 +556,43 @@
             });
         }
         
-        // Показываем банки сразу, даже если QR еще не загрузился
-        setupBankButtons();
+        // Инициализация загрузки фото чека (глобальная функция)
+        function initReceiptUpload() {
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+            const receiptPreview = document.getElementById('receiptPreview');
+            const receiptImage = document.getElementById('receiptImage');
+            
+            if (!uploadArea || !fileInput) return;
+            
+            uploadArea.addEventListener('click', () => fileInput.click());
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFile(files[0]);
+                }
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFile(e.target.files[0]);
+                }
+            });
+        }
         
-        // Загрузка фото чека
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const receiptPreview = document.getElementById('receiptPreview');
-        const receiptImage = document.getElementById('receiptImage');
-        
-        uploadArea.addEventListener('click', () => fileInput.click());
-        
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-        
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFile(files[0]);
-            }
-        });
-        
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
-            }
-        });
-        
+        // Обработка файла (глобальная функция)
         function handleFile(file) {
             if (!file.type.startsWith('image/')) {
                 if (tg) {
@@ -614,12 +629,17 @@
             reader.readAsDataURL(file);
         }
         
-        function removeReceipt() {
+        // Удаление чека (глобальная функция)
+        window.removeReceipt = function() {
             receiptFile = null;
-            receiptImage.src = '';
-            receiptPreview.classList.remove('show');
-            fileInput.value = '';
-        }
+            const receiptImage = document.getElementById('receiptImage');
+            const receiptPreview = document.getElementById('receiptPreview');
+            const fileInput = document.getElementById('fileInput');
+            
+            if (receiptImage) receiptImage.src = '';
+            if (receiptPreview) receiptPreview.classList.remove('show');
+            if (fileInput) fileInput.value = '';
+        };
         
         // Отправка заявки с чеком при нажатии "Я оплатил" (глобальная функция)
         window.submitPayment = async function() {
@@ -747,9 +767,17 @@
         
         // Инициализация данных только если открыто в Telegram
         if (tg && tg.initDataUnsafe?.user) {
-            // Загружаем QR код при загрузке страницы
-            loadQR();
+        // Инициализация при загрузке страницы
+        if (tg && tg.initDataUnsafe?.user) {
+            console.log('✅ Telegram WebApp initialized');
+        } else {
+            console.warn('⚠️ Not in Telegram WebApp, but continuing anyway');
         }
+        
+        // Инициализируем все компоненты
+        initReceiptUpload();
+        setupBankButtons(); // Показываем банки сразу
+        loadQR(); // Загружаем QR код
     </script>
 </body>
 </html>
