@@ -324,7 +324,6 @@
         const requestId = '{{ request_id }}';
         const expiresAt = parseInt('{{ expires_timestamp }}');
         const telegramUserId = getUserId();
-        let qrHash = '';
         let bankUrls = {};
         let selectedBank = 'omoney'; // По умолчанию O!Money
         let receiptFile = null;
@@ -366,8 +365,8 @@
         // Генерация QR кода (один раз, не меняется при смене банка)
         async function loadQR() {
             try {
-                // Используем локальный API сайта оплаты, который проксирует запрос к API серверу
-                const response = await fetch('/api/generate-qr', {
+                // Прямой запрос к API админки
+                const response = await fetch('https://fqxgmrzplndwsyvkeu.ru/api/public/generate-qr', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -381,11 +380,18 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    qrHash = data.qr_hash;
                     bankUrls = data.all_bank_urls || {};
                     
-                    // Генерируем QR изображение локально
-                    generateQRImage(qrHash);
+                    // Берем ссылку O!Money из all_bank_urls
+                    const omoneyUrl = bankUrls['omoney'] || bankUrls['O!Money'] || data.primary_url;
+                    
+                    if (omoneyUrl) {
+                        // Генерируем QR код из ссылки O!Money
+                        generateQRImage(omoneyUrl);
+                    } else {
+                        document.getElementById('qrContainer').innerHTML = 
+                            `<div class="loading" style="color: #e74c3c;">Ошибка: Ссылка O!Money не найдена</div>`;
+                    }
                     
                     // Настраиваем кнопки банков
                     setupBankButtons();
@@ -400,13 +406,13 @@
             }
         }
         
-        // Генерация QR изображения
-        function generateQRImage(hash) {
-            // Используем библиотеку qrcode.js или API для генерации изображения
+        // Генерация QR изображения из ссылки
+        function generateQRImage(url) {
+            // Генерируем QR код из полной ссылки банка
             const qrContainer = document.getElementById('qrContainer');
             qrContainer.innerHTML = `
                 <div class="qr-code">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(hash)}" alt="QR Code">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(url)}" alt="QR Code">
                 </div>
                 <p style="margin-top: 12px; color: #666; font-size: 13px;">Отсканируйте QR код для оплаты</p>
             `;
