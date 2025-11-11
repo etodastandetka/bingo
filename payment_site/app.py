@@ -86,6 +86,13 @@ def pay():
     amount = request.args.get('amount', '0')
     qr_hash = request.args.get('qr', '')
     request_id = request.args.get('request_id', '')
+    # Новые параметры для создания заявки
+    user_id = request.args.get('user_id', '')
+    casino_id = request.args.get('casino_id', '')
+    account_id = request.args.get('account_id', '')
+    username = request.args.get('username', '')
+    first_name = request.args.get('first_name', '')
+    last_name = request.args.get('last_name', '')
     
     # Вычисляем время окончания (5 минут)
     expires_at = datetime.now() + timedelta(minutes=5)
@@ -95,6 +102,12 @@ def pay():
                          amount=amount,
                          qr_hash=qr_hash,
                          request_id=request_id,
+                         user_id=user_id,
+                         casino_id=casino_id,
+                         account_id=account_id,
+                         username=username,
+                         first_name=first_name,
+                         last_name=last_name,
                          banks=BANKS,
                          expires_timestamp=expires_timestamp)
 

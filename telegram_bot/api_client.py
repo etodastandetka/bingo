@@ -52,8 +52,22 @@ class APIClient:
             if withdrawal_code:
                 data['withdrawal_code'] = withdrawal_code
             
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/payment',
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+            
             async with session.post(
-                f'{Config.API_BASE_URL}/payment',
+                f'{api_url}/payment',
                 json=data
             ) as response:
                 return await response.json()
@@ -75,8 +89,26 @@ class APIClient:
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
             try:
+                # Пробуем сначала локальный API, если не доступен - используем продакшн
+                api_url = Config.API_BASE_URL
+                if api_url.startswith('http://localhost'):
+                    try:
+                        # Проверяем доступность локального API
+                        async with session.get(
+                            f'{api_url}/public/payment-settings',
+                            timeout=aiohttp.ClientTimeout(total=2)
+                        ) as test_response:
+                            if test_response.status == 200:
+                                async with session.get(
+                                    f'{api_url}/public/payment-settings'
+                                ) as response:
+                                    return await response.json()
+                    except:
+                        # Если локальный недоступен, используем продакшн
+                        api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+                
                 async with session.get(
-                    f'{Config.API_BASE_URL}/public/payment-settings'
+                    f'{api_url}/public/payment-settings'
                 ) as response:
                     data = await response.json()
                     return data if data.get('success') else {}

@@ -8,19 +8,31 @@ load_dotenv(dotenv_path=env_path)
 
 class Config:
     BOT_TOKEN = os.getenv('BOT_TOKEN', '')
+    # Для API: используем локальный для разработки, продакшн для деплоя
     API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:3001/api')
-    PAYMENT_SITE_URL = os.getenv('PAYMENT_SITE_URL', 'http://gldwueprxkmbtqsnva.ru')
+    # Для WebApp: всегда используем HTTPS домен (Telegram требует HTTPS)
+    # Для локальной разработки используем продакшн домен
+    _payment_site_url = os.getenv('PAYMENT_SITE_URL', 'https://gldwueprxkmbtqsnva.ru')
+    # Принудительно используем HTTPS для WebApp (Telegram требует HTTPS)
+    if _payment_site_url.startswith('http://'):
+        # Если указан HTTP, заменяем на HTTPS или используем продакшн домен
+        if 'localhost' in _payment_site_url:
+            PAYMENT_SITE_URL = 'https://gldwueprxkmbtqsnva.ru'
+        else:
+            PAYMENT_SITE_URL = _payment_site_url.replace('http://', 'https://')
+    else:
+        PAYMENT_SITE_URL = _payment_site_url
     
     # Казино (полный список, фильтрация по настройкам из админки)
     CASINOS = [
-        {'id': '1win', 'name': '1win'},
         {'id': '1xbet', 'name': '1xBet'},
         {'id': 'melbet', 'name': 'Melbet'},
-        {'id': 'winwin', 'name': 'Winwin'},
-        {'id': '1xcasino', 'name': '1xCasino'},
-        {'id': '888starz', 'name': '888starz'},
-        {'id': 'betwinner', 'name': 'BetWinner'},
+        {'id': '1win', 'name': '1win'},
         {'id': 'mostbet', 'name': 'mostbet'},
+        {'id': 'winwin', 'name': 'Winwin'},
+        {'id': '888starz', 'name': '888starz'},
+        {'id': '1xcasino', 'name': '1xCasino'},
+        {'id': 'betwinner', 'name': 'BetWinner'},
     ]
     
     # Банки для пополнения

@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from states import WithdrawStates
@@ -8,6 +8,7 @@ from api_client import APIClient
 from translations import get_text
 import base64
 import io
+from pathlib import Path
 
 router = Router()
 
@@ -26,6 +27,7 @@ async def withdraw_start(message: Message, state: FSMContext):
     enabled_casinos = settings.get('casinos', {})
     
     # Фильтруем казино по настройкам (показываем только включенные)
+    # Формируем кнопки по 2 в ряд
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     row = []
     for casino in Config.CASINOS:
@@ -36,9 +38,11 @@ async def withdraw_start(message: Message, state: FSMContext):
                 text=casino['name'],
                 callback_data=f'withdraw_casino_{casino_id}'
             ))
+            # Когда в ряду 2 кнопки, добавляем ряд в клавиатуру
             if len(row) == 2:
                 keyboard.inline_keyboard.append(row)
-                row = []
+                row = []  # Создаем новый ряд
+    # Добавляем оставшиеся кнопки (если их меньше 2)
     if row:
         keyboard.inline_keyboard.append(row)
     
@@ -192,10 +196,25 @@ async def withdraw_qr_photo_received(message: Message, state: FSMContext):
         resize_keyboard=True
     )
     
-    await message.answer(
-        get_text(lang, 'withdraw', 'enter_account_id'),
-        reply_markup=keyboard
-    )
+    # Отправляем фото казино с текстом
+    data = await state.get_data()
+    casino_id = data.get('casino_id', '')
+    # Фото находятся в корневой папке проекта
+    photo_path = Path(__file__).parent.parent.parent / f"{casino_id}.jpg"
+    if photo_path.exists():
+        photo = FSInputFile(str(photo_path))
+        await message.answer_photo(
+            photo=photo,
+            caption=get_text(lang, 'withdraw', 'enter_account_id'),
+            reply_markup=keyboard
+        )
+    else:
+        # Если фото нет, отправляем только текст
+        await message.answer(
+            get_text(lang, 'withdraw', 'enter_account_id'),
+            reply_markup=keyboard
+        )
+    
     await state.set_state(WithdrawStates.waiting_for_account_id)
 
 @router.message(WithdrawStates.waiting_for_qr_photo)
