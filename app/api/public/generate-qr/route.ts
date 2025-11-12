@@ -176,12 +176,140 @@ export async function POST(request: NextRequest) {
       // Заменяем последнее поле 63 (контрольная сумма)
       const newField63 = `6304${checksum}`
       qrHash = updatedHash.substring(0, last63Index) + newField63
+    } else if (requisiteBank === 'DemirBank' || requisiteBank === 'demirbank' || requisiteBank === 'DEMIRBANK') {
+      // Для DemirBank используем base_hash и меняем только реквизит, поле 54 и 63
+      // В админке для DemirBank хранится base_hash, а активный реквизит (16 цифр) извлекается из него или берется отдельно
+      
+      let baseHash = requisite
+      let activeRequisiteValue = ''
+      
+      // Если requisite является base_hash (содержит qr.demirbank.kg), извлекаем из него реквизит
+      if (baseHash.includes('qr.demirbank.kg')) {
+        // Ищем поле 10 (реквизит) в base_hash: формат "10" + длина(2 цифры) + реквизит(16 цифр)
+        const requisiteMatch = baseHash.match(/10(\d{2})(\d{16})/)
+        if (requisiteMatch) {
+          activeRequisiteValue = requisiteMatch[2] // Извлекаем 16 цифр реквизита
+        } else {
+          // Если не нашли, используем дефолтный base_hash
+          baseHash = '00020101021132590015qr.demirbank.kg01047001101611800003603864311202111302125204482953034175405500945909DEMIRBANK63047803'
+          activeRequisiteValue = '1180000360386431' // Дефолтный реквизит
+        }
+      } else if (/^\d{16}$/.test(requisite)) {
+        // Если реквизит - это просто 16 цифр, используем дефолтный base_hash
+        activeRequisiteValue = requisite
+        baseHash = '00020101021132590015qr.demirbank.kg01047001101611800003603864311202111302125204482953034175405500945909DEMIRBANK63047803'
+      } else {
+        const errorResponse = NextResponse.json(
+          { success: false, error: 'Некорректный формат реквизита для DemirBank. Ожидается base_hash или 16 цифр.' },
+          { status: 400 }
+        )
+        errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+        return errorResponse
+      }
+      
+      // Проверяем, что активный реквизит - это 16 цифр
+      if (!/^\d{16}$/.test(activeRequisiteValue)) {
+        const errorResponse = NextResponse.json(
+          { success: false, error: 'Реквизит для Demir Bank должен содержать 16 цифр' },
+          { status: 400 }
+        )
+        errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+        return errorResponse
+      }
+      
+      // Используем активный реквизит для замены в base_hash
+      const requisiteToUse = activeRequisiteValue
+      
+      // Конвертируем сумму в копейки и форматируем (5 цифр)
+      const amountCents = Math.round(amount * 100)
+      const amountStr = amountCents.toString().padStart(5, '0')
+      const amountLen = amountStr.length.toString().padStart(2, '0')
+      
+      // Находим позицию реквизита в base_hash (после "10" и длины)
+      // Формат: 10 + длина(2 цифры) + реквизит(16 цифр)
+      const requisiteMatch = baseHash.match(/10(\d{2})(\d{16})/)
+      if (!requisiteMatch) {
+        const errorResponse = NextResponse.json(
+          { success: false, error: 'Не найдено поле реквизита в base_hash для DemirBank' },
+          { status: 400 }
+        )
+        errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+        return errorResponse
+      }
+      
+      const requisiteStartIndex = requisiteMatch.index!
+      const requisiteLength = requisiteMatch[1]
+      const oldRequisite = requisiteMatch[2]
+      
+      // Заменяем реквизит (16 цифр после "10" + длина)
+      let updatedHash = baseHash.substring(0, requisiteStartIndex + 4) + 
+                       requisiteToUse + 
+                       baseHash.substring(requisiteStartIndex + 4 + 16)
+      
+      // Находим поле 54 (сумма) - последнее перед полем 63
+      const field54Pattern = /54(\d{2})(\d+)/g
+      const field54Matches: Array<{ index: number; fullMatch: string }> = []
+      let match54
+      while ((match54 = field54Pattern.exec(updatedHash)) !== null) {
+        field54Matches.push({
+          index: match54.index,
+          fullMatch: match54[0]
+        })
+      }
+      
+      // Находим индекс последнего поля 63
+      const last63Index = updatedHash.lastIndexOf('6304')
+      if (last63Index === -1) {
+        const errorResponse = NextResponse.json(
+          { success: false, error: 'Не найдено поле 63 в base_hash для DemirBank' },
+          { status: 400 }
+        )
+        errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+        return errorResponse
+      }
+      
+      // Находим последнее поле 54 перед полем 63
+      const lastField54Before63 = field54Matches
+        .filter(m => m.index < last63Index)
+        .sort((a, b) => b.index - a.index)[0]
+      
+      if (!lastField54Before63) {
+        const errorResponse = NextResponse.json(
+          { success: false, error: 'Не найдено поле 54 перед полем 63 в base_hash для DemirBank' },
+          { status: 400 }
+        )
+        errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+        return errorResponse
+      }
+      
+      // Заменяем поле 54
+      const oldField54 = lastField54Before63.fullMatch
+      const newField54 = `54${amountLen}${amountStr}`
+      
+      updatedHash = updatedHash.substring(0, lastField54Before63.index) + 
+                   newField54 + 
+                   updatedHash.substring(lastField54Before63.index + oldField54.length)
+      
+      // Пересчитываем контрольную сумму
+      // Берем все до последнего поля 63
+      let dataBefore63 = updatedHash.substring(0, last63Index)
+      
+      // Вычисляем SHA256 от данных до объекта 63
+      const checksumFull = createHash('sha256').update(dataBefore63, 'utf8').digest('hex')
+      const checksumCleaned = checksumFull.replace(/-/g, '')
+      
+      // Берем последние 4 символа в нижнем регистре (для DemirBank)
+      const checksum = checksumCleaned.slice(-4).toLowerCase()
+      
+      // Заменяем поле 63
+      const newField63 = `6304${checksum}`
+      qrHash = updatedHash.substring(0, last63Index) + newField63
     } else {
-      // Для Demir Bank используем существующую логику
+      // Для других банков используем существующую логику (если нужно)
       // Проверяем, что реквизит - это 16 цифр
       if (!/^\d{16}$/.test(requisite)) {
         const errorResponse = NextResponse.json(
-          { success: false, error: 'Реквизит для Demir Bank должен содержать 16 цифр' },
+          { success: false, error: 'Реквизит должен содержать 16 цифр' },
           { status: 400 }
         )
         errorResponse.headers.set('Access-Control-Allow-Origin', '*')
@@ -259,7 +387,7 @@ export async function POST(request: NextRequest) {
       console.error('Error fetching deposit settings:', error)
     }
     
-    // Определяем primary_url на основе переданного bank
+    // Определяем primary_url - по умолчанию O!Money
     const primaryBankMap: Record<string, string> = {
       'demirbank': 'DemirBank',
       'omoney': 'O!Money',
@@ -268,8 +396,8 @@ export async function POST(request: NextRequest) {
       'megapay': 'MegaPay',
       'mbank': 'MBank'
     }
-    const primaryBank = primaryBankMap[bank.toLowerCase()] || 'DemirBank'
-    const primaryUrl = bankLinks[primaryBank] || bankLinks['DemirBank']
+    const primaryBank = primaryBankMap[bank.toLowerCase()] || 'O!Money'
+    const primaryUrl = bankLinks[primaryBank] || bankLinks['O!Money']
     
     const response = NextResponse.json({
       success: true,

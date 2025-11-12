@@ -48,9 +48,13 @@ export async function GET(request: NextRequest) {
     // Получаем настройки казино
     const casinoSettings = settingsMap.casinos || {
       '1xbet': true,
-      '1win': true,
       melbet: true,
-      mostbet: true
+      '1win': true,
+      mostbet: true,
+      winwin: true,
+      '888starz': true,
+      '1xcasino': true,
+      betwinner: true
     }
 
     // Формируем ответ в формате, который ожидает клиентский сайт
@@ -76,9 +80,13 @@ export async function GET(request: NextRequest) {
       withdrawals: { enabled: true, banks: ['kompanion', 'odengi', 'bakai', 'balance', 'megapay', 'mbank'] },
       casinos: {
         '1xbet': true,
-        '1win': true,
         melbet: true,
-        mostbet: true
+        '1win': true,
+        mostbet: true,
+        winwin: true,
+        '888starz': true,
+        '1xcasino': true,
+        betwinner: true
       },
       pause: false,
       maintenance_message: 'Технические работы. Попробуйте позже.',

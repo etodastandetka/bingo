@@ -38,9 +38,13 @@ export async function GET(request: NextRequest) {
     // Получаем настройки казино
     const casinoSettings = settingsMap.casinos || {
       '1xbet': true,
-      '1win': true,
       melbet: true,
-      mostbet: true
+      '1win': true,
+      mostbet: true,
+      winwin: true,
+      '888starz': true,
+      '1xcasino': true,
+      betwinner: true
     }
 
     const settings = {

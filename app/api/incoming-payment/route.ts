@@ -176,6 +176,17 @@ async function matchAndProcessPayment(paymentId: number, amount: number) {
 
     console.log(`✅ Auto-deposit successful: Request ${request.id}, Account ${request.accountId}`)
 
+    // Отправляем уведомление пользователю
+    if (request.userId && request.bookmaker && request.accountId && request.amount) {
+      const { sendDepositSuccessNotification } = await import('@/lib/telegram-notifications')
+      await sendDepositSuccessNotification(
+        request.userId,
+        parseFloat(request.amount.toString()),
+        request.bookmaker,
+        request.accountId
+      )
+    }
+
     return {
       requestId: request.id,
       success: true,

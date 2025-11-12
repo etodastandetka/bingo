@@ -23,19 +23,26 @@ export function middleware(request: NextRequest) {
 
   // Add CORS headers for public API routes
   if (isPublicApiRoute && request.method === 'OPTIONS') {
+    console.log('✅ OPTIONS preflight request for:', request.nextUrl.pathname)
     const response = new NextResponse(null, { status: 200 })
     response.headers.set('Access-Control-Allow-Origin', '*')
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.set('Access-Control-Allow-Credentials', 'true')
+    response.headers.set('Access-Control-Max-Age', '86400')
+    console.log('✅ OPTIONS response sent with CORS headers')
     return response
   }
 
   if (isPublicRoute || isPublicApiRoute) {
+    console.log('✅ Public route allowed:', request.nextUrl.pathname, 'Method:', request.method)
     const response = NextResponse.next()
     // Add CORS headers
     response.headers.set('Access-Control-Allow-Origin', '*')
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.set('Access-Control-Allow-Credentials', 'true')
+    console.log('✅ CORS headers set for:', request.nextUrl.pathname)
     return response
   }
 

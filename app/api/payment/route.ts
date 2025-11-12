@@ -4,19 +4,30 @@ import { createApiResponse } from '@/lib/api-helpers'
 
 // API для создания заявок из внешних источников (мини-приложение, бот и т.д.)
 export async function OPTIONS() {
+  console.log('✅ Payment API - OPTIONS preflight request')
   return new NextResponse(null, {
     status: 200,
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Max-Age': '86400',
     },
   })
 }
 
 export async function POST(request: NextRequest) {
+  console.log('📥 Payment API - POST request received')
   try {
     const body = await request.json()
+    console.log('📥 Payment API - Request body parsed:', {
+      has_telegram_user_id: !!body.telegram_user_id,
+      type: body.type,
+      amount: body.amount,
+      bookmaker: body.bookmaker,
+      account_id: body.account_id
+    })
 
     const {
       userId,
@@ -146,6 +157,9 @@ export async function POST(request: NextRequest) {
       })
     )
     response.headers.set('Access-Control-Allow-Origin', '*')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    console.log('✅ Payment API - Response sent with CORS headers')
     return response
   } catch (error: any) {
     console.error('Payment API error:', error)
@@ -161,27 +175,36 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, status, status_detail } = body
+    const { id, status, status_detail, receipt_photo } = body
 
-    if (!id || !status) {
+    if (!id) {
       const response = NextResponse.json(
-        createApiResponse(null, 'Missing required fields: id, status'),
+        createApiResponse(null, 'Missing required field: id'),
         { status: 400 }
       )
       response.headers.set('Access-Control-Allow-Origin', '*')
       return response
     }
 
-    const updateData: any = {
-      status,
+    const updateData: any = {}
+
+    if (status) {
+      updateData.status = status
+      if (status_detail) {
+        updateData.statusDetail = status_detail
+      }
+      if (['completed', 'rejected', 'approved'].includes(status)) {
+        updateData.processedAt = new Date()
+      }
     }
 
-    if (status_detail) {
-      updateData.statusDetail = status_detail
-    }
-
-    if (['completed', 'rejected', 'approved'].includes(status)) {
-      updateData.processedAt = new Date()
+    // Обновление фото чека
+    if (receipt_photo) {
+      // Если это base64 строка, сохраняем как data URL
+      const photoDataUrl = receipt_photo.startsWith('data:') 
+        ? receipt_photo 
+        : `data:image/jpeg;base64,${receipt_photo}`
+      updateData.photoFileUrl = photoDataUrl
     }
 
     const updatedRequest = await prisma.request.update({

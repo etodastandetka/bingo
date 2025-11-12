@@ -12,9 +12,13 @@ interface Settings {
   require_receipt_photo: boolean
   casinos: {
     '1xbet': boolean
-    '1win': boolean
     melbet: boolean
+    '1win': boolean
     mostbet: boolean
+    winwin: boolean
+    '888starz': boolean
+    '1xcasino': boolean
+    betwinner: boolean
   }
 }
 
@@ -283,13 +287,13 @@ export default function SettingsPage() {
         <h2 className="text-base font-bold text-white mb-4">Настройки казино</h2>
         
         <div className="space-y-3">
-          {(['1xbet', '1win', 'melbet', 'mostbet'] as const).map((casino) => (
+          {(['1xbet', 'melbet', '1win', 'mostbet', 'winwin', '888starz', '1xcasino', 'betwinner'] as const).map((casino) => (
             <div key={casino} className="flex items-center justify-between">
               <span className="text-sm font-medium text-white uppercase">{casino}</span>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={settings.casinos[casino]}
+                  checked={settings.casinos[casino] || false}
                   onChange={(e) => updateSetting('casinos', { ...settings.casinos, [casino]: e.target.checked })}
                   className="sr-only peer"
                 />

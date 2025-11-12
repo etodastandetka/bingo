@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, createApiResponse } from '@/lib/api-helpers'
 import { prisma } from '@/lib/prisma'
 import { depositToCasino } from '@/lib/deposit-balance'
+import { sendDepositSuccessNotification } from '@/lib/telegram-notifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,6 +58,16 @@ export async function POST(request: NextRequest) {
         processedAt: new Date(),
       },
     })
+
+    // Отправляем уведомление пользователю
+    if (requestData.userId && requestData.bookmaker && requestData.accountId && requestData.amount) {
+      await sendDepositSuccessNotification(
+        requestData.userId,
+        parseFloat(requestData.amount.toString()),
+        requestData.bookmaker,
+        requestData.accountId
+      )
+    }
 
     return NextResponse.json(
       createApiResponse({
