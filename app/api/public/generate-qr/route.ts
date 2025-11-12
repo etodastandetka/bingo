@@ -4,19 +4,24 @@ import { createHash } from 'crypto'
 
 // Публичный эндпоинт для генерации QR кода (без авторизации)
 export async function OPTIONS() {
+  console.log('✅ Generate QR API - OPTIONS preflight request')
   return new NextResponse(null, {
     status: 200,
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Max-Age': '86400',
     },
   })
 }
 
 export async function POST(request: NextRequest) {
+  console.log('📥 Generate QR API - POST request received')
   try {
     const body = await request.json()
+    console.log('📥 Generate QR API - Request body:', { amount: body.amount, bank: body.bank })
     
     const amount = parseFloat(String(body.amount || 0))
     const playerId = body.playerId || ''
@@ -410,6 +415,10 @@ export async function POST(request: NextRequest) {
       }
     })
     response.headers.set('Access-Control-Allow-Origin', '*')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.set('Access-Control-Allow-Credentials', 'true')
+    console.log('✅ Generate QR API - Response sent with CORS headers')
     return response
     
   } catch (error: any) {
