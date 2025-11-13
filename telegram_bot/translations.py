@@ -18,7 +18,7 @@ TRANSLATIONS = {
         },
         'deposit': {
             'select_casino': 'Выберите казино:',
-            'enter_account_id': 'ID\nОтправьте ID вашего счета {casino}',
+            'enter_account_id': '⚠️ Проверьте ваш ID еще раз\n❌ Отменить пополнение нельзя!!\n\n🆔 Отправьте ID вашего счета {casino}',
             'enter_amount': 'Введите сумму пополнения:\nMin: {min} Max: {max}',
             'invalid_account_id': '❌ Пожалуйста, отправьте корректный ID счета (только цифры)',
             'invalid_amount': '❌ Сумма должна быть от {min} до {max}',
