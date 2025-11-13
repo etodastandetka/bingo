@@ -65,6 +65,12 @@ async def withdraw_casino_selected(callback: CallbackQuery, state: FSMContext):
     
     await state.update_data(casino_id=casino_id, casino_name=casino_name)
     
+    # Удаляем сообщение с кнопками выбора букмекера
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass  # Игнорируем ошибки удаления (если сообщение уже удалено или нет прав)
+    
     # Получаем настройки из админки для фильтрации банков
     settings = await APIClient.get_payment_settings()
     enabled_banks = settings.get('withdrawals', {}).get('banks', [])
@@ -199,19 +205,20 @@ async def withdraw_qr_photo_received(message: Message, state: FSMContext):
     # Отправляем фото казино с текстом
     data = await state.get_data()
     casino_id = data.get('casino_id', '')
+    casino_name = data.get('casino_name', '')
     # Фото находятся в корневой папке проекта
     photo_path = Path(__file__).parent.parent.parent / f"{casino_id}.jpg"
     if photo_path.exists():
         photo = FSInputFile(str(photo_path))
         await message.answer_photo(
             photo=photo,
-            caption=get_text(lang, 'withdraw', 'enter_account_id'),
+            caption=get_text(lang, 'withdraw', 'enter_account_id', casino=casino_name),
             reply_markup=keyboard
         )
     else:
         # Если фото нет, отправляем только текст
         await message.answer(
-            get_text(lang, 'withdraw', 'enter_account_id'),
+            get_text(lang, 'withdraw', 'enter_account_id', casino=casino_name),
             reply_markup=keyboard
         )
     
