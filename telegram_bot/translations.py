@@ -3,7 +3,7 @@
 TRANSLATIONS = {
     'ru': {
         'start': {
-            'greeting': 'Привет, 𝗠𝗢𝗥𝗜𝗔𝗥𝗧𝗬',
+            'greeting': 'Привет, {name}',
             'auto_deposit': '⚡️ Авто-пополнение: 0%',
             'auto_withdraw': '⚡️ Авто-вывод: 0%',
             'working': '🕐 Работаем: 24/7',

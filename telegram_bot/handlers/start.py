@@ -21,8 +21,9 @@ async def get_lang_from_state(state: FSMContext) -> str:
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     lang = await get_lang_from_state(state)
+    first_name = message.from_user.first_name or ('kotik' if lang == 'ru' else 'баатыр')
     
-    text = f"""{get_text(lang, 'start', 'greeting')}
+    text = f"""{get_text(lang, 'start', 'greeting', name=first_name)}
 
 {get_text(lang, 'start', 'auto_deposit')}
 {get_text(lang, 'start', 'auto_withdraw')}
