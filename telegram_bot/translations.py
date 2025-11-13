@@ -17,7 +17,7 @@ TRANSLATIONS = {
             'language': '🌐 Язык',
         },
         'deposit': {
-            'select_casino': 'Выберите казино:',
+            'select_casino': 'Выберите букмекер:',
             'enter_account_id': '⚠️ Проверьте ваш ID еще раз\n❌ Отменить пополнение нельзя!!\n\n🆔 Отправьте ID вашего счета {casino}',
             'enter_amount': 'Введите сумму пополнения:\nMin: {min} Max: {max}',
             'invalid_account_id': '❌ Пожалуйста, отправьте корректный ID счета (только цифры)',
@@ -86,7 +86,7 @@ TRANSLATIONS = {
             'language': '🌐 Тил',
         },
         'deposit': {
-            'select_casino': 'Казинону тандаңыз:',
+            'select_casino': 'Букмекерди тандаңыз:',
             'enter_account_id': 'ID\nКазинодогу эсебиңиздин ID-син жөнөтүңүз {casino}',
             'enter_amount': 'Толтуруу суммасын киргизиңиз:\nМинимум: {min} Максимум: {max}',
             'invalid_account_id': '❌ Туура ID эсепти жөнөтүңүз (сандар гана)',

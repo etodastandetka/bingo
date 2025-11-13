@@ -66,6 +66,12 @@ async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
     
     await state.update_data(casino_id=casino_id, casino_name=casino_name)
     
+    # Удаляем сообщение с кнопками выбора букмекера
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass  # Игнорируем ошибки удаления (если сообщение уже удалено или нет прав)
+    
     keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))]],
         resize_keyboard=True
