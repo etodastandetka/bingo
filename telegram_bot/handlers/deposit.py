@@ -123,7 +123,7 @@ async def deposit_account_id_received(message: Message, state: FSMContext):
     )
     
     await message.answer(
-        get_text(lang, 'deposit', 'enter_amount', min=Config.DEPOSIT_MIN, max=Config.DEPOSIT_MAX),
+        get_text(lang, 'deposit', 'enter_amount', min=str(Config.DEPOSIT_MIN), max=str(Config.DEPOSIT_MAX)),
         reply_markup=keyboard
     )
     await state.set_state(DepositStates.waiting_for_amount)
