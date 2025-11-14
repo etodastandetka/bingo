@@ -25,6 +25,24 @@ async def deposit_start(message: Message, state: FSMContext):
     
     # Получаем настройки из админки
     settings = await APIClient.get_payment_settings()
+    
+    # Проверяем pause режим
+    if settings.get('pause', False):
+        maintenance_message = settings.get('maintenance_message', get_text(lang, 'start', 'bot_paused'))
+        await message.answer(maintenance_message)
+        return
+    
+    # Проверяем, включены ли депозиты
+    deposits = settings.get('deposits', {})
+    if isinstance(deposits, dict):
+        deposits_enabled = deposits.get('enabled', True)
+    else:
+        deposits_enabled = deposits if deposits is not False else True
+    
+    if not deposits_enabled:
+        await message.answer(get_text(lang, 'deposit', 'deposits_disabled'))
+        return
+    
     enabled_casinos = settings.get('casinos', {})
     
     # Фильтруем казино по настройкам (показываем только включенные)
