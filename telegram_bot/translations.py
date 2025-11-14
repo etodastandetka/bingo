@@ -19,7 +19,7 @@ TRANSLATIONS = {
         'deposit': {
             'select_casino': 'Выберите букмекер:',
             'enter_account_id': '⚠️ Проверьте ваш ID еще раз\n❌ Отменить пополнение нельзя!!\n\n🆔 Отправьте ID вашего счета {casino}',
-            'enter_amount': 'Введите сумму пополнения:\nMin: {min} Max: {max}',
+            'enter_amount': 'Введите сумму пополнения:\nMin: {min}\nMax: {max}',
             'invalid_account_id': '❌ Пожалуйста, отправьте корректный ID счета (только цифры)',
             'invalid_amount': '❌ Сумма должна быть от {min} до {max}',
             'go_to_payment': '💰 Сумма: {amount:.2f} KGS\n🎰 Казино: {casino}\n🆔 ID: {account_id}\n\nНажмите кнопку ниже для оплаты:',
@@ -88,7 +88,7 @@ TRANSLATIONS = {
         'deposit': {
             'select_casino': 'Букмекерди тандаңыз:',
             'enter_account_id': 'ID\nКазинодогу эсебиңиздин ID-син жөнөтүңүз {casino}',
-            'enter_amount': 'Толтуруу суммасын киргизиңиз:\nМинимум: {min} Максимум: {max}',
+            'enter_amount': 'Толтуруу суммасын киргизиңиз:\nМинимум: {min}\nМаксимум: {max}',
             'invalid_account_id': '❌ Туура ID эсепти жөнөтүңүз (сандар гана)',
             'invalid_amount': '❌ Сумма {min} ден {max} ге чейин болушу керек',
             'go_to_payment': '💰 Сумма: {amount:.2f} KGS\n🎰 Казино: {casino}\n🆔 ID: {account_id}\n\nТөлөө үчүн төмөнкү баскычты басыңыз:',
