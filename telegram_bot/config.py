@@ -8,8 +8,8 @@ load_dotenv(dotenv_path=env_path)
 
 class Config:
     BOT_TOKEN = os.getenv('BOT_TOKEN', '')
-    # Для API: используем локальный для разработки, продакшн для деплоя
-    API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:3001/api')
+    # Для API: используем продакшн домен
+    API_BASE_URL = os.getenv('API_BASE_URL', 'https://fqxgmrzplndwsyvkeu.ru/api')
     # Для WebApp: всегда используем HTTPS домен (Telegram требует HTTPS)
     # Для локальной разработки используем продакшн домен
     _payment_site_url = os.getenv('PAYMENT_SITE_URL', 'https://gldwueprxkmbtqsnva.ru')
