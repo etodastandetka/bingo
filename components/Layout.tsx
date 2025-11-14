@@ -52,7 +52,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Загрузка...</p>
         </div>
       </div>
@@ -130,7 +130,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isChatPage = pathname?.includes('/chat')
 
   return (
-    <div className="h-screen bg-gradient-to-b from-blue-950 to-blue-800 flex justify-center items-center overflow-hidden">
+    <div className="h-screen bg-gradient-to-b from-green-950 to-green-900 flex justify-center items-center overflow-hidden">
       <div className="mobile-container w-full max-w-[414px] h-full">
         {/* Основной контент */}
         <main className={`px-4 py-4 bg-transparent overflow-y-auto h-full ${isChatPage ? 'pb-4' : 'pb-20'}`}>
@@ -149,7 +149,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   href={item.href}
                   className={`flex flex-col items-center justify-center px-2 py-2 rounded-xl transition-all duration-200 relative ${
                     active
-                      ? 'text-blue-500 bg-blue-500 bg-opacity-20'
+                      ? 'text-green-500 bg-green-500 bg-opacity-20'
                       : 'text-gray-400'
                   }`}
                 >
@@ -157,12 +157,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     {item.icon}
                   </div>
                   <span className={`text-[9px] font-medium uppercase tracking-wider ${
-                    active ? 'text-blue-500' : 'text-gray-400'
+                    active ? 'text-green-500' : 'text-gray-400'
                   }`}>
                     {item.label}
                   </span>
                   {active && (
-                    <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                    <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-green-500 rounded-full"></div>
                   )}
                 </Link>
               )
