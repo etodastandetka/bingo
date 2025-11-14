@@ -23,9 +23,23 @@ npm run build
 mkdir -p .next/standalone/.next
 cp -r .next/static .next/standalone/.next/static
 cp -r .next/BUILD_ID .next/standalone/.next/BUILD_ID 2>/dev/null || true
+
+# Копируем все необходимые файлы для standalone режима
 if [ -d "public" ]; then
   cp -r public .next/standalone/public
 fi
+
+# Копируем server.js и другие необходимые файлы если их нет
+if [ ! -f ".next/standalone/server.js" ]; then
+  echo "ERROR: server.js not found in standalone directory!"
+  echo "Make sure 'output: standalone' is set in next.config.js"
+  exit 1
+fi
+
+# Проверяем что все файлы на месте
+echo "Checking standalone build..."
+ls -la .next/standalone/.next/static 2>/dev/null || echo "WARNING: Static files not found!"
+ls -la .next/standalone/server.js 2>/dev/null || echo "ERROR: server.js not found!"
 
 # 4. Остановить и удалить старые процессы
 pm2 stop bingo-admin
