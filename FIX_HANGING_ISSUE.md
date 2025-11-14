@@ -25,11 +25,18 @@ npx prisma generate
 # Пересобрать проект (ВАЖНО: с новым next.config.js)
 npm run build
 
+# КРИТИЧНО: Скопировать статические файлы в standalone (иначе 404 на CSS/JS)
+cp -r .next/static .next/standalone/.next/static
+cp -r .next/BUILD_ID .next/standalone/.next/BUILD_ID 2>/dev/null || true
+cp -r public .next/standalone/public 2>/dev/null || true
+
 # Остановить PM2
 pm2 stop bingo-admin
 
-# Запустить заново
-pm2 start "NODE_ENV=production PORT=3002 node .next/standalone/server.js" --name bingo-admin
+# Запустить заново (из директории standalone)
+cd .next/standalone
+pm2 start "NODE_ENV=production PORT=3002 node server.js" --name bingo-admin --cwd /var/www/bingo/admin_nextjs/.next/standalone
+cd /var/www/bingo/admin_nextjs
 
 # Сохранить конфигурацию
 pm2 save
