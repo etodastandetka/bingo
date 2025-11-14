@@ -9,6 +9,7 @@ TRANSLATIONS = {
             'working': '🕐 Работаем: 24/7',
             'channel': '🗞 Наш канал: {channel}',
             'support': '👨‍💻Служба поддержки: {support}',
+            'bot_paused': '⏸ Бот временно приостановлен',
         },
         'menu': {
             'deposit': '💰 Пополнить',
@@ -28,6 +29,7 @@ TRANSLATIONS = {
             'cancel': '❌ Операция отменена',
             'no_casinos_available': '❌ Нет доступных казино',
             'deposit_success': '✅ Пополнение успешно!\n\n💰 Сумма: {amount:.2f} KGS\n🎰 Казино: {casino}\n🆔 ID: {account_id}',
+            'deposits_disabled': '❌ Пополнения временно отключены',
         },
         'withdraw': {
             'select_casino': 'Выберите букмекер:',
@@ -43,6 +45,7 @@ TRANSLATIONS = {
             'error': '❌ Произошла ошибка при создании заявки. Попробуйте позже.',
             'cancel': '❌ Операция отменена',
             'no_casinos_available': '❌ Нет доступных казино',
+            'withdrawals_disabled': '❌ Выводы временно отключены',
         },
         'language': {
             'select': 'Выберите язык:',
@@ -78,6 +81,7 @@ TRANSLATIONS = {
             'working': '🕐 Иштеп жатабыз: 24/7',
             'channel': '🗞 Биздин канал: {channel}',
             'support': '👨‍💻Колдоо кызматы: {support}',
+            'bot_paused': '⏸ Бот убактылуу токтотулду',
         },
         'menu': {
             'deposit': '💰 Толтуруу',
@@ -97,6 +101,7 @@ TRANSLATIONS = {
             'cancel': '❌ Аракет жокко чыгарылды',
             'no_casinos_available': '❌ Жеткиликтүү казино жок',
             'deposit_success': '✅ Толтуруу ийгиликтүү!\n\n💰 Сумма: {amount:.2f} KGS\n🎰 Казино: {casino}\n🆔 ID: {account_id}',
+            'deposits_disabled': '❌ Толтуруу убактылуу токтотулду',
         },
         'withdraw': {
             'select_casino': 'Букмекерди тандаңыз:',
@@ -112,6 +117,7 @@ TRANSLATIONS = {
             'error': '❌ Өтүнүч түзүүдө ката кетти. Кийин кайра аракет кылыңыз.',
             'cancel': '❌ Аракет жокко чыгарылды',
             'no_casinos_available': '❌ Жеткиликтүү казино жок',
+            'withdrawals_disabled': '❌ Чыгаруу убактылуу токтотулду',
         },
         'language': {
             'select': 'Тилди тандаңыз:',

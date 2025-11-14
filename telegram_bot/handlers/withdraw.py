@@ -24,6 +24,24 @@ async def withdraw_start(message: Message, state: FSMContext):
     
     # Получаем настройки из админки
     settings = await APIClient.get_payment_settings()
+    
+    # Проверяем pause режим
+    if settings.get('pause', False):
+        maintenance_message = settings.get('maintenance_message', get_text(lang, 'start', 'bot_paused'))
+        await message.answer(maintenance_message)
+        return
+    
+    # Проверяем, включены ли выводы
+    withdrawals = settings.get('withdrawals', {})
+    if isinstance(withdrawals, dict):
+        withdrawals_enabled = withdrawals.get('enabled', True)
+    else:
+        withdrawals_enabled = withdrawals if withdrawals is not False else True
+    
+    if not withdrawals_enabled:
+        await message.answer(get_text(lang, 'withdraw', 'withdrawals_disabled'))
+        return
+    
     enabled_casinos = settings.get('casinos', {})
     
     # Фильтруем казино по настройкам (показываем только включенные)

@@ -4,6 +4,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from config import Config
 from translations import get_text
+from api_client import APIClient
 
 router = Router()
 
@@ -21,6 +22,17 @@ async def get_lang_from_state(state: FSMContext) -> str:
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     lang = await get_lang_from_state(state)
+    
+    # Проверяем pause режим
+    try:
+        settings = await APIClient.get_payment_settings()
+        if settings.get('pause', False):
+            maintenance_message = settings.get('maintenance_message', get_text(lang, 'start', 'bot_paused'))
+            await message.answer(maintenance_message)
+            return
+    except Exception:
+        pass  # Если не удалось получить настройки, продолжаем работу
+    
     first_name = message.from_user.first_name or ('kotik' if lang == 'ru' else 'баатыр')
     
     text = f"""{get_text(lang, 'start', 'greeting', name=first_name)}
