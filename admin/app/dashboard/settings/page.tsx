@@ -20,7 +20,7 @@ interface Settings {
     '1xcasino': boolean
     betwinner: boolean
   }
-  channel: string
+  channel?: string
 }
 
 const DEPOSIT_BANKS = [
@@ -56,7 +56,12 @@ export default function SettingsPage() {
       const data = await response.json()
 
       if (data.success) {
-        setSettings(data.data)
+        // Убеждаемся что channel есть (значение по умолчанию)
+        const settingsData = {
+          ...data.data,
+          channel: data.data.channel || '@bingokg_news'
+        }
+        setSettings(settingsData)
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error)
@@ -174,7 +179,7 @@ export default function SettingsPage() {
             </label>
             <input
               type="text"
-              value={settings.channel}
+              value={settings.channel || '@bingokg_news'}
               onChange={(e) => updateSetting('channel', e.target.value)}
               className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="@bingokg_news"
