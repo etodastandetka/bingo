@@ -244,6 +244,107 @@ pm2 logs bingo-bot --lines 50
 3. **Настройка канала** - зайти в админку → Настройки → указать канал (например: `@bingokg_news`)
 4. **Права бота** - бот должен быть администратором канала или иметь права на проверку участников
 
+## Проблема: 502 Bad Gateway
+
+**Причина:** nginx не может подключиться к приложению Next.js  
+**Диагностика и решение:**
+
+```bash
+# 1. Проверить статус PM2 процесса
+pm2 status
+pm2 list
+
+# Если процесс остановлен или не существует:
+pm2 start bingo-admin
+# или
+pm2 restart bingo-admin
+
+# 2. Проверить что приложение слушает порт 3002
+netstat -tulpn | grep 3002
+# или
+ss -tulpn | grep 3002
+# или
+lsof -i :3002
+
+# Должно быть что-то вроде:
+# tcp  0  0 0.0.0.0:3002  0.0.0.0:*  LISTEN  12345/node
+
+# 3. Проверить что приложение отвечает локально
+curl http://127.0.0.1:3002/api/public/payment-settings
+# Должен вернуть JSON, не ошибку
+
+# 4. Проверить логи PM2 на ошибки
+pm2 logs bingo-admin --lines 100 --err
+pm2 logs bingo-admin --lines 100 | grep -i error
+
+# 5. Проверить конфигурацию nginx
+sudo nginx -t
+# Должно быть: "syntax is ok" и "test is successful"
+
+# 6. Проверить конфигурацию nginx для домена
+sudo cat /etc/nginx/sites-available/fqxgmrzplndwsyvkeu.ru
+# или
+sudo cat /etc/nginx/sites-enabled/fqxgmrzplndwsyvkeu.ru
+
+# Должно быть что-то вроде:
+# location / {
+#     proxy_pass http://127.0.0.1:3002;
+#     proxy_http_version 1.1;
+#     proxy_set_header Upgrade $http_upgrade;
+#     proxy_set_header Connection 'upgrade';
+#     proxy_set_header Host $host;
+#     proxy_cache_bypass $http_upgrade;
+# }
+
+# 7. Перезагрузить nginx после изменений
+sudo systemctl reload nginx
+# или
+sudo nginx -s reload
+
+# 8. Если приложение не запускается, проверить вручную
+cd /var/www/bingo/admin_nextjs
+NODE_ENV=production PORT=3002 node .next/standalone/server.js
+# Если есть ошибки, они будут видны в консоли
+```
+
+### Полное исправление 502:
+
+```bash
+# 1. Перейти в директорию админки
+cd /var/www/bingo/admin_nextjs
+
+# 2. Проверить что build выполнен
+ls .next/standalone/server.js
+# Если файла нет, выполнить build:
+npm run build
+mkdir -p .next/standalone/.next
+cp -r .next/static .next/standalone/.next/static
+cp -r .next/BUILD_ID .next/standalone/.next/BUILD_ID 2>/dev/null || true
+
+# 3. Остановить и удалить старый процесс
+pm2 stop bingo-admin
+pm2 delete bingo-admin 2>/dev/null || true
+
+# 4. Запустить заново
+pm2 start "NODE_ENV=production PORT=3002 node .next/standalone/server.js" --name bingo-admin
+
+# 5. Сохранить конфигурацию
+pm2 save
+
+# 6. Проверить что процесс запущен
+pm2 status
+pm2 logs bingo-admin --lines 50
+
+# 7. Проверить что порт слушается
+netstat -tulpn | grep 3002
+
+# 8. Проверить что приложение отвечает
+curl http://127.0.0.1:3002/api/public/payment-settings
+
+# 9. Перезагрузить nginx
+sudo systemctl reload nginx
+```
+
 ## Если что-то не работает:
 
 ```bash
@@ -257,5 +358,9 @@ journalctl -u bingo-bot -n 100
 
 # Проверить что API доступен
 curl http://127.0.0.1:3002/api/public/payment-settings | jq
+
+# Проверить логи nginx
+sudo tail -f /var/log/nginx/error.log
+sudo tail -f /var/log/nginx/access.log
 ```
 
