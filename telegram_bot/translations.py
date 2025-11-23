@@ -10,6 +10,11 @@ TRANSLATIONS = {
             'channel': '🗞 Наш канал: {channel}',
             'support': '👨‍💻Служба поддержки: {support}',
             'bot_paused': '⏸ Бот временно приостановлен',
+            'subscribe_required': '📢 Для использования бота необходимо подписаться на наш канал: {channel}',
+            'subscribe_button': '📢 Подписаться на канал',
+            'check_subscription': '✅ Я подписался',
+            'not_subscribed': 'Пожалуйста, сначала подпишитесь на канал',
+            'subscription_error': 'Ошибка проверки подписки',
         },
         'menu': {
             'deposit': '💰 Пополнить',
@@ -82,6 +87,11 @@ TRANSLATIONS = {
             'channel': '🗞 Биздин канал: {channel}',
             'support': '👨‍💻Колдоо кызматы: {support}',
             'bot_paused': '⏸ Бот убактылуу токтотулду',
+            'subscribe_required': '📢 Ботту колдонуу үчүн биздин каналга жазылышыңыз керек: {channel}',
+            'subscribe_button': '📢 Каналга жазылуу',
+            'check_subscription': '✅ Мен жазылдым',
+            'not_subscribed': 'Алгач каналга жазылыңыз',
+            'subscription_error': 'Жазылууну текшерүүдө ката',
         },
         'menu': {
             'deposit': '💰 Толтуруу',

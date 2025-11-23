@@ -20,6 +20,7 @@ interface Settings {
     '1xcasino': boolean
     betwinner: boolean
   }
+  channel: string
 }
 
 const DEPOSIT_BANKS = [
@@ -165,6 +166,20 @@ export default function SettingsPage() {
               rows={3}
               placeholder="Введите сообщение..."
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white mb-2">
+              Канал для подписки
+            </label>
+            <input
+              type="text"
+              value={settings.channel}
+              onChange={(e) => updateSetting('channel', e.target.value)}
+              className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="@bingokg_news"
+            />
+            <p className="text-xs text-gray-400 mt-1">Укажите username канала (например: @bingokg_news)</p>
           </div>
         </div>
       </div>

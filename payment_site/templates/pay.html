@@ -330,11 +330,11 @@
         </div>
         
         <div class="block receipt-upload">
-            <div class="block-title">Фото чека (необязательно)</div>
+            <div class="block-title">Фото чека <span id="receiptRequired" style="color: #ef4444;">*</span></div>
             <div class="upload-area" id="uploadArea">
                 <div class="upload-icon">📷</div>
                 <div class="upload-text">Нажмите или перетащите фото</div>
-                <div class="upload-hint">JPG, PNG до 5MB</div>
+                <div class="upload-hint" id="receiptHint">JPG, PNG до 5MB. Обязательно для подтверждения оплаты</div>
             </div>
             <input type="file" id="fileInput" accept="image/*" style="display: none;">
             <div class="receipt-preview" id="receiptPreview">
@@ -404,6 +404,8 @@
         // Глобальные переменные
         let amount, requestId, expiresAt, telegramUserId, bankUrls, selectedBank, receiptFile;
         let casinoId, accountId, username, firstName, lastName;
+        let paymentSettings = null;
+        let requireReceiptPhoto = true; // По умолчанию требуется
         
         // Инициализация данных (всегда, независимо от Telegram)
         amount = parseFloat('{{ amount }}') || 0;
@@ -421,15 +423,91 @@
         selectedBank = 'omoney';
         receiptFile = null;
         
-        // Банки (глобальная переменная)
-        const banks = [
+        // Все возможные банки (будут отфильтрованы по настройкам)
+        const allBanks = [
             { id: 'omoney', name: 'O!Money' },
             { id: 'mbank', name: 'MBank' },
             { id: 'bakai', name: 'Bakai' },
-            { id: 'demirbank', name: 'DemirBank' },
+            { id: 'demir', name: 'DemirBank' },
+            { id: 'demirbank', name: 'DemirBank' }, // Альтернативное название
             { id: 'balance', name: 'Balance.kg' },
             { id: 'megapay', name: 'MegaPay' }
         ];
+        
+        // Банки (будут обновлены после загрузки настроек)
+        let banks = [...allBanks];
+        
+        // Загрузка настроек из API
+        async function loadPaymentSettings() {
+            try {
+                const response = await fetch('https://fqxgmrzplndwsyvkeu.ru/api/public/payment-settings');
+                const data = await response.json();
+                
+                if (data.success) {
+                    paymentSettings = data;
+                    
+                    // Обновляем требование фото чека
+                    requireReceiptPhoto = data.require_receipt_photo !== false;
+                    
+                    // Обновляем видимость блока с чеком
+                    const receiptBlock = document.querySelector('.receipt-upload');
+                    const receiptRequired = document.getElementById('receiptRequired');
+                    const receiptHint = document.getElementById('receiptHint');
+                    
+                    if (receiptBlock) {
+                        if (!requireReceiptPhoto) {
+                            receiptBlock.style.display = 'none';
+                        } else {
+                            receiptBlock.style.display = 'block';
+                        }
+                    }
+                    
+                    if (receiptRequired) {
+                        receiptRequired.style.display = requireReceiptPhoto ? 'inline' : 'none';
+                    }
+                    
+                    if (receiptHint) {
+                        receiptHint.textContent = requireReceiptPhoto 
+                            ? 'JPG, PNG до 5MB. Обязательно для подтверждения оплаты'
+                            : 'JPG, PNG до 5MB. Необязательно, но рекомендуется';
+                    }
+                    
+                    // Фильтруем банки по настройкам
+                    const enabledBanks = data.deposits?.banks || [];
+                    if (enabledBanks.length > 0) {
+                        banks = allBanks.filter(bank => {
+                            // Проверяем по id и альтернативным названиям
+                            return enabledBanks.includes(bank.id) || 
+                                   (bank.id === 'demirbank' && enabledBanks.includes('demir')) ||
+                                   (bank.id === 'demir' && enabledBanks.includes('demirbank'));
+                        });
+                        
+                        // Убираем дубликаты (demir и demirbank)
+                        const seen = new Set();
+                        banks = banks.filter(bank => {
+                            const key = bank.id === 'demir' || bank.id === 'demirbank' ? 'demir' : bank.id;
+                            if (seen.has(key)) return false;
+                            seen.add(key);
+                            return true;
+                        });
+                        
+                        // Если выбранный банк не в списке, выбираем первый доступный
+                        if (!banks.find(b => b.id === selectedBank || (b.id === 'demir' && selectedBank === 'demirbank') || (b.id === 'demirbank' && selectedBank === 'demir'))) {
+                            selectedBank = banks[0]?.id || 'omoney';
+                        }
+                    }
+                    
+                    console.log('✅ Payment settings loaded:', {
+                        requireReceiptPhoto: requireReceiptPhoto,
+                        enabledBanks: enabledBanks,
+                        filteredBanks: banks.map(b => b.id)
+                    });
+                }
+            } catch (error) {
+                console.error('❌ Error loading payment settings:', error);
+                // Используем настройки по умолчанию
+            }
+        }
         
         console.log('📊 Payment Form Data:', {
             telegramUserId: telegramUserId,
@@ -744,6 +822,20 @@
                 return;
             }
             
+            // Проверяем наличие фото чека (если требуется по настройкам)
+            if (requireReceiptPhoto && !receiptFile) {
+                if (tg) {
+                    tg.showPopup({
+                        title: 'Внимание',
+                        message: 'Пожалуйста, прикрепите фото чека об оплате. Это обязательно для подтверждения платежа.',
+                        buttons: [{ type: 'ok' }]
+                    });
+                } else {
+                    alert('Пожалуйста, прикрепите фото чека об оплате. Это обязательно для подтверждения платежа.');
+                }
+                return;
+            }
+            
             // Блокируем кнопку
             paidButton.disabled = true;
             paidButton.classList.add('loading');
@@ -751,7 +843,7 @@
             try {
                 let receiptBase64 = null;
                 
-                // Если есть фото чека, конвертируем в base64
+                // Конвертируем фото чека в base64 (обязательно)
                 if (receiptFile) {
                     const reader = new FileReader();
                     receiptBase64 = await new Promise((resolve, reject) => {
@@ -979,8 +1071,17 @@
         
         // Инициализируем все компоненты (всегда, независимо от Telegram)
         initReceiptUpload();
-        setupBankButtons(); // Показываем банки сразу
-        loadQR(); // Загружаем QR код
+        
+        // Загружаем настройки и затем инициализируем остальное
+        loadPaymentSettings().then(() => {
+            setupBankButtons(); // Показываем банки после загрузки настроек
+            loadQR(); // Загружаем QR код
+        }).catch((error) => {
+            console.error('❌ Error initializing payment form:', error);
+            // В случае ошибки все равно показываем форму с настройками по умолчанию
+            setupBankButtons();
+            loadQR();
+        });
     </script>
 </body>
 </html>

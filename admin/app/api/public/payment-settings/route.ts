@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
       pause: settingsMap.pause === 'true' || settingsMap.pause === true,
       maintenance_message: settingsMap.maintenance_message || 'Технические работы. Попробуйте позже.',
       require_receipt_photo: settingsMap.require_receipt_photo === 'true' || settingsMap.require_receipt_photo === true,
+      channel: settingsMap.channel || '@bingokg_news',
     }
 
     const res = NextResponse.json(response)
@@ -91,6 +92,7 @@ export async function GET(request: NextRequest) {
       pause: false,
       maintenance_message: 'Технические работы. Попробуйте позже.',
       require_receipt_photo: false,
+      channel: '@bingokg_news',
     })
     res.headers.set('Access-Control-Allow-Origin', '*')
     return res

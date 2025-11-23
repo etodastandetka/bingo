@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
       enabled_withdrawal_banks: typeof withdrawalSettings === 'object' ? withdrawalSettings.banks : withdrawalSettings || [],
       require_receipt_photo: settingsMap.require_receipt_photo === 'true' || settingsMap.require_receipt_photo === true,
       casinos: casinoSettings,
+      channel: settingsMap.channel || '@bingokg_news',
     }
 
     return NextResponse.json(createApiResponse(settings))
@@ -114,6 +115,10 @@ export async function POST(request: NextRequest) {
 
     if (body.casinos !== undefined) {
       await updateSetting('casinos', body.casinos, 'Настройки казино')
+    }
+
+    if (body.channel !== undefined) {
+      await updateSetting('channel', body.channel, 'Канал для подписки')
     }
 
     return NextResponse.json(
