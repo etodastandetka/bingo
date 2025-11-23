@@ -17,12 +17,14 @@ export async function GET(
       select: { note: true },
     })
 
+    // Если пользователя нет, возвращаем null
     return NextResponse.json(
       createApiResponse({
         note: user?.note || null,
       })
     )
   } catch (error: any) {
+    console.error('Error fetching note:', error)
     return NextResponse.json(
       createApiResponse(null, error.message || 'Failed to fetch note'),
       { status: error.message === 'Unauthorized' ? 401 : 500 }
@@ -41,9 +43,26 @@ export async function PATCH(
     const body = await request.json()
     const { note } = body
 
-    const user = await prisma.botUser.update({
+    // Получаем данные из последней заявки для создания пользователя, если его нет
+    const lastRequest = await prisma.request.findFirst({
       where: { userId },
-      data: { note: note || null },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    // Используем upsert для создания или обновления пользователя
+    const user = await prisma.botUser.upsert({
+      where: { userId },
+      update: {
+        note: note || null,
+      },
+      create: {
+        userId,
+        username: lastRequest?.username || null,
+        firstName: lastRequest?.firstName || null,
+        lastName: lastRequest?.lastName || null,
+        language: 'ru',
+        note: note || null,
+      },
     })
 
     return NextResponse.json(
@@ -52,6 +71,7 @@ export async function PATCH(
       })
     )
   } catch (error: any) {
+    console.error('Error updating note:', error)
     return NextResponse.json(
       createApiResponse(null, error.message || 'Failed to update note'),
       { status: error.message === 'Unauthorized' ? 401 : 500 }

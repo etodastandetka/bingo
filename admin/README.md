@@ -33,7 +33,7 @@ npm install
 Скопируйте `.env.example` в `.env` и заполните:
 
 ```env
-DATABASE_URL="postgresql://user:password@localhost:5432/bingo_admin?schema=public"
+DATABASE_URL="postgresql://gen_user:dastan10dz@92.51.38.85:5432/default_db?schema=public"
 JWT_SECRET="your-secret-key-change-in-production"
 NODE_ENV="development"
 ```

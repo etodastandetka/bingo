@@ -23,6 +23,7 @@ interface RequestDetail {
   createdAt: string
   updatedAt: string
   processedAt: string | null
+  userNote: string | null
   incomingPayments: any[]
   casinoTransactions?: any[]
 }
@@ -537,6 +538,21 @@ export default function RequestDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Заметка пользователя */}
+      {request?.userNote && (
+        <div className="mx-4 mb-4 bg-red-900 bg-opacity-30 rounded-xl p-4 border border-red-500">
+          <div className="flex items-start space-x-2">
+            <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-400 mb-1">Заметка о пользователе</p>
+              <p className="text-sm text-red-300 whitespace-pre-wrap">{request.userNote}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Модальное окно поиска по ID */}
       {showSearchModal && (

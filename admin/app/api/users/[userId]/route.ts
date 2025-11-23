@@ -59,6 +59,7 @@ export async function GET(
           transType: req.requestType,
           amount: req.amount?.toString() || '0',
           status: req.status,
+          status_detail: req.statusDetail || null,
           bookmaker: req.bookmaker,
           createdAt: req.createdAt.toISOString(),
         }))
@@ -97,6 +98,7 @@ export async function GET(
         transactions: user.transactions.map(t => ({
           ...t,
           amount: t.amount.toString(),
+          status_detail: (t as any).statusDetail || null,
         })),
         referralEarnings: user.referralEarnings.map(e => ({
           ...e,

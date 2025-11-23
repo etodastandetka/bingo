@@ -130,7 +130,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isChatPage = pathname?.includes('/chat')
 
   return (
-    <div className="h-screen bg-gradient-to-b from-blue-950 to-blue-800 flex justify-center items-center overflow-hidden">
+    <div className="h-screen bg-gradient-to-b from-slate-950 to-slate-900 flex justify-center items-center overflow-hidden">
       <div className="mobile-container w-full max-w-[414px] h-full">
         {/* Основной контент */}
         <main className={`px-4 py-4 bg-transparent overflow-y-auto h-full ${isChatPage ? 'pb-4' : 'pb-20'}`}>
@@ -139,7 +139,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Нижнее меню навигации */}
         {!isChatPage && (
-        <nav className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-[414px] bg-gray-800 border-t border-gray-700 rounded-t-3xl z-50 shadow-2xl">
+        <nav className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-[414px] bg-gray-900 border-t border-gray-800 rounded-t-3xl z-50 shadow-2xl">
           <div className="flex justify-around items-center py-2 px-2">
             {bottomNavItems.map((item) => {
               const active = isActive(item.href)

@@ -53,8 +53,9 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
         pass  # Если не удалось получить настройки, продолжаем работу
     
     # Проверяем подписку на канал
-    channel = settings.get('channel', Config.CHANNEL)
-    if channel:
+    channel = settings.get('channel') or Config.CHANNEL
+    # Убеждаемся что channel - строка
+    if channel and isinstance(channel, str) and channel.strip():
         is_subscribed = await check_channel_subscription(bot, message.from_user.id, channel)
         
         if not is_subscribed:
@@ -116,8 +117,9 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
     except Exception:
         pass
     
-    channel = settings.get('channel', Config.CHANNEL)
-    if not channel:
+    channel = settings.get('channel') or Config.CHANNEL
+    # Убеждаемся что channel - строка
+    if not channel or not isinstance(channel, str) or not channel.strip():
         await callback.answer(get_text(lang, 'start', 'subscription_error', default='Ошибка проверки подписки'), show_alert=True)
         return
     

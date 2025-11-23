@@ -17,6 +17,7 @@ interface UserDetail {
     transType: string
     amount: string
     status: string
+    status_detail: string | null
     bookmaker: string | null
     createdAt: string
   }>
@@ -48,10 +49,14 @@ export default function UserDetailPage() {
   const [user, setUser] = useState<UserDetail | null>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [note, setNote] = useState<string>('')
+  const [isEditingNote, setIsEditingNote] = useState(false)
+  const [savingNote, setSavingNote] = useState(false)
 
   useEffect(() => {
     if (params.userId) {
       fetchUser()
+      fetchNote()
     }
   }, [params.userId])
 
@@ -79,6 +84,41 @@ export default function UserDetailPage() {
     }
   }
 
+  const fetchNote = async () => {
+    try {
+      const response = await fetch(`/api/users/${params.userId}/note`)
+      const data = await response.json()
+      if (data.success) {
+        setNote(data.data.note || '')
+      }
+    } catch (error) {
+      console.error('Failed to fetch note:', error)
+    }
+  }
+
+  const saveNote = async () => {
+    setSavingNote(true)
+    try {
+      const response = await fetch(`/api/users/${params.userId}/note`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: note }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        setIsEditingNote(false)
+        alert('Заметка сохранена')
+      } else {
+        alert('Ошибка при сохранении заметки')
+      }
+    } catch (error) {
+      console.error('Failed to save note:', error)
+      alert('Ошибка при сохранении заметки')
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     const day = date.getDate().toString().padStart(2, '0')
@@ -93,14 +133,56 @@ export default function UserDetailPage() {
     return type === 'deposit' ? 'Пополнение' : 'Вывод'
   }
 
-  const getStatusLabel = (status: string) => {
+  const getTransactionType = (tx: { transType: string; status: string; status_detail: string | null }) => {
+    // Если статус "Ожидает", показываем "-"
+    if (tx.status === 'pending' || tx.status === 'processing') {
+      return '-'
+    }
+    
+    // Для выводов может быть profile-*
+    if (tx.transType === 'withdraw') {
+      return tx.status_detail?.match(/profile-\d+/)?.[0] || 'profile-1'
+    }
+    
+    // Для депозитов
+    if (tx.transType === 'deposit') {
+      // Авто пополнение - только если статус явно указывает на автопополнение
+      if (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || tx.status_detail?.includes('autodeposit')) {
+        return 'Авто пополнение'
+      }
+      
+      // Проверяем наличие profile-* в status_detail
+      if (tx.status_detail?.match(/profile-\d+/)) {
+        return tx.status_detail.match(/profile-(\d+)/)?.[0] || 'profile-1'
+      }
+      
+      // Для всех остальных депозитов (включая отклоненные) показываем profile-1
+      return 'profile-1'
+    }
+    
+    return tx.transType === 'deposit' ? 'Пополнение' : 'Вывод'
+  }
+
+  const getStatusLabel = (status: string, status_detail: string | null = null) => {
+    // Если есть status_detail с profile-*, показываем его вместо статуса
+    if (status_detail?.match(/profile-\d+/)) {
+      return status_detail.match(/profile-(\d+)/)?.[0] || status_detail
+    }
+    
     switch (status) {
       case 'completed':
       case 'approved':
+      case 'auto_completed':
+      case 'autodeposit_success':
         return 'Успешно'
       case 'pending':
         return 'Ожидает'
       case 'rejected':
+      case 'declined':
+        // Если есть status_detail, показываем его
+        if (status_detail) {
+          return status_detail
+        }
         return 'Отклонено'
       default:
         return status
@@ -144,7 +226,7 @@ export default function UserDetailPage() {
       <div className="flex items-center justify-between mb-4 px-4">
         <button
           onClick={() => router.back()}
-          className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+          className="p-2 hover:bg-gray-900 rounded-lg transition-colors"
         >
           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -155,7 +237,7 @@ export default function UserDetailPage() {
         </div>
         <Link
           href={`/dashboard/users/${user.userId}/chat`}
-          className="relative p-2 hover:bg-gray-800 rounded-lg transition-colors"
+          className="relative p-2 hover:bg-gray-900 rounded-lg transition-colors"
         >
           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -164,7 +246,7 @@ export default function UserDetailPage() {
       </div>
 
       {/* Карточка пользователя */}
-      <div className="mx-4 mb-4 bg-gray-800 rounded-2xl p-6 border border-gray-700">
+      <div className="mx-4 mb-4 bg-gray-900 rounded-2xl p-6 border border-gray-800">
         <div className="flex items-center space-x-4 mb-4">
           {photoUrl ? (
             <img
@@ -207,22 +289,64 @@ export default function UserDetailPage() {
       </div>
 
       {/* Заметка */}
-      <div className="mx-4 mb-4 bg-gray-800 rounded-2xl p-4 border border-gray-700">
+      <div className="mx-4 mb-4 bg-gray-900 rounded-2xl p-4 border border-gray-800">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-bold text-white">Заметка</h3>
-          <button className="p-1 hover:bg-gray-700 rounded transition-colors">
-            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
+          {!isEditingNote ? (
+            <button 
+              onClick={() => setIsEditingNote(true)}
+              className="p-1 hover:bg-gray-800 rounded transition-colors"
+            >
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          ) : (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={saveNote}
+                disabled={savingNote}
+                className="p-1 hover:bg-gray-800 rounded transition-colors disabled:opacity-50"
+              >
+                <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  setIsEditingNote(false)
+                  fetchNote() // Восстанавливаем исходное значение
+                }}
+                className="p-1 hover:bg-gray-800 rounded transition-colors"
+              >
+                <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
-        <p className="text-xs text-gray-400">
-          Нажмите на иконку редактирования, чтобы добавить заметку о пользователе
-        </p>
+        {isEditingNote ? (
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Введите заметку о пользователе..."
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+            rows={3}
+          />
+        ) : (
+          <p className="text-xs text-gray-400">
+            {note ? (
+              <span className="text-red-300">{note}</span>
+            ) : (
+              'Нажмите на иконку редактирования, чтобы добавить заметку о пользователе'
+            )}
+          </p>
+        )}
       </div>
 
       {/* Статус безопасности */}
-      <div className="mx-4 mb-4 bg-gray-800 rounded-2xl p-4 border border-gray-700">
+      <div className="mx-4 mb-4 bg-gray-900 rounded-2xl p-4 border border-gray-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -252,7 +376,7 @@ export default function UserDetailPage() {
             {user.transactions.slice(0, 10).map((tx) => (
               <div
                 key={tx.id}
-                className="bg-gray-800 rounded-xl p-4 border border-gray-700 hover:border-blue-500 transition-colors"
+                className="bg-gray-900 rounded-xl p-4 border border-gray-800 hover:border-blue-500 transition-colors"
               >
                 <div className="flex items-center space-x-3">
                   <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
@@ -271,11 +395,14 @@ export default function UserDetailPage() {
                       <p className="text-sm font-medium text-white">{displayName}</p>
                       <span className="text-xs text-gray-400">ID: {user.userId}</span>
                     </div>
-                    {tx.bookmaker && (
-                      <span className="inline-block px-2 py-0.5 text-xs font-medium bg-blue-600 text-white rounded mb-1">
-                        {tx.transType === 'deposit' ? 'Авто пополнение' : 'profile-6'}
-                      </span>
-                    )}
+                    {(() => {
+                      const transactionType = getTransactionType(tx)
+                      return transactionType !== '-' && (
+                        <span className="inline-block px-2 py-0.5 text-xs font-medium bg-blue-600 text-white rounded mb-1">
+                          {transactionType}
+                        </span>
+                      )
+                    })()}
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-400 mb-1">{formatDate(tx.createdAt)}</p>
@@ -285,8 +412,18 @@ export default function UserDetailPage() {
                       {tx.transType === 'deposit' ? '+' : '-'}{parseFloat(tx.amount || '0').toFixed(2).replace('.', ',')}
                     </p>
                     <div className="flex items-center space-x-1 mt-1">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <span className="text-xs text-blue-500">{getStatusLabel(tx.status)}</span>
+                      <div className={`w-2 h-2 rounded-full ${
+                        getStatusLabel(tx.status, tx.status_detail) === 'Успешно' ? 'bg-blue-500' :
+                        getStatusLabel(tx.status, tx.status_detail) === 'Ожидает' ? 'bg-yellow-500' :
+                        getStatusLabel(tx.status, tx.status_detail) === 'Отклонено' ? 'bg-red-500' :
+                        'bg-blue-500'
+                      }`}></div>
+                      <span className={`text-xs ${
+                        getStatusLabel(tx.status, tx.status_detail) === 'Успешно' ? 'text-blue-500' :
+                        getStatusLabel(tx.status, tx.status_detail) === 'Ожидает' ? 'text-yellow-500' :
+                        getStatusLabel(tx.status, tx.status_detail) === 'Отклонено' ? 'text-red-500' :
+                        'text-blue-500'
+                      }`}>{getStatusLabel(tx.status, tx.status_detail)}</span>
                     </div>
                   </div>
                 </div>
@@ -294,7 +431,7 @@ export default function UserDetailPage() {
             ))}
           </div>
         ) : (
-          <div className="bg-gray-800 rounded-xl p-6 border border-gray-700 text-center">
+          <div className="bg-gray-900 rounded-xl p-6 border border-gray-800 text-center">
             <p className="text-gray-400">Нет транзакций</p>
           </div>
         )}

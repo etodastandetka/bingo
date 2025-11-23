@@ -32,6 +32,7 @@ model BotUser {
   lastName    String?  @map("last_name") @db.VarChar(255)
   language    String   @default("ru") @db.VarChar(10)
   selectedBookmaker String? @map("selected_bookmaker") @db.VarChar(50)
+  note        String?  @db.Text
   createdAt   DateTime @default(now()) @map("created_at")
 
   transactions BotTransaction[]

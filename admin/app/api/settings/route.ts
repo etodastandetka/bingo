@@ -117,8 +117,12 @@ export async function POST(request: NextRequest) {
       await updateSetting('casinos', body.casinos, 'Настройки казино')
     }
 
-    if (body.channel !== undefined) {
-      await updateSetting('channel', body.channel, 'Канал для подписки')
+    if (body.channel !== undefined && body.channel !== null) {
+      // Убеждаемся что channel - строка
+      const channelValue = typeof body.channel === 'string' ? body.channel.trim() : String(body.channel || '@bingokg_news')
+      if (channelValue) {
+        await updateSetting('channel', channelValue, 'Канал для подписки')
+      }
     }
 
     return NextResponse.json(

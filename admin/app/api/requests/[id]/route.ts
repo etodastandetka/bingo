@@ -18,6 +18,16 @@ export async function GET(
       },
     })
 
+    // Получаем заметку пользователя, если он существует
+    let userNote: string | null = null
+    if (requestData) {
+      const user = await prisma.botUser.findUnique({
+        where: { userId: requestData.userId },
+        select: { note: true },
+      })
+      userNote = user?.note || null
+    }
+
     if (!requestData) {
       return NextResponse.json(
         createApiResponse(null, 'Request not found'),
@@ -58,6 +68,7 @@ export async function GET(
         userId: requestData.userId.toString(), // Преобразуем BigInt в строку
         amount: requestData.amount ? requestData.amount.toString() : null,
         photoFileUrl: requestData.photoFileUrl, // Фото чека (base64 или URL)
+        userNote: userNote, // Заметка пользователя
         incomingPayments: requestData.incomingPayments.map(p => ({
           ...p,
           amount: p.amount.toString(),

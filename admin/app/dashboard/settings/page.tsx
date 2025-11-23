@@ -55,11 +55,11 @@ export default function SettingsPage() {
       const response = await fetch('/api/settings')
       const data = await response.json()
 
-      if (data.success) {
+      if (data.success && data.data) {
         // Убеждаемся что channel есть (значение по умолчанию)
         const settingsData = {
           ...data.data,
-          channel: data.data.channel || '@bingokg_news'
+          channel: (data.data.channel && typeof data.data.channel === 'string') ? data.data.channel : '@bingokg_news'
         }
         setSettings(settingsData)
       }

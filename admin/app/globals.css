@@ -20,8 +20,18 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #1e3a8a;
+  background-color: #0f172a;
   color: #ffffff;
+}
+
+/* Скрытие скроллбара */
+::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 a {

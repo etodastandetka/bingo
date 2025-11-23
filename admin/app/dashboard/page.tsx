@@ -235,7 +235,7 @@ export default function DashboardPage() {
         </div>
         <button 
           onClick={() => fetchRequests()}
-          className="p-2 bg-gray-800 rounded-lg"
+          className="p-2 bg-gray-900 rounded-lg"
         >
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -250,7 +250,7 @@ export default function DashboardPage() {
           className={`flex-1 px-4 py-3 rounded-xl font-medium text-sm transition-all ${
             activeTab === 'pending'
               ? 'bg-blue-500 text-white shadow-lg'
-              : 'bg-gray-800 text-gray-300'
+              : 'bg-gray-900 text-gray-300'
           }`}
         >
           Ожидающие
@@ -260,7 +260,7 @@ export default function DashboardPage() {
           className={`flex-1 px-4 py-3 rounded-xl font-medium text-sm transition-all ${
             activeTab === 'deferred'
               ? 'bg-blue-500 text-white shadow-lg'
-              : 'bg-gray-800 text-gray-300'
+              : 'bg-gray-900 text-gray-300'
           }`}
         >
           Отложенные
@@ -301,7 +301,7 @@ export default function DashboardPage() {
               <Link
                 key={request.id}
                 href={`/dashboard/requests/${request.id}`}
-                className="block bg-gray-800 bg-opacity-50 rounded-xl p-4 border border-gray-700 hover:border-blue-500 transition-colors backdrop-blur-sm"
+                className="block bg-gray-900 bg-opacity-70 rounded-xl p-4 border border-gray-800 hover:border-blue-500 transition-colors backdrop-blur-sm"
               >
                   <div className="flex items-start justify-between">
                     {/* Левая часть: Иконка банка и информация о пользователе */}
