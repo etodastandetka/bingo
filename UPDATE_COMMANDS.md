@@ -9,7 +9,7 @@ cd /var/www/bingo/admin
 # Обновить код из репозитория
 git pull origin main
 
-# Установить зависимости (если нужно)
+# ОБЯЗАТЕЛЬНО: Установить все зависимости (включая devDependencies для сборки)
 npm install
 
 # Сгенерировать Prisma client
@@ -83,7 +83,7 @@ pm2 logs bingo-payment --lines 20
 ## 4. Обновление всех проектов одной командой
 
 ```bash
-# Админка
+# Админка (ВАЖНО: npm install обязателен для установки tailwindcss и других зависимостей)
 cd /var/www/bingo/admin && \
 git pull origin main && \
 npm install && \
@@ -115,11 +115,11 @@ pm2 status
 
 ## 5. Быстрое обновление (только git pull + перезапуск)
 
-Если зависимости не изменились, можно просто обновить код и перезапустить:
+⚠️ **ВНИМАНИЕ:** Используйте только если уверены, что зависимости не изменились!
 
 ```bash
-# Админка
-cd /var/www/bingo/admin && git pull origin main && npm run build && pm2 restart bingo-admin
+# Админка (с установкой зависимостей на всякий случай)
+cd /var/www/bingo/admin && git pull origin main && npm install && npx prisma generate && npm run build && pm2 restart bingo-admin
 
 # Бот
 cd /var/www/bingo/telegram_bot && git pull origin main && pm2 restart bingo-bot
@@ -158,13 +158,25 @@ git fetch origin
 git reset --hard origin/main
 ```
 
-### Если сборка админки не работает:
+### Если сборка админки не работает (ошибка "Cannot find module 'tailwindcss'" и т.д.):
 ```bash
 cd /var/www/bingo/admin
-rm -rf .next node_modules
+
+# Полная переустановка зависимостей
+rm -rf .next node_modules package-lock.json
 npm install
+
+# Проверить что tailwindcss установлен
+npm list tailwindcss
+
+# Сгенерировать Prisma client
 npx prisma generate
+
+# Собрать проект
 npm run build
+
+# Если все еще не работает, проверить что все зависимости установлены
+npm install --production=false
 ```
 
 ### Если PM2 не видит изменения:
