@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,80 +7,94 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Admin Users
 model AdminUser {
-  id            Int       @id @default(autoincrement())
-  username      String    @unique
-  password      String
-  email         String?   @unique
-  isActive      Boolean   @default(true)
-  isSuperAdmin  Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           Int                @id @default(autoincrement())
+  username     String             @unique
+  password     String
+  email        String?            @unique
+  isActive     Boolean            @default(true)
+  isSuperAdmin Boolean            @default(false)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  loginHistory AdminLoginHistory[]
 
   @@map("admin_users")
 }
 
-// Bot Users (from universal_bot.db)
+model AdminLoginHistory {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  username  String   @db.VarChar(255)
+  ipAddress String?  @map("ip_address") @db.VarChar(45)
+  userAgent String?  @map("user_agent")
+  device    String?  @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("admin_login_history")
+}
+
 model BotUser {
-  userId      BigInt   @id @map("user_id") @db.BigInt
-  username    String?  @db.VarChar(255)
-  firstName   String?  @map("first_name") @db.VarChar(255)
-  lastName    String?  @map("last_name") @db.VarChar(255)
-  language    String   @default("ru") @db.VarChar(10)
-  selectedBookmaker String? @map("selected_bookmaker") @db.VarChar(50)
-  note        String?  @db.Text
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  transactions BotTransaction[]
-  referralMade BotReferral[] @relation("Referrer")
-  referralFrom BotReferral?   @relation("Referred")
-  referralEarnings BotReferralEarning[] @relation("ReferrerEarnings")
+  userId            BigInt               @id @map("user_id")
+  username          String?              @db.VarChar(255)
+  firstName         String?              @map("first_name") @db.VarChar(255)
+  lastName          String?              @map("last_name") @db.VarChar(255)
+  language          String               @default("ru") @db.VarChar(10)
+  selectedBookmaker String?              @map("selected_bookmaker") @db.VarChar(50)
+  note              String?
+  isActive          Boolean              @default(true) @map("is_active")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  monthlyPayments   BotMonthlyPayment[]
   earningsGenerated BotReferralEarning[] @relation("ReferredEarnings")
-  userData    BotUserData[]
-  referralTopEntry BotReferralTop?
-  topPayments BotTopPayment[]
-  monthlyPayments BotMonthlyPayment[]
+  referralEarnings  BotReferralEarning[] @relation("ReferrerEarnings")
+  referralTopEntry  BotReferralTop?
+  referralFrom      BotReferral?         @relation("Referred")
+  referralMade      BotReferral[]        @relation("Referrer")
+  topPayments       BotTopPayment[]
+  transactions      BotTransaction[]
+  userData          BotUserData[]
 
+  @@index([isActive])
   @@map("users")
 }
 
 model BotUserData {
   id        Int      @id @default(autoincrement())
-  userId    BigInt   @map("user_id") @db.BigInt
+  userId    BigInt   @map("user_id")
   dataType  String   @map("data_type") @db.VarChar(255)
-  dataValue String?  @map("data_value") @db.Text
+  dataValue String?  @map("data_value")
   createdAt DateTime @default(now()) @map("created_at")
-
-  user BotUser @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  user      BotUser  @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@unique([userId, dataType])
   @@index([userId])
   @@map("user_data")
 }
 
-// Requests (Заявки на пополнение/вывод)
 model Request {
-  id            Int       @id @default(autoincrement())
-  userId        BigInt    @map("user_id") @db.BigInt
-  username      String?   @db.VarChar(255)
-  firstName     String?   @map("first_name") @db.VarChar(255)
-  lastName      String?   @map("last_name") @db.VarChar(255)
-  bookmaker     String?   @db.VarChar(100)
-  accountId     String?   @map("account_id") @db.VarChar(255)
-  amount        Decimal?  @db.Decimal(10, 2)
-  requestType   String    @map("request_type") @db.VarChar(20) // deposit/withdraw
-  status        String    @default("pending") @db.VarChar(20)
-  statusDetail  String?   @map("status_detail") @db.VarChar(50)
-  withdrawalCode String?  @map("withdrawal_code") @db.VarChar(255)
-  photoFileId   String?   @map("photo_file_id") @db.VarChar(255)
-  photoFileUrl  String?   @map("photo_file_url") @db.Text
-  bank          String?   @db.VarChar(100)
-  phone         String?   @db.VarChar(20)
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  processedAt   DateTime? @map("processed_at")
-
+  id               Int               @id @default(autoincrement())
+  userId           BigInt            @map("user_id")
+  username         String?           @db.VarChar(255)
+  firstName        String?           @map("first_name") @db.VarChar(255)
+  lastName         String?           @map("last_name") @db.VarChar(255)
+  bookmaker        String?           @db.VarChar(100)
+  accountId        String?           @map("account_id") @db.VarChar(255)
+  amount           Decimal?          @db.Decimal(10, 2)
+  requestType      String            @default("deposit") @map("request_type") @db.VarChar(20)
+  status           String            @default("pending") @db.VarChar(20)
+  statusDetail     String?           @map("status_detail") @db.VarChar(50)
+  processedBy      String?           @map("processed_by") @db.VarChar(255)
+  processedByUsername String?        @map("processed_by_username") @db.VarChar(255)
+  withdrawalCode   String?           @map("withdrawal_code") @db.VarChar(255)
+  photoFileId      String?           @map("photo_file_id") @db.VarChar(255)
+  photoFileUrl     String?           @map("photo_file_url")
+  bank             String?           @db.VarChar(100)
+  phone            String?           @db.VarChar(20)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  processedAt      DateTime?         @map("processed_at")
   incomingPayments IncomingPayment[]
 
   @@index([userId])
@@ -93,32 +104,28 @@ model Request {
   @@map("requests")
 }
 
-// Bot Transactions
 model BotTransaction {
-  id        Int       @id @default(autoincrement())
-  userId   BigInt    @map("user_id") @db.BigInt
+  id        Int      @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
   bookmaker String?  @db.VarChar(50)
   transType String   @map("trans_type") @db.VarChar(50)
-  amount    Decimal   @db.Decimal(10, 2)
-  status    String    @default("pending") @db.VarChar(20)
-  createdAt DateTime  @default(now()) @map("created_at")
-
-  user BotUser @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  amount    Decimal  @db.Decimal(10, 2)
+  status    String   @default("pending") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      BotUser  @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([status])
   @@map("transactions")
 }
 
-// Referrals
 model BotReferral {
   id         Int      @id @default(autoincrement())
-  referrerId BigInt   @map("referrer_id") @db.BigInt
-  referredId BigInt   @unique @map("referred_id") @db.BigInt
+  referrerId BigInt   @map("referrer_id")
+  referredId BigInt   @unique @map("referred_id")
   createdAt  DateTime @default(now()) @map("created_at")
-
-  referrer BotUser @relation("Referrer", fields: [referrerId], references: [userId], onDelete: Cascade)
-  referred BotUser @relation("Referred", fields: [referredId], references: [userId], onDelete: Cascade)
+  referred   BotUser  @relation("Referred", fields: [referredId], references: [userId], onDelete: Cascade)
+  referrer   BotUser  @relation("Referrer", fields: [referrerId], references: [userId], onDelete: Cascade)
 
   @@index([referrerId])
   @@index([referredId])
@@ -126,17 +133,16 @@ model BotReferral {
 }
 
 model BotReferralEarning {
-  id             Int      @id @default(autoincrement())
-  referrerId     BigInt   @map("referrer_id") @db.BigInt
-  referredId     BigInt   @map("referred_id") @db.BigInt
-  amount         Decimal  @db.Decimal(10, 2)
-  commissionAmount Decimal @map("commission_amount") @db.Decimal(10, 2)
-  bookmaker      String?  @db.VarChar(50)
-  status         String   @default("pending") @db.VarChar(20)
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  referrer BotUser @relation("ReferrerEarnings", fields: [referrerId], references: [userId], onDelete: Cascade)
-  referred BotUser @relation("ReferredEarnings", fields: [referredId], references: [userId], onDelete: Cascade)
+  id               Int      @id @default(autoincrement())
+  referrerId       BigInt   @map("referrer_id")
+  referredId       BigInt   @map("referred_id")
+  amount           Decimal  @db.Decimal(10, 2)
+  commissionAmount Decimal  @map("commission_amount") @db.Decimal(10, 2)
+  bookmaker        String?  @db.VarChar(50)
+  status           String   @default("pending") @db.VarChar(20)
+  createdAt        DateTime @default(now()) @map("created_at")
+  referred         BotUser  @relation("ReferredEarnings", fields: [referredId], references: [userId], onDelete: Cascade)
+  referrer         BotUser  @relation("ReferrerEarnings", fields: [referrerId], references: [userId], onDelete: Cascade)
 
   @@index([referrerId, status])
   @@index([referredId])
@@ -144,94 +150,88 @@ model BotReferralEarning {
 }
 
 model BotReferralTop {
-  id            Int      @id @default(autoincrement())
-  userId        BigInt   @unique @map("user_id") @db.BigInt
-  totalEarnings Decimal  @default(0) @map("total_earnings") @db.Decimal(10, 2)
-  totalReferrals Int     @default(0) @map("total_referrals")
-  lastUpdated   DateTime @updatedAt @map("last_updated")
-
-  user BotUser @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  id             Int      @id @default(autoincrement())
+  userId         BigInt   @unique @map("user_id")
+  totalEarnings  Decimal  @default(0) @map("total_earnings") @db.Decimal(10, 2)
+  totalReferrals Int      @default(0) @map("total_referrals")
+  lastUpdated    DateTime @updatedAt @map("last_updated")
+  user           BotUser  @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@map("referral_top")
 }
 
 model BotTopPayment {
   id        Int      @id @default(autoincrement())
-  userId    BigInt   @map("user_id") @db.BigInt
+  userId    BigInt   @map("user_id")
   position  Int
   amount    Decimal  @db.Decimal(10, 2)
   status    String   @default("pending") @db.VarChar(20)
   createdAt DateTime @default(now()) @map("created_at")
-
-  user BotUser @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  user      BotUser  @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@map("top_payments")
 }
 
 model BotMonthlyPayment {
   id        Int      @id @default(autoincrement())
-  userId    BigInt   @map("user_id") @db.BigInt
+  userId    BigInt   @map("user_id")
   position  Int
   amount    Decimal  @db.Decimal(10, 2)
   status    String   @default("pending") @db.VarChar(20)
   createdAt DateTime @default(now()) @map("created_at")
-
-  user BotUser @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  user      BotUser  @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@map("monthly_payments")
 }
 
-// Requisites
 model BotRequisite {
   id        Int      @id @default(autoincrement())
-  value     String   @db.Text
+  value     String?
   isActive  Boolean  @default(false) @map("is_active")
   name      String?  @db.VarChar(255)
   email     String?  @db.VarChar(255)
   password  String?  @db.VarChar(255)
   createdAt DateTime @default(now()) @map("created_at")
+  bank      String?  @db.VarChar(50)
+  hash      String?
 
   @@index([isActive])
   @@map("requisites")
 }
 
-// Bot Settings
 model BotSetting {
   key       String   @id @db.VarChar(100)
-  value     String   @db.Text
+  value     String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("bot_settings")
 }
 
-// Bot Configuration
 model BotConfiguration {
   id          Int      @id @default(autoincrement())
   key         String   @unique @db.VarChar(100)
-  value       String   @db.Text
-  description String?  @db.Text
+  value       String
+  description String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("bot_configuration")
 }
 
-// Bank Settings
 model BankSettings {
-  id              Int      @id @default(autoincrement())
-  bankName        String   @map("bank_name") @db.VarChar(100)
-  bankCode        String?  @map("bank_code") @db.VarChar(50)
-  isActive        Boolean  @default(true) @map("is_active")
-  isEnabledDeposit Boolean @default(true) @map("is_enabled_deposit")
-  isEnabledWithdraw Boolean @default(true) @map("is_enabled_withdraw")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                Int      @id @default(autoincrement())
+  bankName          String   @map("bank_name") @db.VarChar(100)
+  bankCode          String?  @map("bank_code") @db.VarChar(50)
+  isActive          Boolean  @default(true) @map("is_active")
+  isEnabledDeposit  Boolean  @default(true) @map("is_enabled_deposit")
+  isEnabledWithdraw Boolean  @default(true) @map("is_enabled_withdraw")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@map("bank_settings")
 }
 
-// Bank Wallets
 model BankWallet {
   id            Int      @id @default(autoincrement())
   bankName      String   @default("Unknown") @map("bank_name") @db.VarChar(100)
@@ -244,19 +244,17 @@ model BankWallet {
   @@map("bank_wallets")
 }
 
-// Incoming Payments
 model IncomingPayment {
-  id              Int       @id @default(autoincrement())
-  amount          Decimal   @db.Decimal(10, 2)
-  bank            String?   @db.VarChar(50)
-  paymentDate     DateTime  @map("payment_date")
-  notificationText String?  @map("notification_text") @db.Text
-  requestId       Int?      @map("request_id")
-  isProcessed     Boolean   @default(false) @map("is_processed")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  request Request? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  id               Int      @id @default(autoincrement())
+  amount           Decimal  @db.Decimal(10, 2)
+  bank             String?  @db.VarChar(50)
+  paymentDate      DateTime @map("payment_date")
+  notificationText String?  @map("notification_text")
+  requestId        Int?     @map("request_id")
+  isProcessed      Boolean  @default(false) @map("is_processed")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  request          Request? @relation(fields: [requestId], references: [id])
 
   @@index([amount, isProcessed])
   @@index([paymentDate])
@@ -264,55 +262,84 @@ model IncomingPayment {
   @@map("incoming_payments")
 }
 
-// Chat Messages
+model UncreatedRequest {
+  id             Int      @id @default(autoincrement())
+  userId         BigInt   @map("user_id")
+  username       String?  @db.VarChar(255)
+  firstName      String?  @map("first_name") @db.VarChar(255)
+  lastName       String?  @map("last_name") @db.VarChar(255)
+  bookmaker      String?  @db.VarChar(100)
+  accountId      String?  @map("account_id") @db.VarChar(255)
+  bank           String?  @db.VarChar(100)
+  amount         Decimal? @db.Decimal(10, 2)
+  requestType    String   @default("deposit") @map("request_type") @db.VarChar(20)
+  status         String   @default("not_created") @db.VarChar(30)
+  createdRequestId Int?   @map("created_request_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, status])
+  @@map("uncreated_requests")
+}
+
 model ChatMessage {
-  id                Int       @id @default(autoincrement())
-  userId            BigInt    @map("user_id") @db.BigInt
-  messageText       String?   @map("message_text") @db.Text
-  messageType       String    @default("text") @map("message_type") @db.VarChar(20)
-  mediaUrl          String?   @map("media_url") @db.Text
-  direction         String    @default("in") @db.VarChar(10) // 'in' - от пользователя, 'out' - от админа
-  telegramMessageId BigInt?   @map("telegram_message_id") @db.BigInt
-  createdAt         DateTime  @default(now()) @map("created_at")
+  id                Int      @id @default(autoincrement())
+  userId            BigInt   @map("user_id")
+  messageText       String?  @map("message_text")
+  messageType       String   @default("text") @map("message_type") @db.VarChar(20)
+  mediaUrl          String?  @map("media_url")
+  direction         String   @default("in") @db.VarChar(10)
+  botType           String   @default("main") @map("bot_type") @db.VarChar(20)
+  telegramMessageId BigInt?  @map("telegram_message_id")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   @@index([userId, createdAt])
+  @@index([userId, botType, createdAt])
   @@map("chat_messages")
 }
 
-// Broadcast Messages
 model BroadcastMessage {
   id        Int       @id @default(autoincrement())
-  title     String   @db.VarChar(200)
-  message   String   @db.Text
-  isSent    Boolean  @default(false) @map("is_sent")
+  title     String    @db.VarChar(200)
+  message   String
+  isSent    Boolean   @default(false) @map("is_sent")
   sentAt    DateTime? @map("sent_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
   @@map("broadcast_messages")
 }
 
-// Referral Withdrawal Requests
 model ReferralWithdrawalRequest {
-  id                  Int       @id @default(autoincrement())
-  userId              BigInt    @map("user_id") @db.BigInt
-  username            String?   @db.VarChar(100)
-  firstName           String?   @map("first_name") @db.VarChar(100)
-  lastName            String?   @map("last_name") @db.VarChar(100)
-  phoneNumber         String?   @map("phone_number") @db.VarChar(20)
-  amount              Decimal   @db.Decimal(12, 2)
-  currency            String    @default("KGS") @db.VarChar(10)
-  bookmaker           String    @db.VarChar(20)
-  bookmakerAccountId  String    @map("bookmaker_account_id") @db.VarChar(64)
-  paymentMethod       String    @map("payment_method") @db.VarChar(20)
-  walletDetails       String    @map("wallet_details") @db.Text
-  status              String    @default("pending") @db.VarChar(20)
-  adminComment        String?   @map("admin_comment") @db.Text
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
-  processedAt         DateTime? @map("processed_at")
+  id                 Int       @id @default(autoincrement())
+  userId             BigInt    @map("user_id")
+  username           String?   @db.VarChar(100)
+  firstName          String?   @map("first_name") @db.VarChar(100)
+  lastName           String?   @map("last_name") @db.VarChar(100)
+  phoneNumber        String?   @map("phone_number") @db.VarChar(20)
+  amount             Decimal   @db.Decimal(12, 2)
+  currency           String    @default("KGS") @db.VarChar(10)
+  bookmaker          String    @db.VarChar(20)
+  bookmakerAccountId String    @map("bookmaker_account_id") @db.VarChar(64)
+  paymentMethod      String    @map("payment_method") @db.VarChar(20)
+  walletDetails      String    @map("wallet_details")
+  status             String    @default("pending") @db.VarChar(20)
+  adminComment       String?   @map("admin_comment")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  processedAt        DateTime? @map("processed_at")
 
   @@index([status])
   @@index([userId])
   @@map("referral_withdrawal_requests")
 }
 
+model QuickReply {
+  id        Int      @id @default(autoincrement())
+  text      String   @db.VarChar(500)
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([order])
+  @@map("quick_replies")
+}

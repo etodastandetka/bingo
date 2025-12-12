@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, createApiResponse } from '@/lib/api-helpers'
 import { prisma } from '@/lib/prisma'
+import { ensureUserExists } from '@/lib/sync-user'
 
 // Отправка сообщения пользователю через бота (поддерживает текст, фото и видео)
 export async function POST(
@@ -93,6 +94,7 @@ export async function POST(
         telegramFormData.append('caption', message)
       }
       telegramFormData.append(isPhoto ? 'photo' : 'video', blob, file.name)
+      telegramFormData.append('protect_content', 'true')
 
       const apiEndpoint = isPhoto 
         ? `https://api.telegram.org/bot${botToken}/sendPhoto`
@@ -138,7 +140,8 @@ export async function POST(
         body: JSON.stringify({
           chat_id: userId.toString(),
           text: message,
-          parse_mode: 'HTML'
+          parse_mode: 'HTML',
+          protect_content: true
         })
       })
 
@@ -154,6 +157,9 @@ export async function POST(
       telegramMessageId = BigInt(telegramData.result.message_id)
     }
 
+    // Синхронизируем пользователя перед сохранением сообщения
+    await ensureUserExists(userId)
+
     // Сохраняем сообщение в БД
     await prisma.chatMessage.create({
       data: {
@@ -161,6 +167,7 @@ export async function POST(
         messageText: message,
         messageType,
         direction: 'out', // Сообщение от админа к пользователю
+        botType: 'main', // Сообщение от основного бота
         telegramMessageId,
         mediaUrl,
       },

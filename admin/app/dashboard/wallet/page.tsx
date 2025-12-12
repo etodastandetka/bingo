@@ -5,9 +5,11 @@ import { useEffect, useState, useRef } from 'react'
 interface Wallet {
   id: number
   name: string | null
-  value: string
+  value: string | null
   email: string | null
   password: string | null
+  bank: string | null
+  hash: string | null
   isActive: boolean
 }
 
@@ -22,6 +24,8 @@ export default function WalletPage() {
     value: '',
     email: '',
     password: '',
+    bank: '',
+    hash: '',
     isActive: false,
   })
 
@@ -47,9 +51,31 @@ export default function WalletPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Валидация: реквизит должен быть 16 цифр
-    if (formData.value && !/^\d{16}$/.test(formData.value)) {
-      alert('Реквизит должен содержать ровно 16 цифр')
+    // Валидация в зависимости от банка
+    if (formData.bank === 'Demir Bank') {
+      if (!formData.value || !/^\d{16}$/.test(formData.value)) {
+        alert('Реквизит должен содержать ровно 16 цифр')
+        return
+      }
+      if (!formData.email) {
+        alert('Почта обязательна для Demir Bank')
+        return
+      }
+      if (!editing && !formData.password) {
+        alert('Пароль обязателен для Demir Bank')
+        return
+      }
+    } else if (formData.bank === 'Bakai') {
+      if (!formData.hash) {
+        alert('Hash обязателен для Bakai')
+        return
+      }
+      if (!formData.name) {
+        alert('Название обязательно для Bakai')
+        return
+      }
+    } else {
+      alert('Выберите банк')
       return
     }
 
@@ -89,6 +115,8 @@ export default function WalletPage() {
         value: '',
         email: '',
         password: '',
+        bank: '',
+        hash: '',
         isActive: false,
       })
       fetchWallets()
@@ -105,6 +133,8 @@ export default function WalletPage() {
       value: wallet.value || '',
       email: wallet.email || '',
       password: '', // Не показываем пароль при редактировании
+      bank: wallet.bank || '',
+      hash: wallet.hash || '',
       isActive: wallet.isActive,
     })
     setShowModal(true)
@@ -135,6 +165,8 @@ export default function WalletPage() {
       value: '',
       email: '',
       password: '',
+      bank: '',
+      hash: '',
       isActive: false,
     })
     setShowModal(true)
@@ -243,7 +275,7 @@ export default function WalletPage() {
             <option value="">Выберите активный кошелек</option>
             {wallets.map((wallet) => (
               <option key={wallet.id} value={wallet.id}>
-                {wallet.name || `Кошелек #${wallet.id}`} - {wallet.value.slice(0, 4)}****{wallet.value.slice(-4)} {wallet.isActive ? '(Активен)' : ''}
+                {wallet.name || `Кошелек #${wallet.id}`} - {wallet.bank || 'Без банка'} {wallet.isActive ? '(Активен)' : ''}
               </option>
             ))}
           </select>
@@ -303,14 +335,36 @@ export default function WalletPage() {
               </div>
 
               <div className="space-y-2 mt-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">
-                    Реквизит (16 цифр)
-                  </label>
-                  <div className="bg-gray-900 p-2 rounded-lg border border-gray-700">
-                    <p className="text-sm text-white font-mono">{wallet.value}</p>
+                {wallet.bank && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                      Банк
+                    </label>
+                    <div className="bg-gray-900 p-2 rounded-lg border border-gray-700">
+                      <p className="text-sm text-white">{wallet.bank}</p>
+                    </div>
                   </div>
-                </div>
+                )}
+                {wallet.bank === 'Demir Bank' && wallet.value && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                      Реквизит (16 цифр)
+                    </label>
+                    <div className="bg-gray-900 p-2 rounded-lg border border-gray-700">
+                      <p className="text-sm text-white font-mono">{wallet.value}</p>
+                    </div>
+                  </div>
+                )}
+                {wallet.bank === 'Bakai' && wallet.hash && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                      Hash
+                    </label>
+                    <div className="bg-gray-900 p-2 rounded-lg border border-gray-700">
+                      <p className="text-sm text-white font-mono break-all">{wallet.hash}</p>
+                    </div>
+                  </div>
+                )}
                 {wallet.email && (
                   <div>
                     <label className="block text-xs font-medium text-gray-400 mb-1">
@@ -347,11 +401,11 @@ export default function WalletPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Название *
+                  Название {formData.bank === 'Bakai' && '*'}
                 </label>
                 <input
                   type="text"
-                  required
+                  required={formData.bank === 'Bakai'}
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -361,52 +415,107 @@ export default function WalletPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Реквизит (16 цифр) *
+                  Банк *
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.value}
+                <select
+                  value={formData.bank}
                   onChange={(e) => {
-                    const value = e.target.value.replace(/\D/g, '').slice(0, 16)
-                    setFormData({ ...formData, value })
+                    const bank = e.target.value
+                    setFormData({
+                      ...formData,
+                      bank,
+                      // Очищаем поля при смене банка
+                      value: bank === 'Demir Bank' ? formData.value : '',
+                      email: bank === 'Demir Bank' ? formData.email : '',
+                      password: bank === 'Demir Bank' ? formData.password : '',
+                      hash: bank === 'Bakai' ? formData.hash : '',
+                    })
                   }}
-                  className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="1234567890123456"
-                  maxLength={16}
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  {formData.value.length}/16 цифр
-                </p>
+                  className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                  required
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    backgroundSize: '16px',
+                    paddingRight: '40px'
+                  }}
+                >
+                  <option value="">Выберите банк</option>
+                  <option value="Demir Bank">Demir Bank</option>
+                  <option value="Bakai">Bakai</option>
+                </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Почта
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="email@example.com"
-                />
-              </div>
+              {formData.bank === 'Demir Bank' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Реквизит (16 цифр) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.value}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '').slice(0, 16)
+                        setFormData({ ...formData, value })
+                      }}
+                      className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="1234567890123456"
+                      maxLength={16}
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      {formData.value.length}/16 цифр
+                    </p>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Пароль {editing && '(оставьте пустым, чтобы не менять)'}
-                  {!editing && ' *'}
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder={editing ? 'Оставьте пустым, чтобы не менять' : 'Пароль'}
-                  required={!editing}
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Почта *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="email@example.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Пароль {editing && '(оставьте пустым, чтобы не менять)'}
+                      {!editing && ' *'}
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder={editing ? 'Оставьте пустым, чтобы не менять' : 'Пароль'}
+                      required={!editing}
+                    />
+                  </div>
+                </>
+              )}
+
+              {formData.bank === 'Bakai' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Hash *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.hash}
+                    onChange={(e) => setFormData({ ...formData, hash: e.target.value })}
+                    className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Введите hash"
+                  />
+                </div>
+              )}
 
               <div className="flex items-center">
                 <input
@@ -432,6 +541,8 @@ export default function WalletPage() {
                       value: '',
                       email: '',
                       password: '',
+                      bank: '',
+                      hash: '',
                       isActive: false,
                     })
                   }}

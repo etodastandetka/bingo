@@ -1,0 +1,70 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { requireAuth, createApiResponse } from '@/lib/api-helpers'
+
+export const dynamic = 'force-dynamic'
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    requireAuth(request)
+
+    const id = parseInt(params.id, 10)
+    if (Number.isNaN(id)) {
+      return NextResponse.json(createApiResponse(null, 'Invalid id'), { status: 400 })
+    }
+
+    // @ts-ignore prisma client needs regenerate after schema change
+    const uncreated = await prisma.uncreatedRequest.findUnique({ where: { id } })
+    if (!uncreated) {
+      return NextResponse.json(createApiResponse(null, 'Uncreated request not found'), { status: 404 })
+    }
+
+    // Создаем обычную заявку со статусом "на проверку"
+    const createdRequest = await prisma.request.create({
+      data: {
+        userId: uncreated.userId,
+        username: uncreated.username,
+        firstName: uncreated.firstName,
+        lastName: uncreated.lastName,
+        bookmaker: uncreated.bookmaker,
+        accountId: uncreated.accountId,
+        amount: uncreated.amount,
+        requestType: uncreated.requestType,
+        status: 'pending_check',
+        statusDetail: 'pending_check',
+        bank: uncreated.bank,
+      },
+    })
+
+    // @ts-ignore prisma client needs regenerate after schema change
+    await prisma.uncreatedRequest.update({
+      where: { id },
+      data: {
+        status: 'converted',
+        createdRequestId: createdRequest.id,
+      },
+    })
+
+    return NextResponse.json(
+      createApiResponse({
+        request: {
+          ...createdRequest,
+          userId: createdRequest.userId.toString(),
+          amount: createdRequest.amount?.toString() || '0',
+          createdAt: createdRequest.createdAt.toISOString(),
+          updatedAt: createdRequest.updatedAt.toISOString(),
+        },
+      })
+    )
+  } catch (error: any) {
+    console.error('convert uncreated request error:', error)
+    return NextResponse.json(
+      createApiResponse(null, error.message || 'Failed to convert uncreated request'),
+      { status: 500 }
+    )
+  }
+}
+

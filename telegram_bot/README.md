@@ -12,8 +12,8 @@ pip install -r requirements.txt
 2. Создайте файл `.env`:
 ```
 BOT_TOKEN=your_telegram_bot_token_here
-API_BASE_URL=http://fqxgmrzplndwsyvkeu.ru/api
-PAYMENT_SITE_URL=http://gldwueprxkmbtqsnva.ru
+API_BASE_URL=http://localhost:3001/api
+PAYMENT_SITE_URL=http://localhost:3003
 ```
 
 3. Запустите бота:

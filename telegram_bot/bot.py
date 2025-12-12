@@ -3,7 +3,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from config import Config
-from handlers import start, deposit, withdraw, language, instruction
+from handlers import start, deposit, withdraw, language, instruction, chat
 
 # Настройка логирования
 logging.basicConfig(
@@ -28,6 +28,7 @@ async def main():
     dp.include_router(withdraw.router)
     dp.include_router(language.router)
     dp.include_router(instruction.router)
+    dp.include_router(chat.router)
     
     logger.info("Бот запущен!")
     

@@ -22,9 +22,13 @@ export async function GET(
 
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '50')
+    const botType = searchParams.get('botType') || 'main'
 
     const messages = await prisma.chatMessage.findMany({
-      where: { userId },
+      where: { 
+        userId,
+        botType: botType
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
     })

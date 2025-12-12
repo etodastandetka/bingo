@@ -54,13 +54,14 @@ export async function GET(request: NextRequest) {
     let chartStartDate = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     let chartEndDate = endDate ? new Date(endDate) : new Date()
 
-    // Группировка по датам для графика используя SQL
+    // Группировка по датам для графика используя SQL (только успешные заявки)
     const depositsByDate = await prisma.$queryRaw<Array<{ date: string; count: bigint }>>`
       SELECT 
         TO_CHAR(created_at, 'YYYY-MM-DD') as date,
         COUNT(*)::bigint as count
       FROM requests
       WHERE request_type = 'deposit'
+        AND status IN ('completed', 'approved', 'auto_completed', 'autodeposit_success')
         AND created_at >= ${chartStartDate}::timestamp
         AND created_at <= ${chartEndDate}::timestamp
       GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
@@ -74,6 +75,7 @@ export async function GET(request: NextRequest) {
         COUNT(*)::bigint as count
       FROM requests
       WHERE request_type = 'withdraw'
+        AND status IN ('completed', 'approved', 'auto_completed', 'autodeposit_success')
         AND created_at >= ${chartStartDate}::timestamp
         AND created_at <= ${chartEndDate}::timestamp
       GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')

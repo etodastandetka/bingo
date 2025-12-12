@@ -93,28 +93,127 @@ class APIClient:
                 api_url = Config.API_BASE_URL
                 if api_url.startswith('http://localhost'):
                     try:
-                        # Проверяем доступность локального API
+                        # Прямой запрос с коротким таймаутом
                         async with session.get(
                             f'{api_url}/public/payment-settings',
-                            timeout=aiohttp.ClientTimeout(total=2)
-                        ) as test_response:
-                            if test_response.status == 200:
-                                async with session.get(
-                                    f'{api_url}/public/payment-settings'
-                                ) as response:
-                                    return await response.json()
+                            timeout=aiohttp.ClientTimeout(total=1)
+                        ) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                return data if data.get('success') else {}
                     except:
                         # Если локальный недоступен, используем продакшн
                         api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
                 
                 async with session.get(
-                    f'{api_url}/public/payment-settings'
+                    f'{api_url}/public/payment-settings',
+                    timeout=aiohttp.ClientTimeout(total=2)
                 ) as response:
                     data = await response.json()
                     return data if data.get('success') else {}
             except Exception as e:
                 print(f"Error fetching payment settings: {e}")
                 return {}
+    
+    @staticmethod
+    def get_api_base_url() -> str:
+        """Получить базовый URL API"""
+        return Config.API_BASE_URL
+    
+    @staticmethod
+    async def check_blocked(telegram_user_id: str, account_id: Optional[str] = None) -> Dict[str, Any]:
+        """Проверить, заблокирован ли пользователь или accountId"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            data = {
+                'userId': str(telegram_user_id),
+            }
+            
+            if account_id:
+                data['accountId'] = account_id
+            
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/public/check-blocked',
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+            
+            async with session.post(
+                f'{api_url}/public/check-blocked',
+                json=data
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
+    async def check_player(bookmaker: str, account_id: str) -> Dict[str, Any]:
+        """Проверить существование игрока в казино"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            data = {
+                'bookmaker': bookmaker,
+                'accountId': account_id,
+            }
+            
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/public/check-player',
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+            
+            async with session.post(
+                f'{api_url}/public/check-player',
+                json=data,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
+    async def check_withdraw_amount(bookmaker: str, user_id: str, code: str) -> Dict[str, Any]:
+        """Проверить сумму вывода по коду"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            data = {
+                'bookmaker': bookmaker,
+                'userId': user_id,
+                'code': code,
+            }
+            
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/check-withdraw-amount',
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+            
+            async with session.post(
+                f'{api_url}/check-withdraw-amount',
+                json=data,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                return await response.json()
 
 
 

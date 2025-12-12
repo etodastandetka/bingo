@@ -12,13 +12,17 @@ interface UserDetail {
   language: string
   selectedBookmaker: string | null
   createdAt: string
+  isActive?: boolean
   transactions: Array<{
     id: number
     transType: string
     amount: string
     status: string
     status_detail: string | null
+    processedByUsername: string | null
     bookmaker: string | null
+    bank: string | null
+    accountId: string | null
     createdAt: string
   }>
   referralMade: Array<{
@@ -52,6 +56,8 @@ export default function UserDetailPage() {
   const [note, setNote] = useState<string>('')
   const [isEditingNote, setIsEditingNote] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
+  const [isActive, setIsActive] = useState<boolean>(true)
+  const [updatingActive, setUpdatingActive] = useState(false)
 
   useEffect(() => {
     if (params.userId) {
@@ -72,6 +78,7 @@ export default function UserDetailPage() {
 
       if (userData.success) {
         setUser(userData.data)
+        setIsActive(userData.data.isActive !== undefined ? userData.data.isActive : true)
       }
 
       if (photoData.success && photoData.data.photoUrl) {
@@ -81,6 +88,42 @@ export default function UserDetailPage() {
       console.error('Failed to fetch user:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleToggleActive = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.checked
+    setUpdatingActive(true)
+    
+    try {
+      const response = await fetch(`/api/users/${params.userId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ isActive: newValue }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setIsActive(newValue)
+        // Обновляем данные пользователя
+        if (user) {
+          setUser({ ...user, isActive: newValue })
+        }
+      } else {
+        // Если ошибка, возвращаем переключатель в исходное состояние
+        setIsActive(!newValue)
+        alert(data.error || 'Не удалось обновить статус пользователя')
+      }
+    } catch (error) {
+      console.error('Failed to update user active status:', error)
+      // Возвращаем переключатель в исходное состояние
+      setIsActive(!newValue)
+      alert('Ошибка при обновлении статуса пользователя')
+    } finally {
+      setUpdatingActive(false)
     }
   }
 
@@ -133,7 +176,7 @@ export default function UserDetailPage() {
     return type === 'deposit' ? 'Пополнение' : 'Вывод'
   }
 
-  const getTransactionType = (tx: { transType: string; status: string; status_detail: string | null }) => {
+  const getTransactionType = (tx: { transType: string; status: string; status_detail: string | null; processedByUsername?: string | null }) => {
     // Если статус "Ожидает", показываем "-"
     if (tx.status === 'pending' || tx.status === 'processing') {
       return '-'
@@ -146,9 +189,14 @@ export default function UserDetailPage() {
     
     // Для депозитов
     if (tx.transType === 'deposit') {
-      // Авто пополнение - только если статус явно указывает на автопополнение
+      // Авто пополнение - если статус явно указывает на автопополнение
       if (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || tx.status_detail?.includes('autodeposit')) {
-        return 'Авто пополнение'
+        return 'Автопополнение'
+      }
+      
+      // Если админ вручную обработал заявку - показываем его логин
+      if (tx.processedByUsername) {
+        return tx.processedByUsername
       }
       
       // Проверяем наличие profile-* в status_detail
@@ -156,7 +204,7 @@ export default function UserDetailPage() {
         return tx.status_detail.match(/profile-(\d+)/)?.[0] || 'profile-1'
       }
       
-      // Для всех остальных депозитов (включая отклоненные) показываем profile-1
+      // Для всех остальных депозитов показываем profile-1
       return 'profile-1'
     }
     
@@ -184,9 +232,76 @@ export default function UserDetailPage() {
           return status_detail
         }
         return 'Отклонено'
+      case 'deferred':
+        return 'Отложено'
+      case 'processing':
+        return 'Обработка'
+      case 'manual':
+      case 'awaiting_manual':
+        return 'Ручная'
       default:
-        return status
+        return 'Неизвестно'
     }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+      case 'approved':
+      case 'auto_completed':
+      case 'autodeposit_success':
+        return 'bg-blue-500 text-white border border-blue-400'
+      case 'pending':
+        return 'bg-yellow-500 text-black border border-yellow-400'
+      case 'rejected':
+      case 'declined':
+        return 'bg-red-500 text-white border border-red-400'
+      case 'deferred':
+        return 'bg-orange-500 text-white border border-orange-400'
+      case 'manual':
+      case 'awaiting_manual':
+        return 'bg-red-500 text-white border border-red-400'
+      default:
+        return 'bg-gray-700 text-gray-300 border border-gray-600'
+    }
+  }
+
+  const getBankImage = (bank: string | null) => {
+    // Дефолтная иконка банка, если банк не указан
+    const defaultBank = '/images/mbank.png'
+    
+    if (!bank) return defaultBank
+    
+    const normalized = bank.toLowerCase()
+    
+    // Маппинг банков на изображения
+    if (normalized.includes('demirbank') || normalized.includes('demir')) {
+      return '/images/demirbank.jpg'
+    }
+    if (normalized.includes('omoney') || normalized.includes('o!money')) {
+      return '/images/omoney.jpg'
+    }
+    if (normalized.includes('balance')) {
+      return '/images/balance.jpg'
+    }
+    if (normalized.includes('bakai')) {
+      return '/images/bakai.jpg'
+    }
+    if (normalized.includes('megapay')) {
+      return '/images/megapay.jpg'
+    }
+    if (normalized.includes('mbank')) {
+      return '/images/mbank.png'
+    }
+    if (normalized.includes('optima')) {
+      return '/images/optima.jpg'
+    }
+    if (normalized.includes('companion')) {
+      return '/images/companion.png'
+    }
+    
+    // Если банк указан, но не распознан - возвращаем дефолтную иконку
+    return defaultBank
   }
 
   if (loading) {
@@ -353,17 +468,19 @@ export default function UserDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
             <div>
-              <p className="text-sm font-medium text-white">Активен</p>
-              <p className="text-xs text-gray-400">Все операции доступны</p>
+              <p className="text-sm font-medium text-white">{isActive ? 'Активен' : 'Заблокирован'}</p>
+              <p className="text-xs text-gray-400">{isActive ? 'Все операции доступны' : 'Все операции заблокированы'}</p>
             </div>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
-              defaultChecked
+              checked={isActive}
+              onChange={handleToggleActive}
+              disabled={updatingActive}
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+            <div className={`w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500 ${updatingActive ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
           </label>
         </div>
       </div>
@@ -379,52 +496,51 @@ export default function UserDetailPage() {
                 className="bg-gray-900 rounded-xl p-4 border border-gray-800 hover:border-blue-500 transition-colors"
               >
                 <div className="flex items-center space-x-3">
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                    tx.transType === 'deposit' ? 'bg-purple-600' : 'bg-pink-600'
-                  }`}>
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      {tx.transType === 'deposit' ? (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      ) : (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      )}
-                    </svg>
+                  {/* Иконка банка */}
+                  <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border border-gray-600 bg-gray-900">
+                    <img
+                      src={getBankImage(tx.bank)}
+                      alt={tx.bank || 'Bank'}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
                       <p className="text-sm font-medium text-white">{displayName}</p>
-                      <span className="text-xs text-gray-400">ID: {user.userId}</span>
                     </div>
+                    <p className="text-xs text-gray-400 mb-1">
+                      {tx.accountId ? `ID: ${tx.accountId}` : tx.bookmaker || '-'}
+                    </p>
                     {(() => {
                       const transactionType = getTransactionType(tx)
                       return transactionType !== '-' && (
-                        <span className="inline-block px-2 py-0.5 text-xs font-medium bg-blue-600 text-white rounded mb-1">
+                        <span className="inline-block px-2 py-0.5 text-xs font-medium bg-blue-500 bg-opacity-20 text-blue-300 rounded-md mb-1 border border-blue-500 border-opacity-30">
                           {transactionType}
                         </span>
                       )
                     })()}
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-400 mb-1">{formatDate(tx.createdAt)}</p>
+                  <div className="flex flex-col items-end space-y-2">
+                    <p className="text-xs text-gray-400 whitespace-nowrap">{formatDate(tx.createdAt)}</p>
                     <p className={`text-lg font-bold ${
                       tx.transType === 'deposit' ? 'text-green-500' : 'text-red-500'
                     }`}>
-                      {tx.transType === 'deposit' ? '+' : '-'}{parseFloat(tx.amount || '0').toFixed(2).replace('.', ',')}
+                      {tx.transType === 'deposit' ? '+' : '-'}{parseFloat(tx.amount || '0').toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </p>
-                    <div className="flex items-center space-x-1 mt-1">
-                      <div className={`w-2 h-2 rounded-full ${
-                        getStatusLabel(tx.status, tx.status_detail) === 'Успешно' ? 'bg-blue-500' :
-                        getStatusLabel(tx.status, tx.status_detail) === 'Ожидает' ? 'bg-yellow-500' :
-                        getStatusLabel(tx.status, tx.status_detail) === 'Отклонено' ? 'bg-red-500' :
-                        'bg-blue-500'
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium whitespace-nowrap ${getStatusColor(tx.status)}`}
+                    >
+                      <div className={`w-1.5 h-1.5 rounded-full ${
+                        getStatusLabel(tx.status, tx.status_detail) === 'Успешно' ? 'bg-blue-600' :
+                        getStatusLabel(tx.status, tx.status_detail) === 'Отклонено' ? 'bg-red-600' :
+                        getStatusLabel(tx.status, tx.status_detail) === 'Отложено' ? 'bg-orange-600' :
+                        'bg-yellow-600'
                       }`}></div>
-                      <span className={`text-xs ${
-                        getStatusLabel(tx.status, tx.status_detail) === 'Успешно' ? 'text-blue-500' :
-                        getStatusLabel(tx.status, tx.status_detail) === 'Ожидает' ? 'text-yellow-500' :
-                        getStatusLabel(tx.status, tx.status_detail) === 'Отклонено' ? 'text-red-500' :
-                        'text-blue-500'
-                      }`}>{getStatusLabel(tx.status, tx.status_detail)}</span>
-                    </div>
+                      {getStatusLabel(tx.status, tx.status_detail)}
+                    </span>
                   </div>
                 </div>
               </div>

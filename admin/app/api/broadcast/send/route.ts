@@ -57,7 +57,8 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             chat_id: user.userId.toString(),
             text: message,
-            parse_mode: 'HTML'
+            parse_mode: 'HTML',
+            protect_content: true
           })
         })
 

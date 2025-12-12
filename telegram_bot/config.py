@@ -7,19 +7,22 @@ env_path = Path(__file__).parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 class Config:
-    BOT_TOKEN = os.getenv('BOT_TOKEN', '')
-    # Для API: используем продакшн домен
-    API_BASE_URL = os.getenv('API_BASE_URL', 'https://fqxgmrzplndwsyvkeu.ru/api')
-    # Для WebApp: всегда используем HTTPS домен (Telegram требует HTTPS)
-    # Для локальной разработки используем продакшн домен
-    _payment_site_url = os.getenv('PAYMENT_SITE_URL', 'https://gldwueprxkmbtqsnva.ru')
-    # Принудительно используем HTTPS для WebApp (Telegram требует HTTPS)
-    if _payment_site_url.startswith('http://'):
-        # Если указан HTTP, заменяем на HTTPS или используем продакшн домен
-        if 'localhost' in _payment_site_url:
-            PAYMENT_SITE_URL = 'https://gldwueprxkmbtqsnva.ru'
-        else:
-            PAYMENT_SITE_URL = _payment_site_url.replace('http://', 'https://')
+    BOT_TOKEN = os.getenv('BOT_TOKEN', '8413027203:AAHhXadiHxW8WUSGp8tzxPqOF7iLHf8lI_s')
+    OPERATOR_BOT_TOKEN = os.getenv('OPERATOR_BOT_TOKEN', '8279477654:AAHZHyx5Ez_qeOYx610ayISgHhtz9Uy7F_0')
+    # Для API: используем localhost для разработки
+    API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:3001/api')
+    # Для WebApp: Telegram требует HTTPS, поэтому используем продакшн домен
+    # Для локальной разработки можно использовать ngrok или оставить продакшн URL
+    _payment_site_url = os.getenv('PAYMENT_SITE_URL', 'http://localhost:3003')
+    # Для localhost принудительно используем http (не https)
+    if 'localhost' in _payment_site_url.lower():
+        # Убираем https если есть и заменяем на http
+        _payment_site_url = _payment_site_url.replace('https://', 'http://')
+        if not _payment_site_url.startswith('http://'):
+            _payment_site_url = 'http://' + _payment_site_url.replace('http://', '')
+        PAYMENT_SITE_URL = _payment_site_url
+    elif _payment_site_url.startswith('http://'):
+        PAYMENT_SITE_URL = _payment_site_url.replace('http://', 'https://')
     else:
         PAYMENT_SITE_URL = _payment_site_url
     
@@ -33,6 +36,7 @@ class Config:
         {'id': '888starz', 'name': '888starz'},
         {'id': '1xcasino', 'name': '1xCasino'},
         {'id': 'betwinner', 'name': 'BetWinner'},
+        {'id': 'wowbet', 'name': 'WowBet'},
     ]
     
     # Банки для пополнения

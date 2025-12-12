@@ -16,10 +16,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [unreadChatsCount, setUnreadChatsCount] = useState(0)
 
   useEffect(() => {
     fetchUser()
+    fetchUnreadChats()
+    // Обновляем счетчик каждые 15 секунд (увеличено для снижения нагрузки)
+    const interval = setInterval(() => {
+      fetchUnreadChats()
+    }, 15000)
+    return () => clearInterval(interval)
   }, [])
+
+  const fetchUnreadChats = async () => {
+    try {
+      const response = await fetch('/api/operator-chats?status=open')
+      const data = await response.json()
+      if (data.success) {
+        setUnreadChatsCount(data.data.totalUnread || 0)
+      }
+    } catch (error) {
+      // Игнорируем ошибки при получении счетчика
+    }
+  }
 
   const fetchUser = async () => {
     try {
@@ -63,7 +82,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return null
   }
 
-  const bottomNavItems = [
+  const bottomNavItems: Array<{
+    href: string
+    label: string
+    icon: React.ReactNode
+    badge?: number | null
+  }> = [
     { 
       href: '/dashboard', 
       label: 'ГЛАВНАЯ', 
@@ -92,21 +116,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       )
     },
     { 
-      href: '/dashboard/limits', 
-      label: 'ЛИМИТЫ', 
+      href: '/dashboard/operator-chats', 
+      label: 'ЧАТ', 
       icon: (
-        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-          <circle cx="6" cy="6" r="2" fill="currentColor"/>
-          <line x1="6" y1="10" x2="6" y2="18" stroke="currentColor" strokeWidth="2"/>
-          <circle cx="6" cy="18" r="2" fill="currentColor"/>
-          <circle cx="12" cy="6" r="2" fill="currentColor"/>
-          <line x1="12" y1="10" x2="12" y2="18" stroke="currentColor" strokeWidth="2"/>
-          <circle cx="12" cy="18" r="2" fill="currentColor"/>
-          <circle cx="18" cy="6" r="2" fill="currentColor"/>
-          <line x1="18" y1="10" x2="18" y2="18" stroke="currentColor" strokeWidth="2"/>
-          <circle cx="18" cy="18" r="2" fill="currentColor"/>
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
-      )
+      ),
+      badge: unreadChatsCount > 0 ? unreadChatsCount : null,
     },
     { 
       href: '/dashboard/menu', 
@@ -126,8 +143,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return pathname.startsWith(href)
   }
 
-  // Скрываем нижнее меню на странице чата
-  const isChatPage = pathname?.includes('/chat')
+  // Скрываем нижнее меню только на странице конкретного чата (не на списке чатов)
+  const isChatPage = pathname?.includes('/chat') && !pathname?.includes('/operator-chats')
 
   return (
     <div className="h-screen bg-gradient-to-b from-slate-950 to-slate-900 flex justify-center items-center overflow-hidden">
@@ -153,8 +170,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       : 'text-gray-400'
                   }`}
                 >
-                  <div className={`mb-1 ${active ? 'transform scale-110' : ''}`}>
+                  <div className={`mb-1 relative ${active ? 'transform scale-110' : ''}`}>
                     {item.icon}
+                    {item.badge && item.badge > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                        {item.badge > 9 ? '9+' : item.badge}
+                      </span>
+                    )}
                   </div>
                   <span className={`text-[9px] font-medium uppercase tracking-wider ${
                     active ? 'text-blue-500' : 'text-gray-400'

@@ -9,12 +9,13 @@ export default function MenuPage() {
   const [showMenu, setShowMenu] = useState(true)
 
   const menuItems = [
-    { href: '/dashboard/requests', label: 'Заявки', icon: '📝' },
-    { href: '/dashboard/requisites', label: 'Реквизиты', icon: '💳' },
+    { href: '/dashboard', label: 'Заявки', icon: '📝' },
+    { href: '/dashboard/wallet', label: 'Реквизиты', icon: '💳' },
     { href: '/dashboard/history', label: 'История транзакций', icon: '🕐' },
-    { href: '/dashboard/wallet', label: 'Кошельки', icon: '💰' },
+    { href: '/dashboard/login-history', label: 'История входов', icon: '🔐' },
     { href: '/dashboard/limits', label: 'Лимиты', icon: '⚙️' },
     { href: '/dashboard/broadcast', label: 'Рассылка', icon: '📢' },
+    { href: '/dashboard/search', label: 'Поиск', icon: '🔍' },
     { href: '/dashboard/settings', label: 'Настройки', icon: '🔧' },
   ]
 

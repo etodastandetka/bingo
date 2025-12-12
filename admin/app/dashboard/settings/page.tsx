@@ -19,8 +19,10 @@ interface Settings {
     '888starz': boolean
     '1xcasino': boolean
     betwinner: boolean
+    wowbet: boolean
   }
   channel?: string
+  require_channel_subscription?: boolean
 }
 
 const DEPOSIT_BANKS = [
@@ -186,6 +188,22 @@ export default function SettingsPage() {
             />
             <p className="text-xs text-gray-400 mt-1">Укажите username канала (например: @bingokg_news)</p>
           </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-white">Требовать подписку на канал</p>
+              <p className="text-xs text-gray-400">Проверять подписку пользователя на канал перед использованием бота</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.require_channel_subscription !== false}
+                onChange={(e) => updateSetting('require_channel_subscription', e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -307,7 +325,7 @@ export default function SettingsPage() {
         <h2 className="text-base font-bold text-white mb-4">Настройки казино</h2>
         
         <div className="space-y-3">
-          {(['1xbet', '1win', 'melbet', 'mostbet', 'winwin', '888starz', '1xcasino', 'betwinner'] as const).map((casino) => (
+          {(['1xbet', '1win', 'melbet', 'mostbet', 'winwin', '888starz', '1xcasino', 'betwinner', 'wowbet'] as const).map((casino) => (
             <div key={casino} className="flex items-center justify-between">
               <span className="text-sm font-medium text-white uppercase">{casino}</span>
               <label className="relative inline-flex items-center cursor-pointer">

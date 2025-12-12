@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 
 // Конфигурация API казино
-interface CasinoConfig {
+export interface CasinoConfig {
   hash?: string
   cashierpass?: string
   login?: string
@@ -9,6 +9,8 @@ interface CasinoConfig {
   api_key?: string
   secret?: string
   cashpoint_id?: string | number
+  x_project?: string // Для MBCash (MBC или INDEP)
+  brand_id?: number // Для MBCash (1=Mostbet, 2=BetAndreas, 3=Vivi, 4=Banzai)
 }
 
 // Генерация confirm для 1xbet/Melbet
@@ -60,6 +62,48 @@ export function generateSignForDepositMelbet(
   return crypto.createHash('sha256').update(combined).digest('hex')
 }
 
+// Генерация подписи для вывода 1xbet
+export function generateSignForPayout1xbet(
+  userId: string,
+  code: string,
+  hash: string,
+  cashierpass: string,
+  cashdeskid: string | number
+): string {
+  // a) SHA256(hash={hash}&lng=ru&userid={user_id})
+  const step1String = `hash=${hash}&lng=ru&userid=${userId}`
+  const step1Hash = crypto.createHash('sha256').update(step1String).digest('hex')
+
+  // b) MD5(code={code}&cashierpass={cashierpass}&cashdeskid={cashdeskid})
+  const step2String = `code=${code}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
+  const step2Hash = crypto.createHash('md5').update(step2String).digest('hex')
+
+  // c) SHA256(step1 + step2)
+  const combined = step1Hash + step2Hash
+  return crypto.createHash('sha256').update(combined).digest('hex')
+}
+
+// Генерация подписи для вывода Melbet (userid в lower-case)
+export function generateSignForPayoutMelbet(
+  userId: string,
+  code: string,
+  hash: string,
+  cashierpass: string,
+  cashdeskid: string | number
+): string {
+  // a) SHA256(hash={hash}&lng=ru&userid={user_id.lower()})
+  const step1String = `hash=${hash}&lng=ru&userid=${userId.toLowerCase()}`
+  const step1Hash = crypto.createHash('sha256').update(step1String).digest('hex')
+
+  // b) MD5(code={code}&cashierpass={cashierpass}&cashdeskid={cashdeskid})
+  const step2String = `code=${code}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
+  const step2Hash = crypto.createHash('md5').update(step2String).digest('hex')
+
+  // c) SHA256(step1 + step2)
+  const combined = step1Hash + step2Hash
+  return crypto.createHash('sha256').update(combined).digest('hex')
+}
+
 // Генерация Basic Auth header
 export function generateBasicAuth(login: string, cashierpass: string): string {
   const authString = `${login}:${cashierpass}`
@@ -67,7 +111,7 @@ export function generateBasicAuth(login: string, cashierpass: string): string {
   return `Basic ${authBase64}`
 }
 
-// Пополнение для 1xbet/Melbet через Cashdesk API
+// Пополнение для 1xbet/Melbet/Winwin через Cashdesk API
 export async function depositCashdeskAPI(
   bookmaker: string,
   userId: string,
@@ -76,6 +120,7 @@ export async function depositCashdeskAPI(
 ): Promise<{ success: boolean; message: string; data?: any }> {
   const baseUrl = 'https://partners.servcul.com/CashdeskBotAPI/'
   const isMelbet = bookmaker.toLowerCase().includes('melbet')
+  // Winwin использует ту же логику что и 1xbet (не нужно toLowerCase для userId)
 
   // Проверяем, что все обязательные поля заполнены и не пустые
   const hash = config.hash
@@ -138,7 +183,10 @@ export async function depositCashdeskAPI(
 
     console.log(`[Cashdesk Deposit] Response status: ${response.status}, Data:`, data)
 
-    if (response.ok && data.success) {
+    // API может возвращать success (маленькая) или Success (большая буква)
+    const isSuccess = response.ok && (data.success === true || data.Success === true)
+
+    if (isSuccess) {
       return {
         success: true,
         message: 'Balance deposited successfully',
@@ -148,7 +196,7 @@ export async function depositCashdeskAPI(
 
     return {
       success: false,
-      message: data.message || data.error || data.Message || `Failed to deposit balance (Status: ${response.status})`,
+      message: data.message || data.Message || data.error || data.Error || `Failed to deposit balance (Status: ${response.status})`,
       data,
     }
   } catch (error: any) {
@@ -194,10 +242,10 @@ export async function depositMostbetAPI(
     const cashpointIdStr = String(cashpointId)
     const path = `/mbc/gateway/v1/api/cashpoint/${cashpointIdStr}/player/deposit`
     const requestBodyData = {
-      brandId: 1,
+      brandId: config.brand_id || 1, // По умолчанию Mostbet
       playerId: String(userId), // ID игрока в казино
       amount: amount,
-      currency: 'KGS',
+      currency: 'RUB', // Изменено на RUB согласно документации
     }
     const requestBody = JSON.stringify(requestBodyData)
 
@@ -208,10 +256,21 @@ export async function depositMostbetAPI(
 
     // Генерируем подпись: HMAC SHA3-256 от <API_KEY><PATH><REQUEST_BODY><TIMESTAMP>
     const signatureString = `${apiKeyFormatted}${path}${requestBody}${timestamp}`
-    const signature = crypto
-      .createHmac('sha3-256', secret)
-      .update(signatureString)
-      .digest('hex')
+    // Используем SHA3-256 (Node.js 10+ поддерживает)
+    let signature: string
+    try {
+      signature = crypto
+        .createHmac('sha3-256', secret)
+        .update(signatureString)
+        .digest('hex')
+    } catch (e) {
+      // Fallback на SHA256 если SHA3-256 не поддерживается
+      console.warn('[Mostbet Deposit] SHA3-256 not supported, using SHA256')
+      signature = crypto
+        .createHmac('sha256', secret)
+        .update(signatureString)
+        .digest('hex')
+    }
 
     const url = `${baseUrl}${path}`
     
@@ -223,7 +282,7 @@ export async function depositMostbetAPI(
         'X-Api-Key': apiKeyFormatted,
         'X-Timestamp': timestamp,
         'X-Signature': signature,
-        'X-Project': 'MBC',
+        'X-Project': config.x_project || 'MBC',
         'Content-Type': 'application/json',
         'Accept': '*/*',
       },
@@ -263,6 +322,348 @@ export async function depositMostbetAPI(
     return {
       success: false,
       message: error.message || 'Failed to deposit balance',
+    }
+  }
+}
+
+// Пополнение для 1win
+export async function deposit1winAPI(
+  userId: string,
+  amount: number,
+  config: CasinoConfig
+): Promise<{ success: boolean; message: string; data?: any }> {
+  const baseUrl = 'https://api.1win.win/v1/client'
+
+  // Проверяем, что все обязательные поля заполнены и не пустые
+  const apiKey = config.api_key
+
+  if (!apiKey || apiKey.trim() === '') {
+    return {
+      success: false,
+      message: 'Missing required 1win API key. Please configure API settings in database or environment variables.',
+    }
+  }
+
+  try {
+    // userId здесь - это ID казино (accountId), не Telegram ID
+    console.log(`[1win Deposit] Casino User ID: ${userId}, Amount: ${amount}`)
+    
+    const url = `${baseUrl}/deposit`
+    const requestBody = {
+      userId: parseInt(String(userId)),
+      amount: amount,
+    }
+
+    console.log(`[1win Deposit] URL: ${url}, Request body:`, requestBody)
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': apiKey,
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    const responseText = await response.text()
+    let data: any
+    try {
+      data = JSON.parse(responseText)
+    } catch (e) {
+      console.error(`[1win Deposit] Failed to parse response: ${responseText}`)
+      return {
+        success: false,
+        message: `Invalid response from 1win API: ${responseText.substring(0, 100)}`,
+        data: { rawResponse: responseText, status: response.status },
+      }
+    }
+
+    console.log(`[1win Deposit] Response status: ${response.status}, Data:`, data)
+
+    if (response.ok && !data.errorCode) {
+      return {
+        success: true,
+        message: 'Balance deposited successfully',
+        data,
+      }
+    }
+
+    return {
+      success: false,
+      message: data.errorMessage || data.message || `Failed to deposit balance (Status: ${response.status})`,
+      data,
+    }
+  } catch (error: any) {
+    console.error(`[1win Deposit] Error for userId: ${userId}:`, error)
+    return {
+      success: false,
+      message: error.message || 'Failed to deposit balance',
+    }
+  }
+}
+
+// Получение баланса 1win через попытку пополнения с огромной суммой
+export async function get1winBalance(
+  userId: string,
+  config: CasinoConfig
+): Promise<{ balance: number; limit: number }> {
+  const baseUrl = 'https://api.1win.win/v1/client'
+  const apiKey = config.api_key
+
+  if (!apiKey || apiKey.trim() === '') {
+    return { balance: 0, limit: 0 }
+  }
+
+  try {
+    // Пытаемся пополнить на огромную сумму (1 триллион)
+    const hugeAmount = 1000000000000
+    const url = `${baseUrl}/deposit`
+    const requestBody = {
+      userId: parseInt(String(userId)),
+      amount: hugeAmount,
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': apiKey,
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    const responseText = await response.text()
+    let data: any
+    try {
+      data = JSON.parse(responseText)
+    } catch (e) {
+      console.error(`[1win Balance] Failed to parse response: ${responseText}`)
+      return { balance: 0, limit: 0 }
+    }
+
+    // Если получили ошибку CASH07, извлекаем баланс из сообщения
+    if (data.errorCode === 'CASH07' && data.errorMessage) {
+      // Формат: "Cash limit exceeded: 44729.21 >= 560222222222220.06"
+      const match = data.errorMessage.match(/Cash limit exceeded:\s*([\d.]+)/)
+      if (match && match[1]) {
+        const balance = parseFloat(match[1])
+        return {
+          balance: balance,
+          limit: balance, // Лимит равен балансу
+        }
+      }
+    }
+
+    return { balance: 0, limit: 0 }
+  } catch (error) {
+    console.error('[1win Balance] Error:', error)
+    return { balance: 0, limit: 0 }
+  }
+}
+
+// Поиск игрока через Cashdesk API (для 1xbet, Melbet, Winwin, 888starz, 1xcasino, betwinner, wowbet)
+export async function searchPlayerCashdeskAPI(
+  bookmaker: string,
+  userId: string,
+  config: CasinoConfig
+): Promise<{ success: boolean; message: string; data?: any }> {
+  const baseUrl = 'https://partners.servcul.com/CashdeskBotAPI/'
+  const isMelbet = bookmaker.toLowerCase().includes('melbet')
+
+  // Проверяем, что все обязательные поля заполнены
+  const hash = config.hash
+  const cashierpass = config.cashierpass
+  const login = config.login
+  const cashdeskid = config.cashdeskid
+
+  if (!hash || !cashierpass || !login || !cashdeskid || 
+      hash.trim() === '' || cashierpass.trim() === '' || 
+      login.trim() === '' || String(cashdeskid).trim() === '' || String(cashdeskid).trim() === '0') {
+    return {
+      success: false,
+      message: `Missing required API credentials for ${bookmaker}. Please configure API settings.`,
+    }
+  }
+
+  try {
+    console.log(`[Cashdesk Search Player] Bookmaker: ${bookmaker}, Casino User ID: ${userId}`)
+    
+    // Формируем подпись для поиска игрока:
+    // a. SHA256(hash={hash}&userid={userid}&cashdeskid={cashdeskid})
+    const step1String = `hash=${hash}&userid=${isMelbet ? userId.toLowerCase() : userId}&cashdeskid=${cashdeskid}`
+    const step1Hash = crypto.createHash('sha256').update(step1String).digest('hex')
+
+    // b. MD5(userid={userid}&cashierpass={cashierpass}&hash={hash})
+    const step2String = `userid=${isMelbet ? userId.toLowerCase() : userId}&cashierpass=${cashierpass}&hash=${hash}`
+    const step2Hash = crypto.createHash('md5').update(step2String).digest('hex')
+
+    // c. SHA256(step1 + step2)
+    const combined = step1Hash + step2Hash
+    const sign = crypto.createHash('sha256').update(combined).digest('hex')
+
+    // Формируем confirm: MD5(userId:hash)
+    const userIdForConfirm = isMelbet ? userId.toLowerCase() : userId
+    const confirmString = `${userIdForConfirm}:${hash}`
+    const confirm = crypto.createHash('md5').update(confirmString).digest('hex')
+
+    const url = `${baseUrl}Users/${userId}?confirm=${confirm}&cashdeskId=${cashdeskid}`
+    const authHeader = generateBasicAuth(login, cashierpass)
+
+    console.log(`[Cashdesk Search Player] URL: ${url}`)
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader,
+        'sign': sign,
+      },
+    })
+
+    const responseText = await response.text()
+    let data: any
+    try {
+      data = JSON.parse(responseText)
+    } catch (e) {
+      console.error(`[Cashdesk Search Player] Failed to parse response: ${responseText}`)
+      return {
+        success: false,
+        message: `Invalid response from ${bookmaker} API: ${responseText.substring(0, 100)}`,
+        data: { rawResponse: responseText, status: response.status },
+      }
+    }
+
+    console.log(`[Cashdesk Search Player] Response status: ${response.status}, Data:`, data)
+
+    const userIdFromResponse = data.userId ?? data.UserId
+    const nameFromResponse = data.name ?? data.Name ?? ''
+    const currencyIdFromResponse = data.currencyId ?? data.CurrencyId ?? 0
+
+    if (response.ok && userIdFromResponse) {
+      return {
+        success: true,
+        message: 'Player found',
+        data: {
+          userId: userIdFromResponse,
+          name: nameFromResponse,
+          currencyId: currencyIdFromResponse,
+        },
+      }
+    }
+
+    return {
+      success: false,
+      message: data.message || data.Message || data.error || data.Error || `Player not found (Status: ${response.status})`,
+      data,
+    }
+  } catch (error: any) {
+    console.error(`[Cashdesk Search Player] Error for ${bookmaker}, userId: ${userId}:`, error)
+    return {
+      success: false,
+      message: error.message || 'Failed to search player',
+    }
+  }
+}
+
+// Вывод для 1xbet/Melbet/Winwin/888starz/1xcasino/betwinner/wowbet через Cashdesk API
+export async function payoutCashdeskAPI(
+  bookmaker: string,
+  userId: string,
+  code: string,
+  config: CasinoConfig
+): Promise<{ success: boolean; message: string; data?: any }> {
+  const baseUrl = 'https://partners.servcul.com/CashdeskBotAPI/'
+  const isMelbet = bookmaker.toLowerCase().includes('melbet')
+
+  // Проверяем, что все обязательные поля заполнены и не пустые
+  const hash = config.hash
+  const cashierpass = config.cashierpass
+  const login = config.login
+  const cashdeskid = config.cashdeskid
+
+  if (!hash || !cashierpass || !login || !cashdeskid || 
+      hash.trim() === '' || cashierpass.trim() === '' || 
+      login.trim() === '' || String(cashdeskid).trim() === '' || String(cashdeskid).trim() === '0') {
+    return {
+      success: false,
+      message: `Missing required API credentials for ${bookmaker}. Please configure API settings in database or environment variables.`,
+    }
+  }
+
+  if (!code || code.trim() === '') {
+    return {
+      success: false,
+      message: 'Withdrawal code is required',
+    }
+  }
+
+  try {
+    // userId здесь - это ID казино (accountId), не Telegram ID
+    console.log(`[Cashdesk Payout] Bookmaker: ${bookmaker}, Casino User ID: ${userId}, Code: ${code}`)
+    
+    const confirm = generateConfirm(userId, hash, isMelbet)
+    const sign = isMelbet
+      ? generateSignForPayoutMelbet(userId, code, hash, cashierpass, cashdeskid)
+      : generateSignForPayout1xbet(userId, code, hash, cashierpass, cashdeskid)
+
+    const url = `${baseUrl}Deposit/${userId}/Payout`
+    const authHeader = generateBasicAuth(login, cashierpass)
+
+    const requestBody = {
+      cashdeskId: String(cashdeskid),
+      lng: 'ru',
+      code: code,
+      confirm: confirm,
+    }
+
+    console.log(`[Cashdesk Payout] URL: ${url}, Request body:`, requestBody)
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader,
+        'sign': sign,
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    const responseText = await response.text()
+    let data: any
+    try {
+      data = JSON.parse(responseText)
+    } catch (e) {
+      console.error(`[Cashdesk Payout] Failed to parse response: ${responseText}`)
+      return {
+        success: false,
+        message: `Invalid response from ${bookmaker} API: ${responseText.substring(0, 100)}`,
+        data: { rawResponse: responseText, status: response.status },
+      }
+    }
+
+    console.log(`[Cashdesk Payout] Response status: ${response.status}, Data:`, data)
+
+    // API может возвращать success (маленькая) или Success (большая буква)
+    const isSuccess = response.ok && (data.success === true || data.Success === true)
+
+    if (isSuccess) {
+      return {
+        success: true,
+        message: 'Balance withdrawn successfully',
+        data,
+      }
+    }
+
+    return {
+      success: false,
+      message: data.message || data.Message || data.error || data.Error || `Failed to withdraw balance (Status: ${response.status})`,
+      data,
+    }
+  } catch (error: any) {
+    console.error(`[Cashdesk Payout] Error for ${bookmaker}, userId: ${userId}:`, error)
+    return {
+      success: false,
+      message: error.message || 'Failed to withdraw balance',
     }
   }
 }

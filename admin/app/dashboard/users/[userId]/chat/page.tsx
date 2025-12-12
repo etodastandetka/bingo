@@ -60,7 +60,7 @@ export default function ChatPage() {
   const fetchChatData = async () => {
     try {
       const [chatRes, userRes, photoRes] = await Promise.all([
-        fetch(`/api/users/${params.userId}/chat`),
+        fetch(`/api/users/${params.userId}/chat?botType=main`),
         fetch(`/api/users/${params.userId}`),
         fetch(`/api/users/${params.userId}/profile-photo`)
       ])
@@ -217,7 +217,7 @@ export default function ChatPage() {
             {user.username && (
               <p className="text-xs text-gray-400 truncate">@{user.username}</p>
             )}
-            <p className="text-xs text-blue-500">онлайн</p>
+            <p className="text-xs text-blue-500">Чат основного бота</p>
           </div>
         </Link>
         <button className="p-2 hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0">

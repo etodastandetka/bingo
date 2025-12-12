@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createApiResponse } from '@/lib/api-helpers'
+import { Prisma } from '@prisma/client'
+import { addLog } from '@/lib/logs'
 
 // API для создания заявок из внешних источников (мини-приложение, бот и т.д.)
 export async function OPTIONS() {
@@ -16,7 +18,25 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   try {
+    // Логируем сам факт получения запроса
+    console.log('📥 Payment API - POST request received')
+    addLog('info', '📥 Payment API - POST request received', { timestamp: new Date().toISOString() })
+    
     const body = await request.json()
+    console.log('📥 Payment API - Request body received:', { 
+      hasBody: !!body,
+      keys: Object.keys(body || {}),
+      telegram_user_id: body?.telegram_user_id,
+      amount: body?.amount,
+      type: body?.type
+    })
+    addLog('info', '📥 Payment API - Request body received', { 
+      hasBody: !!body,
+      keys: Object.keys(body || {}),
+      telegram_user_id: body?.telegram_user_id,
+      amount: body?.amount,
+      type: body?.type
+    })
 
     const {
       userId,
@@ -33,38 +53,89 @@ export async function POST(request: NextRequest) {
       telegram_first_name,
       telegram_last_name,
       receipt_photo, // base64 строка фото чека
+      uncreated_request_id,
     } = body
+    
+    // Вспомогательная функция для обработки пустых строк
+    const cleanString = (value: any): string | null => {
+      if (value === null || value === undefined) return null
+      const str = String(value).trim()
+      return str === '' ? null : str
+    }
+    
+    // Специальная функция для обработки base64 фото (не обрезаем содержимое, только убираем пробелы по краям)
+    const cleanBase64 = (value: any): string | null => {
+      if (value === null || value === undefined) return null
+      const str = String(value)
+      // Убираем только начальные и конечные пробелы/переносы строк
+      const trimmed = str.trim()
+      // Проверяем, что это не пустая строка и имеет минимальную длину для base64 (минимум 20 символов)
+      if (trimmed === '' || trimmed.length < 20) return null
+      // Если уже есть префикс data:image, возвращаем как есть
+      if (trimmed.startsWith('data:image')) return trimmed
+      // Если это чистый base64, добавляем префикс для изображения (определяем тип по первым символам)
+      // По умолчанию используем jpeg, но можно определить по содержимому
+      return `data:image/jpeg;base64,${trimmed}`
+    }
 
     // Определяем user_id (пробуем разные варианты)
     // Приоритет: telegram_user_id > userId > user_id > playerId
     const finalUserId = telegram_user_id || userId || user_id || playerId
     const finalAccountId = account_id || user_id || userId || playerId
 
-    console.log('📝 Payment API - Creating request:', {
+    // Валидация типа - должен быть 'deposit' или 'withdraw'
+    const validType = (type === 'deposit' || type === 'withdraw') ? type : 'deposit'
+    
+    if (!type || (type !== 'deposit' && type !== 'withdraw')) {
+      console.warn('⚠️ Payment API: Invalid or missing type, using "deposit" as default', { receivedType: type })
+    }
+    
+    const logData = {
       telegram_user_id,
       userId,
       user_id,
       playerId,
       finalUserId,
       type,
+      validType,
       amount,
+      amount_type: typeof amount,
       bookmaker,
-      bank
-    })
-
-    // Если user_id не передан, используем playerId как userId (для тестирования)
-    // Но лучше использовать telegram_user_id если он доступен
-    if (!finalUserId || !type || !amount) {
-      console.error('❌ Payment API: Missing required fields', { 
+      bank,
+      account_id,
+      has_receipt_photo: !!receipt_photo
+    }
+    
+    console.log('📝 Payment API - Creating request:', logData)
+    addLog('info', '📝 Payment API - Creating request', logData)
+    
+    // Валидация обязательных полей
+    if (!finalUserId) {
+      const errorData = { 
         userId, 
         user_id, 
         telegram_user_id, 
-        playerId, 
-        type, 
-        amount 
-      })
+        playerId
+      }
+      console.error('❌ Payment API: Missing userId', errorData)
+      addLog('error', '❌ Payment API: Missing userId', errorData)
+      
       const errorResponse = NextResponse.json(
-        createApiResponse(null, 'Missing required fields: userId, type, amount'),
+        createApiResponse(null, 'Missing required field: userId (telegram_user_id)'),
+        { 
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
+      )
+      return errorResponse
+    }
+
+    if (!amount || amount === null || amount === undefined || amount === '') {
+      console.error('❌ Payment API: Missing or invalid amount', { amount })
+      const errorResponse = NextResponse.json(
+        createApiResponse(null, 'Missing or invalid amount'),
         { 
           status: 400,
           headers: {
@@ -97,57 +168,320 @@ export async function POST(request: NextRequest) {
       return errorResponse
     }
 
+    // Проверка блокировки пользователя по userId (Telegram ID)
+    const user = await prisma.botUser.findUnique({
+      where: { userId: userIdBigInt },
+      select: { isActive: true },
+    })
+
+    // Если пользователь существует и заблокирован - отклоняем запрос
+    if (user && user.isActive === false) {
+      console.log('❌ Payment API: User is blocked', userIdBigInt.toString())
+      const errorResponse = NextResponse.json(
+        createApiResponse(null, 'Вы заблокированы'),
+        { 
+          status: 403,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
+      )
+      return errorResponse
+    }
+
+    // Проверка блокировки по accountId (ID казино)
+    // Если этот accountId использовал заблокированный пользователь - блокируем всех
+    if (finalAccountId) {
+      // Находим всех пользователей, которые использовали этот accountId
+      const requestsWithAccountId = await prisma.request.findMany({
+        where: {
+          accountId: finalAccountId.toString(),
+        },
+        select: {
+          userId: true,
+        },
+        distinct: ['userId'],
+      })
+
+      // Проверяем каждого пользователя на блокировку
+      for (const req of requestsWithAccountId) {
+        const accountUser = await prisma.botUser.findUnique({
+          where: { userId: req.userId },
+          select: { isActive: true },
+        })
+
+        // Если пользователь существует и заблокирован - блокируем всех, кто пытается использовать этот accountId
+        if (accountUser && accountUser.isActive === false) {
+          console.log('❌ Payment API: Account ID is blocked due to blocked owner', {
+            accountId: finalAccountId,
+            ownerUserId: req.userId.toString(),
+            attemptingUserId: userIdBigInt.toString(),
+          })
+          
+          // АВТОМАТИЧЕСКАЯ БЛОКИРОВКА: блокируем текущего пользователя, который пытается использовать заблокированный accountId
+          try {
+            // Получаем данные пользователя из запроса для создания записи
+            const currentUserData = await prisma.request.findFirst({
+              where: { userId: userIdBigInt },
+              orderBy: { createdAt: 'desc' },
+              select: {
+                username: true,
+                firstName: true,
+                lastName: true,
+              },
+            })
+            
+            await prisma.botUser.upsert({
+              where: { userId: userIdBigInt },
+              update: {
+                isActive: false,
+              },
+              create: {
+                userId: userIdBigInt,
+                username: currentUserData?.username || null,
+                firstName: currentUserData?.firstName || null,
+                lastName: currentUserData?.lastName || null,
+                language: 'ru',
+                isActive: false,
+              },
+            })
+            console.log(`🔒 Auto-blocked user ${userIdBigInt.toString()} for using blocked accountId ${finalAccountId}`)
+            addLog('warn', `🔒 Auto-blocked user ${userIdBigInt.toString()} for using blocked accountId ${finalAccountId}`, {
+              userId: userIdBigInt.toString(),
+              accountId: finalAccountId,
+              blockedByAccountId: req.userId.toString(),
+            })
+          } catch (error) {
+            console.error('Error auto-blocking user:', error)
+          }
+          
+          const errorResponse = NextResponse.json(
+            createApiResponse(null, 'Аккаунт заблокирован'),
+            { 
+              status: 403,
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+              }
+            }
+          )
+          return errorResponse
+        }
+      }
+    }
+
+    // Преобразуем amount в Decimal (Prisma требует Decimal для этого поля)
+    // Убеждаемся, что amount это число
+    const amountNum = typeof amount === 'number' ? amount : parseFloat(amount?.toString() || '0')
+    if (!amountNum || amountNum <= 0 || isNaN(amountNum)) {
+      console.error('❌ Payment API: Invalid amount', { amount, amountNum })
+      const errorResponse = NextResponse.json(
+        createApiResponse(null, 'Invalid amount: must be a positive number'),
+        { 
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
+      )
+      return errorResponse
+    }
+    const amountDecimal = new Prisma.Decimal(amountNum)
+
+    // Обрабатываем фото чека
+    const processedPhoto = cleanBase64(receipt_photo)
+    
     console.log('💾 Payment API - Saving to database:', {
       userId: userIdBigInt.toString(),
       username: telegram_username,
       firstName: telegram_first_name,
-      type,
-      amount: parseFloat(amount),
+      lastName: telegram_last_name,
+      type: validType,
+      amount: amountDecimal.toString(),
+      amount_type: typeof amountDecimal,
       bookmaker,
-      bank
+      bank,
+      accountId: finalAccountId?.toString(),
+      has_receipt_photo: !!receipt_photo,
+      receipt_photo_length: receipt_photo ? receipt_photo.length : 0,
+      processed_photo_length: processedPhoto ? processedPhoto.length : 0,
+      photo_has_prefix: processedPhoto ? processedPhoto.startsWith('data:image') : false
     })
 
-    const newRequest = await prisma.request.create({
-      data: {
-        userId: userIdBigInt,
-        username: telegram_username,
-        firstName: telegram_first_name,
-        lastName: telegram_last_name,
-        bookmaker,
-        accountId: finalAccountId?.toString(),
-        amount: parseFloat(amount),
-        requestType: type,
-        bank,
-        phone,
-        status: 'pending',
-        photoFileUrl: receipt_photo || null, // Сохраняем base64 фото чека
-      },
-    })
+    try {
+      // Синхронизируем пользователя в BotUser при создании заявки
+      const { ensureUserExists } = await import('@/lib/sync-user')
+      
+      const cleanUsername = cleanString(telegram_username)
+      const cleanFirstName = cleanString(telegram_first_name)
+      const cleanLastName = cleanString(telegram_last_name)
 
-    console.log('✅ Payment API - Request created successfully:', {
-      id: newRequest.id,
-      userId: newRequest.userId.toString(),
-      type: newRequest.requestType,
-      status: newRequest.status,
-      amount: newRequest.amount?.toString()
-    })
-
-    const response = NextResponse.json(
-      createApiResponse({
-        id: newRequest.id,
-        transactionId: newRequest.id,
-        message: 'Заявка успешно создана',
+      await ensureUserExists(userIdBigInt, {
+        username: cleanUsername,
+        firstName: cleanFirstName,
+        lastName: cleanLastName,
       })
-    )
-    response.headers.set('Access-Control-Allow-Origin', '*')
-    return response
+
+      const newRequest = await prisma.request.create({
+        data: {
+          userId: userIdBigInt,
+          username: cleanUsername,
+          firstName: cleanFirstName,
+          lastName: cleanLastName,
+          bookmaker: cleanString(bookmaker),
+          accountId: finalAccountId ? cleanString(finalAccountId.toString()) : null,
+          amount: amountDecimal,
+          requestType: validType, // Используем валидированный тип
+          bank: cleanString(bank),
+          phone: cleanString(phone),
+          status: 'pending',
+          photoFileUrl: processedPhoto, // Сохраняем base64 фото чека (с префиксом data:image если нужно)
+        },
+      })
+
+      if (uncreated_request_id) {
+        const uncreatedIdNum = parseInt(uncreated_request_id, 10)
+        if (!Number.isNaN(uncreatedIdNum)) {
+          // @ts-ignore prisma client needs regenerate after schema change
+          await prisma.uncreatedRequest.updateMany({
+            where: { id: uncreatedIdNum },
+            data: { status: 'converted', createdRequestId: newRequest.id },
+          })
+        }
+      }
+
+      const successData = {
+        id: newRequest.id,
+        userId: newRequest.userId.toString(),
+        type: newRequest.requestType,
+        status: newRequest.status,
+        amount: newRequest.amount?.toString(),
+        bookmaker: newRequest.bookmaker,
+        accountId: newRequest.accountId,
+        has_photo: !!newRequest.photoFileUrl,
+        createdAt: newRequest.createdAt
+      }
+      
+      console.log('✅ Payment API - Request created successfully:', successData)
+      addLog('success', `✅ Заявка создана успешно (ID: ${newRequest.id})`, successData)
+      
+      // Проверяем, что заявка видна в запросе pending
+      const pendingCheck = await prisma.request.findFirst({
+        where: {
+          id: newRequest.id,
+          status: 'pending'
+        }
+      })
+      const pendingCheckData = {
+        found: !!pendingCheck,
+        id: pendingCheck?.id,
+        status: pendingCheck?.status
+      }
+      console.log('🔍 Payment API - Pending check:', pendingCheckData)
+      addLog('info', `🔍 Проверка заявки pending (ID: ${newRequest.id})`, pendingCheckData)
+      
+      // Проверяем, сколько всего заявок pending в БД
+      const totalPending = await prisma.request.count({
+        where: { status: 'pending' }
+      })
+      const totalAll = await prisma.request.count({})
+      
+      console.log('📊 Payment API - Database stats:', {
+        totalPending,
+        totalAll,
+        newRequestId: newRequest.id,
+        newRequestStatus: newRequest.status
+      })
+      addLog('info', '📊 Статистика БД после создания заявки', {
+        totalPending,
+        totalAll,
+        newRequestId: newRequest.id,
+        newRequestStatus: newRequest.status
+      })
+
+      // Проверяем, что заявка действительно создана в БД
+      const verifyRequest = await prisma.request.findUnique({
+        where: { id: newRequest.id }
+      })
+      
+      if (!verifyRequest) {
+        console.error('❌ Payment API - Request was not found after creation!', { id: newRequest.id })
+        throw new Error('Failed to verify request creation')
+      }
+      
+      console.log('✅ Payment API - Request verified in database:', {
+        id: verifyRequest.id,
+        requestType: verifyRequest.requestType,
+        status: verifyRequest.status,
+        createdAt: verifyRequest.createdAt
+      })
+      
+      // ВАЖНО: Проверяем, что статус действительно 'pending'
+      if (verifyRequest.status !== 'pending') {
+        const errorData = {
+          expected: 'pending',
+          actual: verifyRequest.status,
+          id: verifyRequest.id
+        }
+        console.error('❌ Payment API - CRITICAL: Request created with wrong status!', errorData)
+        addLog('error', `❌ Заявка создана с неправильным статусом! (ID: ${verifyRequest.id})`, errorData)
+        
+        // Исправляем статус на 'pending'
+        await prisma.request.update({
+          where: { id: verifyRequest.id },
+          data: { status: 'pending' }
+        })
+        console.log('✅ Payment API - Status corrected to pending')
+        addLog('success', `✅ Статус заявки исправлен на 'pending' (ID: ${verifyRequest.id})`)
+      }
+
+      const response = NextResponse.json(
+        createApiResponse({
+          id: newRequest.id,
+          transactionId: newRequest.id,
+          message: 'Заявка успешно создана',
+        })
+      )
+      response.headers.set('Access-Control-Allow-Origin', '*')
+      return response
+    } catch (dbError: any) {
+      const errorData = {
+        error: dbError.message,
+        code: dbError.code,
+        meta: dbError.meta,
+        stack: dbError.stack
+      }
+      console.error('❌ Payment API - Database error:', errorData)
+      addLog('error', '❌ Payment API - Database error', errorData)
+      
+      const errorResponse = NextResponse.json(
+        createApiResponse(null, `Ошибка базы данных: ${dbError.message}`),
+        { 
+          status: 500,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
+      )
+      return errorResponse
+    }
   } catch (error: any) {
-    console.error('Payment API error:', error)
+    const errorData = {
+      error: error.message,
+      stack: error.stack,
+      name: error.name
+    }
+    console.error('❌ Payment API - Unexpected error:', errorData)
+    addLog('error', '❌ Payment API - Unexpected error', errorData)
+    
     const errorResponse = NextResponse.json(
       createApiResponse(null, error.message || 'Failed to create request'),
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+        }
+      }
     )
-    errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     return errorResponse
   }
 }
@@ -155,28 +489,179 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, status, status_detail } = body
+    const { 
+      id, 
+      status, 
+      status_detail,
+      receipt_photo,
+      telegram_user_id,
+      amount,
+      bookmaker,
+      account_id,
+      bank,
+      phone,
+      telegram_username,
+      telegram_first_name,
+      telegram_last_name,
+      type, // requestType для обновления
+      requestType
+    } = body
 
-    if (!id || !status) {
+    if (!id) {
       const response = NextResponse.json(
-        createApiResponse(null, 'Missing required fields: id, status'),
+        createApiResponse(null, 'Missing required field: id'),
         { status: 400 }
       )
       response.headers.set('Access-Control-Allow-Origin', '*')
       return response
     }
 
-    const updateData: any = {
-      status,
+    // Вспомогательная функция для обработки пустых строк
+    const cleanString = (value: any): string | null => {
+      if (value === null || value === undefined) return null
+      const str = String(value).trim()
+      return str === '' ? null : str
+    }
+    
+    // Специальная функция для обработки base64 фото (не обрезаем содержимое, только убираем пробелы по краям)
+    const cleanBase64 = (value: any): string | null => {
+      if (value === null || value === undefined) return null
+      const str = String(value)
+      // Убираем только начальные и конечные пробелы/переносы строк
+      const trimmed = str.trim()
+      // Проверяем, что это не пустая строка и имеет минимальную длину для base64 (минимум 20 символов)
+      if (trimmed === '' || trimmed.length < 20) return null
+      // Если уже есть префикс data:image, возвращаем как есть
+      if (trimmed.startsWith('data:image')) return trimmed
+      // Если это чистый base64, добавляем префикс для изображения (определяем тип по первым символам)
+      // По умолчанию используем jpeg, но можно определить по содержимому
+      return `data:image/jpeg;base64,${trimmed}`
     }
 
-    if (status_detail) {
-      updateData.statusDetail = status_detail
+    // Проверяем, не истекло ли время для заявки
+    const existingRequest = await prisma.request.findUnique({
+      where: { id: parseInt(id) },
+      select: { createdAt: true, status: true },
+    })
+    
+    if (!existingRequest) {
+      const response = NextResponse.json(
+        createApiResponse(null, 'Request not found'),
+        { status: 404 }
+      )
+      response.headers.set('Access-Control-Allow-Origin', '*')
+      return response
+    }
+    
+    // Проверяем, не прошло ли 5 минут с момента создания
+    const createdAt = existingRequest.createdAt.getTime()
+    const now = Date.now()
+    const fiveMinutes = 5 * 60 * 1000 // 5 минут в миллисекундах
+    const timeElapsed = now - createdAt
+    
+    if (timeElapsed > fiveMinutes) {
+      console.log('❌ Payment API: Request expired on update', {
+        requestId: id,
+        createdAt: new Date(createdAt).toISOString(),
+        timeElapsed: Math.floor(timeElapsed / 1000) + ' секунд',
+        status: existingRequest.status
+      })
+      const response = NextResponse.json(
+        createApiResponse(null, 'Время на оплату истекло. Заявка не может быть обновлена.'),
+        { status: 400 }
+      )
+      response.headers.set('Access-Control-Allow-Origin', '*')
+      return response
     }
 
-    if (['completed', 'rejected', 'approved'].includes(status)) {
-      updateData.processedAt = new Date()
+    const updateData: any = {}
+
+    // Обновляем статус, если передан
+    if (status) {
+      updateData.status = status
+      
+      if (status_detail) {
+        updateData.statusDetail = status_detail
+      }
+
+      if (['completed', 'rejected', 'approved'].includes(status)) {
+        updateData.processedAt = new Date()
+      }
     }
+
+    // Обновляем фото чека, если передано (используем cleanBase64 для сохранения целостности base64)
+    if (receipt_photo !== undefined) {
+      updateData.photoFileUrl = cleanBase64(receipt_photo)
+    }
+
+    // Обновляем другие поля, если переданы
+    if (amount !== undefined) {
+      const amountNum = typeof amount === 'number' ? amount : parseFloat(amount?.toString() || '0')
+      if (!isNaN(amountNum) && amountNum > 0) {
+        updateData.amount = new Prisma.Decimal(amountNum)
+      }
+    }
+
+    if (bookmaker !== undefined) {
+      updateData.bookmaker = cleanString(bookmaker)
+    }
+
+    if (account_id !== undefined) {
+      updateData.accountId = cleanString(account_id?.toString())
+    }
+
+    if (bank !== undefined) {
+      updateData.bank = cleanString(bank)
+    }
+
+    if (phone !== undefined) {
+      updateData.phone = cleanString(phone)
+    }
+
+    if (telegram_username !== undefined) {
+      updateData.username = cleanString(telegram_username)
+    }
+
+    if (telegram_first_name !== undefined) {
+      updateData.firstName = cleanString(telegram_first_name)
+    }
+
+    if (telegram_last_name !== undefined) {
+      updateData.lastName = cleanString(telegram_last_name)
+    }
+
+    // Обновляем requestType, если передан (с валидацией)
+    const requestTypeToUpdate = type || requestType
+    if (requestTypeToUpdate !== undefined) {
+      const validRequestType = (requestTypeToUpdate === 'deposit' || requestTypeToUpdate === 'withdraw') 
+        ? requestTypeToUpdate 
+        : null
+      if (validRequestType) {
+        updateData.requestType = validRequestType
+      } else {
+        console.warn('⚠️ Payment API PUT: Invalid requestType, ignoring', { receivedType: requestTypeToUpdate })
+      }
+    }
+
+    // Обновляем userId, если передан telegram_user_id
+    if (telegram_user_id !== undefined && telegram_user_id !== null && telegram_user_id !== '') {
+      let userIdBigInt: bigint
+      try {
+        const userIdStr = String(telegram_user_id).trim()
+        if (userIdStr !== '') {
+          userIdBigInt = BigInt(userIdStr)
+          updateData.userId = userIdBigInt
+        }
+      } catch (error) {
+        console.error('❌ Payment API PUT: Invalid userId format', telegram_user_id, error)
+      }
+    }
+
+    console.log('📝 Payment API PUT - Updating request:', {
+      id,
+      updateData: Object.keys(updateData),
+      has_receipt: !!updateData.photoFileUrl
+    })
 
     const updatedRequest = await prisma.request.update({
       where: { id: parseInt(id) },

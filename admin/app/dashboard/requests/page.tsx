@@ -23,10 +23,10 @@ export default function RequestsPage() {
   useEffect(() => {
     fetchRequests()
     
-    // Автоматическое обновление каждые 3 секунды
+    // Автоматическое обновление каждые 10 секунд (увеличено для снижения нагрузки)
     const interval = setInterval(() => {
       fetchRequests(false) // Не показываем loading при автообновлении
-    }, 3000)
+    }, 10000)
     
     // Обновление при фокусе страницы
     const handleVisibilityChange = () => {
@@ -124,8 +124,10 @@ export default function RequestsPage() {
       case 'manual':
       case 'awaiting_manual':
         return 'Ручная'
+      case 'processing':
+        return 'Обработка'
       default:
-        return status
+        return 'Неизвестно'
     }
   }
 
@@ -227,7 +229,7 @@ export default function RequestsPage() {
                 </p>
               </div>
               <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
-                <span>{request.username || request.firstName || request.userId}</span>
+                <span>{(request as any).firstName ? `${(request as any).firstName}${(request as any).lastName ? ' ' + (request as any).lastName : ''}` : (request as any).username ? `@${(request as any).username}` : (request as any).userId}</span>
                 {request.bookmaker && <span>{request.bookmaker}</span>}
               </div>
             </Link>

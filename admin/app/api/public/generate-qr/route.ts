@@ -40,7 +40,9 @@ export async function POST(request: NextRequest) {
       })
       if (activeRequisite) {
         requisite = activeRequisite.value
-        console.log(`✅ Using active requisite: ${activeRequisite.name || `#${activeRequisite.id}`} - ${requisite.slice(0, 4)}****${requisite.slice(-4)}`)
+        if (requisite) {
+          console.log(`✅ Using active requisite: ${activeRequisite.name || `#${activeRequisite.id}`} - ${requisite.slice(0, 4)}****${requisite.slice(-4)}`)
+        }
       } else {
         console.error('❌ No active requisite found in database')
       }

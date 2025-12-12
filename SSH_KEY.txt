@@ -1,0 +1,50 @@
+═══════════════════════════════════════════════════════════════
+            ВАШ SSH ПУБЛИЧНЫЙ КЛЮЧ
+═══════════════════════════════════════════════════════════════
+
+Скопируйте этот ключ и добавьте его на сервер:
+
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFc9dUc4MasxfY89XvqlW1KJCG1LWWVxNuafZgsc39wo bingo_bot_server
+
+═══════════════════════════════════════════════════════════════
+                    ИНСТРУКЦИЯ
+═══════════════════════════════════════════════════════════════
+
+1. КЛЮЧИ СОХРАНЕНЫ:
+   - Приватный ключ: C:\Users\User\.ssh\id_ed25519_bingo
+   - Публичный ключ: C:\Users\User\.ssh\id_ed25519_bingo.pub
+
+2. ДОБАВИТЬ КЛЮЧ НА СЕРВЕР:
+
+   Вариант А - Через ssh-copy-id (если установлен):
+   ssh-copy-id -i ~/.ssh/id_ed25519_bingo.pub user@your-server.com
+
+   Вариант Б - Вручную:
+   1. Войдите на сервер: ssh user@your-server.com
+   2. Добавьте ключ в файл:
+      echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFc9dUc4MasxfY89XvqlW1KJCG1LWWVxNuafZgsc39wo bingo_bot_server" >> ~/.ssh/authorized_keys
+   3. Установите права:
+      chmod 600 ~/.ssh/authorized_keys
+      chmod 700 ~/.ssh
+
+3. ПОДКЛЮЧЕНИЕ К СЕРВЕРУ:
+
+   ssh -i ~/.ssh/id_ed25519_bingo user@your-server.com
+
+   Или добавьте в ~/.ssh/config:
+   
+   Host your-server
+       HostName your-server.com
+       User your-username
+       IdentityFile ~/.ssh/id_ed25519_bingo
+
+═══════════════════════════════════════════════════════════════
+
+
+
+
+
+
+
+
+

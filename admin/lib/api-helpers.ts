@@ -18,6 +18,33 @@ export function getAuthUser(request: NextRequest): TokenPayload | null {
   return verifyToken(token)
 }
 
+// Функция для рекурсивного преобразования BigInt в строки
+function serializeBigInt(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj
+  }
+  
+  if (typeof obj === 'bigint') {
+    return obj.toString()
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(serializeBigInt)
+  }
+  
+  if (typeof obj === 'object') {
+    const serialized: any = {}
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        serialized[key] = serializeBigInt(obj[key])
+      }
+    }
+    return serialized
+  }
+  
+  return obj
+}
+
 export function createApiResponse<T>(
   data?: T,
   error?: string,
@@ -26,7 +53,9 @@ export function createApiResponse<T>(
   if (error) {
     return { success: false, error }
   }
-  return { success: true, data, message }
+  // Сериализуем BigInt перед возвратом
+  const serializedData = data ? serializeBigInt(data) : undefined
+  return { success: true, data: serializedData, message }
 }
 
 export function requireAuth(request: NextRequest): TokenPayload {

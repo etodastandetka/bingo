@@ -54,7 +54,8 @@ export async function GET(request: NextRequest) {
       winwin: true,
       '888starz': true,
       '1xcasino': true,
-      betwinner: true
+      betwinner: true,
+      wowbet: true
     }
 
     // Формируем ответ в формате, который ожидает клиентский сайт
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
       maintenance_message: settingsMap.maintenance_message || 'Технические работы. Попробуйте позже.',
       require_receipt_photo: settingsMap.require_receipt_photo === 'true' || settingsMap.require_receipt_photo === true,
       channel: (typeof settingsMap.channel === 'string' ? settingsMap.channel : settingsMap.channel?.toString()) || '@bingokg_news',
+      require_channel_subscription: settingsMap.require_channel_subscription === 'true' || settingsMap.require_channel_subscription === true,
     }
 
     const res = NextResponse.json(response)
@@ -87,12 +89,14 @@ export async function GET(request: NextRequest) {
         winwin: true,
         '888starz': true,
         '1xcasino': true,
-        betwinner: true
+        betwinner: true,
+        wowbet: true
       },
       pause: false,
       maintenance_message: 'Технические работы. Попробуйте позже.',
       require_receipt_photo: false,
       channel: '@bingokg_news',
+      require_channel_subscription: true,
     })
     res.headers.set('Access-Control-Allow-Origin', '*')
     return res

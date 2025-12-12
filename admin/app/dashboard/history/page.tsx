@@ -9,6 +9,9 @@ interface Transaction {
   user_id: string
   account_id: string
   user_display_name: string
+  username?: string
+  first_name?: string
+  last_name?: string
   type: string
   amount: number
   status: string
@@ -16,6 +19,7 @@ interface Transaction {
   bookmaker: string
   bank: string
   created_at: string
+  processed_by?: string | null
 }
 
 export default function HistoryPage() {
@@ -23,12 +27,15 @@ export default function HistoryPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'all' | 'deposit' | 'withdraw'>('all')
-
-  useEffect(() => {
-    fetchHistory()
-  }, [activeTab])
+  const [isFetching, setIsFetching] = useState(false)
 
   const fetchHistory = async () => {
+    // Предотвращаем множественные запросы
+    if (isFetching) {
+      return
+    }
+
+    setIsFetching(true)
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -36,18 +43,44 @@ export default function HistoryPage() {
         params.append('type', activeTab === 'deposit' ? 'deposit' : 'withdraw')
       }
 
-      const response = await fetch(`/api/transaction-history?${params.toString()}`)
+      // Добавляем таймаут для запроса
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 секунд
+
+      const response = await fetch(`/api/transaction-history?${params.toString()}`, {
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
       const data = await response.json()
 
       if (data.success) {
         setTransactions(data.data.transactions || [])
+      } else {
+        console.error('API returned error:', data.error)
+        setTransactions([])
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch history:', error)
+      if (error.name === 'AbortError') {
+        console.error('Request timeout')
+      }
+      setTransactions([])
     } finally {
       setLoading(false)
+      setIsFetching(false)
     }
   }
+
+  useEffect(() => {
+    fetchHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -59,10 +92,15 @@ export default function HistoryPage() {
     return `${day}.${month}.${year} • ${hours}:${minutes}`
   }
 
-  const getStatusLabel = (status: string, statusDetail: string | null) => {
+  const getStatusLabel = (status: string, statusDetail: string | null, processedBy?: string | null) => {
+    // Если автопополнение - показываем "Успешно"
+    if (processedBy === 'автопополнение' || processedBy === 'autodeposit') {
+      return { label: 'Успешно', color: 'bg-green-500 text-white border border-green-400' }
+    }
+    
     // Маппинг статусов на русские метки (темная тема)
     if (status === 'completed' || status === 'auto_completed' || status === 'approved' || status === 'autodeposit_success') {
-      return { label: 'Успешно', color: 'bg-blue-500 text-white border border-blue-400' }
+      return { label: 'Успешно', color: 'bg-green-500 text-white border border-green-400' }
     }
     if (status === 'rejected' || status === 'declined') {
       return { label: 'Отклонено', color: 'bg-red-500 text-white border border-red-400' }
@@ -76,7 +114,7 @@ export default function HistoryPage() {
     if (status === 'deferred') {
       return { label: 'Отложено', color: 'bg-orange-500 text-white border border-orange-400' }
     }
-    return { label: status, color: 'bg-gray-700 text-gray-300 border border-gray-600' }
+    return { label: 'Неизвестно', color: 'bg-gray-700 text-gray-300 border border-gray-600' }
   }
 
   const getTransactionType = (tx: Transaction) => {
@@ -92,9 +130,14 @@ export default function HistoryPage() {
     
     // Для депозитов
     if (tx.type === 'deposit') {
-      // Авто пополнение - только если статус явно указывает на автопополнение
+      // Автопополнение - проверяем processedBy
+      if (tx.processed_by === 'автопополнение' || tx.processed_by === 'autodeposit') {
+        return 'автопополнение'
+      }
+      
+      // Авто пополнение - если статус явно указывает на автопополнение
       if (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || tx.status_detail?.includes('autodeposit')) {
-        return 'Авто пополнение'
+        return 'автопополнение'
       }
       
       // Проверяем наличие profile-* в status_detail
@@ -116,7 +159,22 @@ export default function HistoryPage() {
     if (normalized.includes('melbet')) return 'Melbet'
     if (normalized.includes('mostbet')) return 'Mostbet'
     if (normalized.includes('1win') || normalized.includes('onewin')) return '1win'
+    if (normalized.includes('wowbet')) return 'WowBet'
     return bookmaker
+  }
+
+  const getDisplayName = (tx: Transaction) => {
+    // Приоритет: firstName/lastName > username
+    if (tx.first_name && tx.last_name) {
+      return `${tx.first_name} ${tx.last_name}`
+    } else if (tx.first_name) {
+      return tx.first_name
+    } else if (tx.last_name) {
+      return tx.last_name
+    } else if (tx.username) {
+      return `@${tx.username}`
+    }
+    return tx.user_display_name || 'Неизвестный пользователь'
   }
 
   const getBankImage = (bank: string | null) => {
@@ -242,13 +300,14 @@ export default function HistoryPage() {
         <div className="space-y-3">
           {transactions.map((tx) => {
             const isDeposit = tx.type === 'deposit'
-            const statusInfo = getStatusLabel(tx.status, tx.status_detail)
+            const statusInfo = getStatusLabel(tx.status, tx.status_detail, tx.processed_by)
             const transactionType = getTransactionType(tx)
 
             return (
-              <div
+              <Link
                 key={tx.id}
-                className="block bg-gray-800 bg-opacity-50 rounded-xl p-4 border border-gray-700 backdrop-blur-sm"
+                href={`/dashboard/requests/${tx.id}`}
+                className="block bg-gray-800 bg-opacity-50 rounded-xl p-4 border border-gray-700 backdrop-blur-sm hover:border-blue-500 transition-colors"
               >
                 <div className="flex items-start justify-between">
                   {/* Левая часть: Аватар и информация о пользователе */}
@@ -265,7 +324,7 @@ export default function HistoryPage() {
                     {/* Информация о пользователе и транзакции */}
                     <div className="flex-1 min-w-0">
                       <p className="text-base font-bold text-white mb-0.5">
-                        {tx.user_display_name || 'Неизвестный пользователь'}
+                        {getDisplayName(tx)}
                       </p>
                       <p className="text-xs text-gray-400 mb-2">
                         ID: {tx.user_id}
@@ -292,10 +351,10 @@ export default function HistoryPage() {
                       }`}
                     >
                       {isDeposit ? '+' : '-'}
-                      {tx.amount.toLocaleString('ru-RU', {
+                      {tx.amount.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
-                      }).replace('.', ',')}
+                      })}
                     </p>
                     
                     {/* Статус */}
@@ -312,7 +371,7 @@ export default function HistoryPage() {
                     </span>
                   </div>
                 </div>
-              </div>
+              </Link>
             )
           })}
         </div>

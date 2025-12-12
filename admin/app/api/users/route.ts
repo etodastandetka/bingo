@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, createApiResponse } from '@/lib/api-helpers'
 
+// Отключаем кеширование для актуальных данных
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     requireAuth(request)

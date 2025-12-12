@@ -13,6 +13,9 @@ export async function OPTIONS() {
   })
 }
 
+// Отключаем кеширование для реального времени
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -27,24 +30,52 @@ export async function GET(request: NextRequest) {
       where.requestType = type
     }
 
+    // Ограничиваем количество записей для оптимизации
     const requests = await prisma.request.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take: userId ? 50 : 100,
+      select: {
+        id: true,
+        userId: true,
+        accountId: true,
+        username: true,
+        firstName: true,
+        lastName: true,
+        requestType: true,
+        amount: true,
+        status: true,
+        statusDetail: true,
+        bookmaker: true,
+        bank: true,
+        phone: true,
+        createdAt: true,
+        processedAt: true,
+        processedBy: true,
+      },
     })
 
-    const transactions = requests.map((r) => ({
-      id: r.id.toString(),
-      user_id: r.userId.toString(),
-      account_id: r.accountId || '',
-      user_display_name: r.username
-        ? `@${r.username}`
-        : r.firstName && r.lastName
-        ? `${r.firstName} ${r.lastName}`
-        : r.firstName || 'Unknown',
-      username: r.username || '',
-      first_name: r.firstName || '',
-      last_name: r.lastName || '',
+    const transactions = requests.map((r) => {
+      // Приоритет: firstName/lastName > username
+      let displayName = 'Unknown'
+      if (r.firstName && r.lastName) {
+        displayName = `${r.firstName} ${r.lastName}`
+      } else if (r.firstName) {
+        displayName = r.firstName
+      } else if (r.lastName) {
+        displayName = r.lastName
+      } else if (r.username) {
+        displayName = `@${r.username}`
+      }
+
+      return {
+        id: r.id.toString(),
+        user_id: r.userId.toString(),
+        account_id: r.accountId || '',
+        user_display_name: displayName,
+        username: r.username || '',
+        first_name: r.firstName || '',
+        last_name: r.lastName || '',
       type: r.requestType,
       amount: r.amount ? parseFloat(r.amount.toString()) : 0,
       status: r.status,
@@ -55,7 +86,9 @@ export async function GET(request: NextRequest) {
       date: r.createdAt.toISOString(),
       created_at: r.createdAt.toISOString(),
       processed_at: r.processedAt?.toISOString() || null,
-    }))
+      processed_by: r.processedBy || null,
+      }
+    })
 
     const response = NextResponse.json(createApiResponse({ transactions }))
     response.headers.set('Access-Control-Allow-Origin', '*')

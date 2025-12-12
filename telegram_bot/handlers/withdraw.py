@@ -1,4 +1,4 @@
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
@@ -22,6 +22,18 @@ async def withdraw_start(message: Message, state: FSMContext):
     """Начало процесса вывода - выбор казино"""
     lang = await get_lang_from_state(state)
     
+    # Проверяем блокировку пользователя
+    try:
+        blocked_check = await APIClient.check_blocked(str(message.from_user.id))
+        if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
+            blocked_data = blocked_check.get('data', {})
+            blocked_message = blocked_data.get('message', 'Вы заблокированы')
+            await message.answer(blocked_message)
+            return
+    except Exception as e:
+        print(f"Error checking blocked status: {e}")
+        # Продолжаем работу, если проверка не удалась
+    
     # Получаем настройки из админки
     settings = await APIClient.get_payment_settings()
     
@@ -42,16 +54,20 @@ async def withdraw_start(message: Message, state: FSMContext):
         await message.answer(get_text(lang, 'withdraw', 'withdrawals_disabled'))
         return
     
-    enabled_casinos = settings.get('casinos', {})
-    
-    # Фильтруем казино по настройкам (показываем только включенные)
-    # Формируем кнопки по 2 в ряд
+    # Показываем все казино (не фильтруем)
+    # 1xbet - одна кнопка в строке, остальные - по 2 в строке
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     row = []
     for casino in Config.CASINOS:
-        # Проверяем, включено ли казино (по умолчанию true, если не указано)
         casino_id = casino['id']
-        if enabled_casinos.get(casino_id, True):
+        # 1xbet - отдельная строка (одна кнопка)
+        if casino_id == '1xbet':
+            keyboard.inline_keyboard.append([InlineKeyboardButton(
+                text=casino['name'],
+                callback_data=f'withdraw_casino_{casino_id}'
+            )])
+        else:
+            # Остальные казино - по 2 в строке
             row.append(InlineKeyboardButton(
                 text=casino['name'],
                 callback_data=f'withdraw_casino_{casino_id}'
@@ -64,13 +80,9 @@ async def withdraw_start(message: Message, state: FSMContext):
     if row:
         keyboard.inline_keyboard.append(row)
     
-    if not keyboard.inline_keyboard:
-        await message.answer(get_text(lang, 'withdraw', 'no_casinos_available'))
-        return
-    
     await message.answer(
         get_text(lang, 'withdraw', 'select_casino'),
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await state.set_state(WithdrawStates.waiting_for_casino)
 
@@ -79,6 +91,14 @@ async def withdraw_casino_selected(callback: CallbackQuery, state: FSMContext):
     """Казино выбрано, запрашиваем выбор банка"""
     lang = await get_lang_from_state(state)
     casino_id = callback.data.replace('withdraw_casino_', '')
+    
+    # Проверяем, включено ли казино
+    settings = await APIClient.get_payment_settings()
+    enabled_casinos = settings.get('casinos', {})
+    if enabled_casinos.get(casino_id, True) is False:
+        await callback.answer(get_text(lang, 'withdraw', 'casino_disabled', default='❌ Это казино временно отключено'), show_alert=True)
+        return
+    
     casino_name = next((c['name'] for c in Config.CASINOS if c['id'] == casino_id), casino_id)
     
     await state.update_data(casino_id=casino_id, casino_name=casino_name)
@@ -113,13 +133,13 @@ async def withdraw_casino_selected(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.answer(
         get_text(lang, 'withdraw', 'select_bank', casino=casino_name),
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await state.set_state(WithdrawStates.waiting_for_bank)
     await callback.answer()
 
 @router.message(WithdrawStates.waiting_for_bank)
-async def withdraw_bank_selected(message: Message, state: FSMContext):
+async def withdraw_bank_selected(message: Message, state: FSMContext, bot: Bot):
     """Банк выбран, запрашиваем номер телефона"""
     lang = await get_lang_from_state(state)
     
@@ -127,7 +147,7 @@ async def withdraw_bank_selected(message: Message, state: FSMContext):
         await state.clear()
         # Показываем главное меню
         from handlers.start import cmd_start
-        await cmd_start(message, state)
+        await cmd_start(message, state, bot)
         return
     
     # Ищем банк по названию
@@ -151,12 +171,12 @@ async def withdraw_bank_selected(message: Message, state: FSMContext):
     
     await message.answer(
         get_text(lang, 'withdraw', 'enter_phone', casino=casino_name, bank=bank_name),
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await state.set_state(WithdrawStates.waiting_for_phone)
 
 @router.message(WithdrawStates.waiting_for_phone)
-async def withdraw_phone_received(message: Message, state: FSMContext):
+async def withdraw_phone_received(message: Message, state: FSMContext, bot: Bot):
     """Номер телефона получен, запрашиваем фото QR кода"""
     lang = await get_lang_from_state(state)
     
@@ -164,7 +184,7 @@ async def withdraw_phone_received(message: Message, state: FSMContext):
         await state.clear()
         # Показываем главное меню
         from handlers.start import cmd_start
-        await cmd_start(message, state)
+        await cmd_start(message, state, bot)
         return
     
     phone = message.text.strip()
@@ -187,7 +207,7 @@ async def withdraw_phone_received(message: Message, state: FSMContext):
     
     await message.answer(
         get_text(lang, 'withdraw', 'send_qr_photo'),
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await state.set_state(WithdrawStates.waiting_for_qr_photo)
 
@@ -231,13 +251,13 @@ async def withdraw_qr_photo_received(message: Message, state: FSMContext):
         await message.answer_photo(
             photo=photo,
             caption=get_text(lang, 'withdraw', 'enter_account_id', casino=casino_name),
-            reply_markup=keyboard
+            reply_markup=keyboard,
         )
     else:
         # Если фото нет, отправляем только текст
         await message.answer(
             get_text(lang, 'withdraw', 'enter_account_id', casino=casino_name),
-            reply_markup=keyboard
+            reply_markup=keyboard,
         )
     
     await state.set_state(WithdrawStates.waiting_for_account_id)
@@ -249,7 +269,7 @@ async def withdraw_qr_photo_invalid(message: Message, state: FSMContext):
     await message.answer(get_text(lang, 'withdraw', 'invalid_photo'))
 
 @router.message(WithdrawStates.waiting_for_account_id)
-async def withdraw_account_id_received(message: Message, state: FSMContext):
+async def withdraw_account_id_received(message: Message, state: FSMContext, bot: Bot):
     """ID казино получен, запрашиваем код с сайта казино"""
     lang = await get_lang_from_state(state)
     
@@ -257,7 +277,7 @@ async def withdraw_account_id_received(message: Message, state: FSMContext):
         await state.clear()
         # Показываем главное меню
         from handlers.start import cmd_start
-        await cmd_start(message, state)
+        await cmd_start(message, state, bot)
         return
     
     account_id = message.text.strip()
@@ -265,6 +285,18 @@ async def withdraw_account_id_received(message: Message, state: FSMContext):
     if not account_id or not account_id.isdigit():
         await message.answer('❌ Пожалуйста, отправьте корректный ID счета (только цифры)')
         return
+    
+    # Проверяем блокировку accountId
+    try:
+        blocked_check = await APIClient.check_blocked(str(message.from_user.id), account_id)
+        if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
+            blocked_data = blocked_check.get('data', {})
+            blocked_message = blocked_data.get('message', 'Аккаунт заблокирован')
+            await message.answer(blocked_message)
+            return
+    except Exception as e:
+        print(f"Error checking blocked accountId: {e}")
+        # Продолжаем работу, если проверка не удалась
     
     await state.update_data(account_id=account_id)
     
@@ -275,20 +307,20 @@ async def withdraw_account_id_received(message: Message, state: FSMContext):
     
     await message.answer(
         get_text(lang, 'withdraw', 'enter_code'),
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await state.set_state(WithdrawStates.waiting_for_withdrawal_code)
 
 @router.message(WithdrawStates.waiting_for_withdrawal_code)
-async def withdraw_code_received(message: Message, state: FSMContext):
-    """Код получен, создаем заявку"""
+async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
+    """Код получен, проверяем сумму и создаем заявку"""
     lang = await get_lang_from_state(state)
     
     if message.text == get_text(lang, 'withdraw', 'cancel'):
         await state.clear()
         # Показываем главное меню
         from handlers.start import cmd_start
-        await cmd_start(message, state)
+        await cmd_start(message, state, bot)
         return
     
     withdrawal_code = message.text.strip()
@@ -298,17 +330,56 @@ async def withdraw_code_received(message: Message, state: FSMContext):
         return
     
     data = await state.get_data()
+    casino_id = data.get('casino_id')
+    account_id = data.get('account_id')
+    
+    # Получаем сумму вывода перед созданием заявки
+    withdraw_amount = 0
+    amount_check_ok = True
+    try:
+        checking_msg = await message.answer("🔍 Проверяю код вывода...")
+        
+        amount_result = await APIClient.check_withdraw_amount(casino_id, account_id, withdrawal_code)
+        
+        # Удаляем сообщение о проверке
+        try:
+            await checking_msg.delete()
+        except:
+            pass
+        
+        amount_value = amount_result.get('data', {}).get('amount') if amount_result.get('success') else None
+        if amount_value is not None:
+            withdraw_amount = amount_value
+            if withdraw_amount <= 0:
+                amount_check_ok = False
+                await message.answer("⚠️ Сумма вывода не найдена. Проверьте код и попробуйте ещё раз.")
+        else:
+            amount_check_ok = False
+            error_message = amount_result.get('error') or amount_result.get('message') or 'Не удалось получить сумму вывода'
+            await message.answer(f"⚠️ {error_message}")
+    except Exception as e:
+        print(f"Error checking withdraw amount: {e}")
+        amount_check_ok = False
+        await message.answer("⚠️ Не удалось проверить сумму вывода. Попробуйте еще раз.")
+    
+    if not amount_check_ok:
+        await message.answer("Заявка не создана. Проверьте код вывода и попробуйте ещё раз.")
+        await state.clear()
+        # Показываем главное меню и выходим без создания заявки
+        from handlers.start import cmd_start
+        await cmd_start(message, state, bot)
+        return
     
     try:
         # Создаем заявку на вывод
         request_data = await APIClient.create_request(
             telegram_user_id=str(message.from_user.id),
             request_type='withdraw',
-            amount=0,  # Сумма будет указана позже админом
-            bookmaker=data.get('casino_id'),
+            amount=withdraw_amount,  # Используем полученную сумму или 0
+            bookmaker=casino_id,
             bank=data.get('bank_id'),
             phone=data.get('phone'),
-            account_id=data.get('account_id'),
+            account_id=account_id,
             telegram_username=message.from_user.username,
             telegram_first_name=message.from_user.first_name,
             telegram_last_name=message.from_user.last_name,
@@ -319,13 +390,30 @@ async def withdraw_code_received(message: Message, state: FSMContext):
         request_id = request_data.get('data', {}).get('id')
         
         if request_id:
-            await message.answer(
-                get_text(lang, 'withdraw', 'request_created',
+            # Формируем сообщение с суммой
+            if withdraw_amount > 0:
+                if lang == 'ky':
+                    success_message = f"✅ Ваша заявка на вывод {withdraw_amount:.2f} KGS была отправлена!\n\n"
+                    success_message += f"🎰 Казино: {data.get('casino_name')}\n"
+                    success_message += f"🏦 Банк: {data.get('bank_name')}\n"
+                    success_message += f"📱 Телефон: {data.get('phone')}\n"
+                    success_message += f"🆔 ID: {account_id}\n\n"
+                    success_message += f"Ваша заявка будет обработана в ближайшее время."
+                else:
+                    success_message = f"✅ Ваша заявка на вывод {withdraw_amount:.2f} KGS была отправлена!\n\n"
+                    success_message += f"🎰 Казино: {data.get('casino_name')}\n"
+                    success_message += f"🏦 Банк: {data.get('bank_name')}\n"
+                    success_message += f"📱 Телефон: {data.get('phone')}\n"
+                    success_message += f"🆔 ID: {account_id}\n\n"
+                    success_message += f"Ваша заявка будет обработана в ближайшее время."
+            else:
+                success_message = get_text(lang, 'withdraw', 'request_created',
                         casino=data.get("casino_name"),
                         bank=data.get("bank_name"),
                         phone=data.get("phone"),
-                        account_id=data.get("account_id"))
-            )
+                        account_id=account_id)
+            
+            await message.answer(success_message)
         else:
             await message.answer(get_text(lang, 'withdraw', 'error'))
         
@@ -339,14 +427,14 @@ async def withdraw_code_received(message: Message, state: FSMContext):
                     '❌ Сервер жеткиликсиз. Админ панелди 3001 портунда иштеткениңизди текшериңиз.\n\n'
                     'Админ панелди иштетүү:\n'
                     'cd admin_nextjs\n'
-                    'npm run dev'
+                    'npm run dev',
                 )
             else:
                 await message.answer(
                     '❌ Сервер недоступен. Пожалуйста, убедитесь, что админ-панель запущена на порту 3001.\n\n'
                     'Запустите админ-панель:\n'
                     'cd admin_nextjs\n'
-                    'npm run dev'
+                    'npm run dev',
                 )
         else:
             await message.answer(get_text(lang, 'withdraw', 'error'))
@@ -355,13 +443,13 @@ async def withdraw_code_received(message: Message, state: FSMContext):
     
     # Показываем главное меню после создания заявки или ошибки
     from handlers.start import cmd_start
-    await cmd_start(message, state)
+    await cmd_start(message, state, bot)
 
 @router.message(F.text.in_(['❌ Операция отменена', '❌ Аракет жокко чыгарылды']))
-async def cancel_withdraw(message: Message, state: FSMContext):
+async def cancel_withdraw(message: Message, state: FSMContext, bot: Bot):
     """Отмена операции вывода"""
     await state.clear()
     # Показываем главное меню
     from handlers.start import cmd_start
-    await cmd_start(message, state)
+    await cmd_start(message, state, bot)
 

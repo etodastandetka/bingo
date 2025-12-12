@@ -28,11 +28,90 @@ export default function LimitsPage() {
   const searchParams = useSearchParams()
   const [stats, setStats] = useState<LimitsStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [dateRange, setDateRange] = useState('')
+  const [dateRangeInput, setDateRangeInput] = useState<HTMLInputElement | null>(null)
 
   useEffect(() => {
     fetchStats()
   }, [searchParams])
+
+  useEffect(() => {
+    // Инициализация flatpickr для выбора диапазона дат
+    if (typeof window === 'undefined' || !dateRangeInput) return
+
+    let fpInstance: any = null
+
+    const loadFlatpickr = async () => {
+      if ((window as any).flatpickr) {
+        initFlatpickr()
+        return
+      }
+
+      // Загружаем CSS
+      const existingLink = document.querySelector('link[href*="flatpickr"]')
+      if (!existingLink) {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css'
+        document.head.appendChild(link)
+      }
+
+      // Загружаем JS
+      const existingScript = document.querySelector('script[src*="flatpickr"]')
+      if (!existingScript) {
+        const script = document.createElement('script')
+        script.src = 'https://cdn.jsdelivr.net/npm/flatpickr'
+        script.onload = initFlatpickr
+        document.body.appendChild(script)
+      } else {
+        initFlatpickr()
+      }
+    }
+
+    const initFlatpickr = () => {
+      if (!(window as any).flatpickr || !dateRangeInput) return
+
+      // Удаляем старый экземпляр если есть
+      if (fpInstance) {
+        fpInstance.destroy()
+        fpInstance = null
+      }
+
+      const start = searchParams.get('start') || ''
+      const end = searchParams.get('end') || ''
+      const initialDates = start && end ? [start, end] : []
+
+      fpInstance = (window as any).flatpickr(dateRangeInput, {
+        mode: 'range',
+        dateFormat: 'Y-m-d',
+        defaultDate: initialDates,
+        locale: {
+          rangeSeparator: ' — ',
+        },
+        onChange: (selectedDates: Date[]) => {
+          if (selectedDates.length === 2) {
+            const startDate = selectedDates[0].toISOString().split('T')[0]
+            const endDate = selectedDates[1].toISOString().split('T')[0]
+            const params = new URLSearchParams()
+            params.append('start', startDate)
+            params.append('end', endDate)
+            router.push(`/dashboard/limits?${params.toString()}`)
+          } else if (selectedDates.length === 0) {
+            router.push('/dashboard/limits')
+          }
+        },
+        theme: 'dark',
+      })
+    }
+
+    loadFlatpickr()
+
+    return () => {
+      if (fpInstance) {
+        fpInstance.destroy()
+        fpInstance = null
+      }
+    }
+  }, [dateRangeInput, searchParams, router])
 
   const fetchStats = async () => {
     setLoading(true)
@@ -49,13 +128,6 @@ export default function LimitsPage() {
 
       if (data.success) {
         setStats(data.data)
-        
-        // Устанавливаем значение дат для инпута
-        if (start || end) {
-          setDateRange(`${start || ''} — ${end || ''}`)
-        } else {
-          setDateRange('')
-        }
       }
     } catch (error) {
       console.error('Failed to fetch limits stats:', error)
@@ -64,17 +136,14 @@ export default function LimitsPage() {
     }
   }
 
-  const handlePeriodSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const parts = dateRange.split(/\s*[—\-–toдо]+\s*/i).filter(Boolean)
-    const start = parts[0]?.trim() || ''
-    const end = parts[1]?.trim() || ''
-
-    const params = new URLSearchParams()
-    if (start) params.append('start', start)
-    if (end) params.append('end', end)
-
-    router.push(`/dashboard/limits?${params.toString()}`)
+  const handleClearDates = () => {
+    if (dateRangeInput && (window as any).flatpickr) {
+      const fp = (window as any).flatpickr(dateRangeInput)
+      if (fp) {
+        fp.clear()
+      }
+    }
+    router.push('/dashboard/limits')
   }
 
   useEffect(() => {
@@ -276,21 +345,33 @@ export default function LimitsPage() {
       {/* Период */}
       <div className="bg-gray-800 bg-opacity-50 rounded-xl p-4 mb-4 border border-gray-700 backdrop-blur-sm">
         <div className="text-base font-bold text-white mb-3">Период (от — до)</div>
-        <form onSubmit={handlePeriodSubmit} className="flex gap-2">
-          <input
-            type="text"
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            placeholder="ГГГГ-ММ-ДД — ГГГГ-ММ-ДД"
-            className="flex-1 bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-xl hover:from-blue-700 hover:to-blue-800 font-medium text-sm whitespace-nowrap"
-          >
-            Применить
-          </button>
-        </form>
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <input
+              ref={(el) => setDateRangeInput(el)}
+              type="text"
+              placeholder="Выберите период"
+              className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 pl-12 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer transition-all"
+              readOnly
+            />
+            <div className="absolute left-4 top-1/2 transform -translate-y-1/2 pointer-events-none">
+              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+          </div>
+          {(searchParams.get('start') || searchParams.get('end')) && (
+            <button
+              onClick={handleClearDates}
+              className="bg-gray-700 text-white px-4 py-3 rounded-xl hover:bg-gray-600 font-medium text-sm whitespace-nowrap transition-all hover:scale-105 flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Сбросить
+            </button>
+          )}
+        </div>
         <p className="text-xs text-gray-400 mt-2">Оставьте пустым, чтобы показать все время</p>
       </div>
 
@@ -333,18 +414,6 @@ export default function LimitsPage() {
             </div>
             <div className="text-xs text-gray-500 mt-1">
               {stats.totalWithdrawalsCount} операций
-            </div>
-          </div>
-          <div className="bg-gray-900 bg-opacity-50 rounded-xl p-3 border border-gray-700">
-            <div className="text-xs text-gray-400 mb-1">Сумма пополнений</div>
-            <div className="text-blue-500 font-bold text-lg">
-              {stats.totalDepositsSum.toFixed(2)} с
-            </div>
-          </div>
-          <div className="bg-gray-900 bg-opacity-50 rounded-xl p-3 border border-gray-700">
-            <div className="text-xs text-gray-400 mb-1">Сумма выводов</div>
-            <div className="text-red-500 font-bold text-lg">
-              {stats.totalWithdrawalsSum.toFixed(2)} с
             </div>
           </div>
         </div>

@@ -44,8 +44,12 @@ export async function GET(request: NextRequest) {
       winwin: true,
       '888starz': true,
       '1xcasino': true,
-      betwinner: true
+      betwinner: true,
+      wowbet: true
     }
+
+    // Получаем настройку подписки на канал
+    const requireChannelSubscription = settingsMap.require_channel_subscription === 'true' || settingsMap.require_channel_subscription === true || settingsMap.require_channel_subscription === undefined
 
     const settings = {
       pause: settingsMap.pause === 'true' || settingsMap.pause === true,
@@ -57,6 +61,7 @@ export async function GET(request: NextRequest) {
       require_receipt_photo: settingsMap.require_receipt_photo === 'true' || settingsMap.require_receipt_photo === true,
       casinos: casinoSettings,
       channel: (typeof settingsMap.channel === 'string' ? settingsMap.channel : settingsMap.channel?.toString()) || '@bingokg_news',
+      require_channel_subscription: requireChannelSubscription,
     }
 
     return NextResponse.json(createApiResponse(settings))
@@ -123,6 +128,10 @@ export async function POST(request: NextRequest) {
       if (channelValue) {
         await updateSetting('channel', channelValue, 'Канал для подписки')
       }
+    }
+
+    if (body.require_channel_subscription !== undefined) {
+      await updateSetting('require_channel_subscription', body.require_channel_subscription.toString(), 'Требовать подписку на канал')
     }
 
     return NextResponse.json(

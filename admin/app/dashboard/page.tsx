@@ -23,14 +23,17 @@ export default function DashboardPage() {
   const [requests, setRequests] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'pending' | 'deferred'>('pending')
+  const [isFetching, setIsFetching] = useState(false)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [lastRequestCount, setLastRequestCount] = useState(0)
 
   useEffect(() => {
-    fetchRequests()
+    fetchRequests(true) // Первая загрузка с показом loading
     
-    // Автоматическое обновление каждые 3 секунды
+    // Автоматическое обновление каждую секунду для мгновенного отображения новых заявок
     const interval = setInterval(() => {
       fetchRequests(false) // Не показываем loading при автообновлении
-    }, 3000)
+    }, 1000)
     
     // Обновление при фокусе страницы
     const handleVisibilityChange = () => {
@@ -63,12 +66,20 @@ export default function DashboardPage() {
       window.removeEventListener('focus', handleFocus)
       window.removeEventListener('storage', handleStorageChange)
     }
-  }, [activeTab])
+  }, [activeTab]) // Убрали isFetching из зависимостей
 
   const fetchRequests = async (showLoading = true) => {
-    if (showLoading) {
+    // Защита от множественных одновременных запросов
+    if (isFetching) {
+      return
+    }
+
+    setIsFetching(true)
+    // Показываем loading только при первой загрузке или ручном обновлении
+    if (showLoading && isInitialLoad) {
       setLoading(true)
     }
+    
     try {
       const params = new URLSearchParams()
       if (activeTab === 'pending') {
@@ -79,26 +90,41 @@ export default function DashboardPage() {
         params.append('status', 'deferred')
       }
 
-      const response = await fetch(`/api/requests?${params.toString()}`)
-      const data = await response.json()
+      // Добавляем timestamp для предотвращения кеширования браузером
+      params.append('_t', Date.now().toString())
 
-      console.log('📋 Fetched requests data:', data)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 секунд таймаут
+
+      const response = await fetch(`/api/requests?${params.toString()}`, {
+        signal: controller.signal,
+        cache: 'no-store', // Отключаем кеширование браузера
+      })
+      
+      clearTimeout(timeoutId)
+      const data = await response.json()
 
       if (data.success) {
         const requestsList = data.data.requests || []
+        // Обновляем только если список изменился (новые заявки или изменения)
+        const currentCount = requestsList.length
+        const hasChanges = currentCount !== lastRequestCount || 
+          JSON.stringify(requestsList.map((r: any) => r.id)) !== JSON.stringify(requests.map((r: any) => r.id))
         
-        console.log(`✅ Loaded ${requestsList.length} requests for tab: ${activeTab}`)
-        setRequests(requestsList)
-      } else {
-        console.error('❌ Failed to fetch requests:', data.error || data)
-        setRequests([])
+        if (hasChanges || showLoading) {
+          setRequests(requestsList)
+          setLastRequestCount(currentCount)
+        }
       }
-    } catch (error) {
-      console.error('❌ Failed to fetch requests:', error)
-      setRequests([])
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('❌ Failed to fetch requests:', error)
+      }
     } finally {
-      if (showLoading) {
+      setIsFetching(false)
+      if (showLoading && isInitialLoad) {
         setLoading(false)
+        setIsInitialLoad(false) // После первой загрузки больше не показываем loading
       }
     }
   }
@@ -124,8 +150,10 @@ export default function DashboardPage() {
       case 'manual':
       case 'awaiting_manual':
         return 'Ручная'
+      case 'processing':
+        return 'Обработка'
       default:
-        return status
+        return 'Неизвестно'
     }
   }
 
@@ -151,8 +179,10 @@ export default function DashboardPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '—'
     const date = new Date(dateString)
+    if (Number.isNaN(date.getTime())) return '—'
     const day = String(date.getDate()).padStart(2, '0')
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const year = date.getFullYear()
@@ -200,7 +230,15 @@ export default function DashboardPage() {
   }
 
     const getTransactionType = (request: Request) => {
-      // Если статус "Ожидает", показываем "-"
+      // На проверке
+      if (
+        request.status_detail?.includes('pending_check') ||
+        request.status === 'pending_check'
+      ) {
+        return 'На проверке'
+      }
+      
+      // Если статус "Ожидает/обработка", показываем "-"
       if (request.status === 'pending' || request.status === 'processing') {
         return '-'
       }
@@ -239,7 +277,10 @@ export default function DashboardPage() {
           <p className="text-xs text-gray-300 mt-1">Актуальные транзакции</p>
         </div>
         <button 
-          onClick={() => fetchRequests()}
+          onClick={() => {
+            setIsInitialLoad(false) // После ручного обновления не показываем loading
+            fetchRequests(false)
+          }}
           className="p-2 bg-gray-900 rounded-lg"
         >
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -273,7 +314,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Контент заявок */}
-      {loading ? (
+      {loading && isInitialLoad ? (
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
         </div>
@@ -290,10 +331,10 @@ export default function DashboardPage() {
         <div className="space-y-3">
           {requests.map((request) => {
             const isDeposit = request.requestType === 'deposit'
-            const userName = request.username 
-              ? `@${request.username}` 
-              : request.firstName 
-                ? `${request.firstName}${request.lastName ? ' ' + request.lastName : ''}` 
+            const userName = request.firstName 
+              ? `${request.firstName}${request.lastName ? ' ' + request.lastName : ''}` 
+              : request.username 
+                ? `@${request.username}` 
                 : `ID: ${request.userId}`
             const transactionType = getTransactionType(request)
             const isDeferred = request.status === 'deferred'
@@ -350,10 +391,10 @@ export default function DashboardPage() {
                         }`}
                       >
                         {showMinus ? '-' : (isDeposit ? '+' : '-')}
-                        {request.amount ? parseFloat(request.amount).toLocaleString('ru-RU', {
+                        {request.amount ? parseFloat(request.amount).toLocaleString('en-US', {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
-                        }).replace('.', ',') : '0,00'}
+                        }) : '0.00'}
                       </p>
                       
                       {/* Статус */}

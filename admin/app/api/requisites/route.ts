@@ -27,11 +27,44 @@ export async function POST(request: NextRequest) {
     requireAuth(request)
 
     const body = await request.json()
-    const { value, name, email, password, isActive } = body
+    const { value, name, email, password, bank, hash, isActive } = body
 
-    if (!value) {
+    // Валидация в зависимости от банка
+    if (bank === 'Demir Bank') {
+      if (!value || !/^\d{16}$/.test(value)) {
+        return NextResponse.json(
+          createApiResponse(null, 'Реквизит должен содержать ровно 16 цифр'),
+          { status: 400 }
+        )
+      }
+      if (!email) {
+        return NextResponse.json(
+          createApiResponse(null, 'Почта обязательна для Demir Bank'),
+          { status: 400 }
+        )
+      }
+      if (!password) {
+        return NextResponse.json(
+          createApiResponse(null, 'Пароль обязателен для Demir Bank'),
+          { status: 400 }
+        )
+      }
+    } else if (bank === 'Bakai') {
+      if (!hash) {
+        return NextResponse.json(
+          createApiResponse(null, 'Hash обязателен для Bakai'),
+          { status: 400 }
+        )
+      }
+      if (!name) {
+        return NextResponse.json(
+          createApiResponse(null, 'Название обязательно для Bakai'),
+          { status: 400 }
+        )
+      }
+    } else if (bank) {
       return NextResponse.json(
-        createApiResponse(null, 'Value is required'),
+        createApiResponse(null, 'Неизвестный банк'),
         { status: 400 }
       )
     }
@@ -46,10 +79,12 @@ export async function POST(request: NextRequest) {
 
     const requisite = await prisma.botRequisite.create({
       data: {
-        value,
+        value: bank === 'Demir Bank' ? value : null,
         name,
-        email,
-        password,
+        email: bank === 'Demir Bank' ? email : null,
+        password: bank === 'Demir Bank' ? password : null,
+        bank,
+        hash: bank === 'Bakai' ? hash : null,
         isActive: isActive || false,
       },
     })

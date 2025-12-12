@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, createApiResponse } from '@/lib/api-helpers'
+import { addLog } from '@/lib/logs'
+
+// Отключаем кеширование для реального времени (автообновление каждые 3 секунды)
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +14,8 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') // deposit or withdraw
     const status = searchParams.get('status')
     const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    // Уменьшаем лимит для быстрой загрузки
+    const limit = parseInt(searchParams.get('limit') || '20')
     const skip = (page - 1) * limit
 
     const where: any = {}
@@ -23,7 +28,7 @@ export async function GET(request: NextRequest) {
       where.status = { not: 'pending' }
     }
 
-    console.log('📋 Requests API - Fetching requests:', { type, status, where, page, limit })
+    // Убрали лишние логи и запросы для оптимизации
 
     const [requests, total] = await Promise.all([
       prisma.request.findMany({
@@ -31,11 +36,29 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
+        select: {
+          id: true,
+          userId: true,
+          username: true,
+          firstName: true,
+          lastName: true,
+          bookmaker: true,
+          accountId: true,
+          bank: true,
+          amount: true,
+          requestType: true,
+          status: true,
+          statusDetail: true,
+          createdAt: true,
+          // Исключаем большие поля, которые не нужны для списка
+          // photoFileUrl: false, // Не загружаем фото в списке
+          // phone: false, // Не загружаем телефон в списке
+        },
       }),
       prisma.request.count({ where }),
     ])
 
-    console.log(`✅ Requests API - Found ${requests.length} requests (total: ${total})`)
+    // Убрали лишние логи для оптимизации
 
     return NextResponse.json(
       createApiResponse({
@@ -43,6 +66,8 @@ export async function GET(request: NextRequest) {
           ...r,
           userId: r.userId.toString(), // Преобразуем BigInt в строку
           amount: r.amount ? r.amount.toString() : null,
+          createdAt: r.createdAt ? r.createdAt.toISOString() : null,
+          status_detail: r.statusDetail ?? null, // для совместимости с UI (snake_case)
         })),
         pagination: {
           page,
@@ -53,6 +78,11 @@ export async function GET(request: NextRequest) {
       })
     )
   } catch (error: any) {
+    console.error('❌ Requests API - Error fetching requests:', {
+      error: error.message,
+      stack: error.stack,
+      name: error.name
+    })
     return NextResponse.json(
       createApiResponse(null, error.message || 'Failed to fetch requests'),
       { status: error.message === 'Unauthorized' ? 401 : 500 }
@@ -78,25 +108,46 @@ export async function POST(request: NextRequest) {
       phone,
     } = body
 
-    if (!userId || !requestType || !amount) {
+    // Валидация типа - должен быть 'deposit' или 'withdraw'
+    const validRequestType = (requestType === 'deposit' || requestType === 'withdraw') 
+      ? requestType 
+      : 'deposit'
+
+    if (!userId || !amount) {
       return NextResponse.json(
-        createApiResponse(null, 'Missing required fields'),
+        createApiResponse(null, 'Missing required fields: userId, amount'),
         { status: 400 }
       )
     }
 
+    if (!requestType || (requestType !== 'deposit' && requestType !== 'withdraw')) {
+      console.warn('⚠️ Requests API: Invalid or missing requestType, using "deposit" as default', { 
+        receivedType: requestType 
+      })
+    }
+
+    const userIdBigInt = BigInt(userId)
+
+    // Синхронизируем пользователя в BotUser при создании заявки
+    const { ensureUserExists } = await import('@/lib/sync-user')
+    await ensureUserExists(userIdBigInt, {
+      username: username || null,
+      firstName: firstName || null,
+      lastName: lastName || null,
+    })
+
     const newRequest = await prisma.request.create({
       data: {
-        userId: BigInt(userId),
-        username,
-        firstName,
-        lastName,
-        bookmaker,
-        accountId,
+        userId: userIdBigInt,
+        username: username || null,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        bookmaker: bookmaker || null,
+        accountId: accountId || null,
         amount: parseFloat(amount),
-        requestType,
-        bank,
-        phone,
+        requestType: validRequestType, // Используем валидированный тип
+        bank: bank || null,
+        phone: phone || null,
         status: 'pending',
       },
     })

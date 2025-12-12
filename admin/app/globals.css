@@ -39,3 +39,241 @@ a {
   text-decoration: none;
 }
 
+/* Стили для календаря в темной теме */
+input[type="date"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* Стили для flatpickr в темной теме */
+.flatpickr-calendar {
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.2) !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+.flatpickr-months {
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
+  border-bottom: 1px solid #374151 !important;
+  padding: 12px !important;
+}
+
+.flatpickr-month {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.flatpickr-current-month {
+  color: #ffffff !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+}
+
+.flatpickr-weekdays {
+  background: #111827 !important;
+  border-bottom: 1px solid #374151 !important;
+  padding: 8px 0 !important;
+}
+
+.flatpickr-weekday {
+  color: #9ca3af !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  text-transform: uppercase !important;
+}
+
+.flatpickr-days {
+  padding: 8px !important;
+}
+
+.flatpickr-day {
+  color: #e5e7eb !important;
+  border-radius: 8px !important;
+  border: 2px solid transparent !important;
+  transition: all 0.2s ease !important;
+  font-weight: 500 !important;
+}
+
+.flatpickr-day:hover {
+  background: rgba(59, 130, 246, 0.3) !important;
+  border-color: rgba(59, 130, 246, 0.5) !important;
+  transform: scale(1.05) !important;
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+  border-color: #60a5fa !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4), 0 2px 4px -1px rgba(37, 99, 235, 0.2) !important;
+  transform: scale(1.1) !important;
+  z-index: 2 !important;
+}
+
+.flatpickr-day.startRange {
+  border-top-left-radius: 8px !important;
+  border-bottom-left-radius: 8px !important;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.flatpickr-day.endRange {
+  border-top-right-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
+.flatpickr-day.inRange {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.15) 100%) !important;
+  border-color: rgba(59, 130, 246, 0.3) !important;
+  color: #93c5fd !important;
+  border-radius: 0 !important;
+}
+
+.flatpickr-day.inRange:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.25) 100%) !important;
+}
+
+.flatpickr-day.today {
+  border-color: #3b82f6 !important;
+  background: rgba(59, 130, 246, 0.1) !important;
+  font-weight: 600 !important;
+}
+
+.flatpickr-day.today:hover {
+  background: rgba(59, 130, 246, 0.3) !important;
+  border-color: #60a5fa !important;
+}
+
+.flatpickr-day.flatpickr-disabled,
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay {
+  color: #4b5563 !important;
+  opacity: 0.5 !important;
+}
+
+.flatpickr-prev-month,
+.flatpickr-next-month {
+  color: #ffffff !important;
+  fill: #ffffff !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+  padding: 4px !important;
+}
+
+.flatpickr-prev-month:hover,
+.flatpickr-next-month:hover {
+  background: rgba(59, 130, 246, 0.2) !important;
+  transform: scale(1.1) !important;
+}
+
+.flatpickr-time {
+  border-top: 1px solid #374151 !important;
+  background: #1f2937 !important;
+}
+
+.flatpickr-time input {
+  color: #ffffff !important;
+  background: transparent !important;
+}
+
+.flatpickr-time input:hover {
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Дополнительные улучшения для красивого отображения */
+.flatpickr-day.startRange.inRange {
+  border-top-left-radius: 8px !important;
+  border-bottom-left-radius: 8px !important;
+}
+
+.flatpickr-day.endRange.inRange {
+  border-top-right-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+}
+
+/* Анимация при наведении */
+.flatpickr-day:not(.flatpickr-disabled):not(.prevMonthDay):not(.nextMonthDay) {
+  position: relative !important;
+}
+
+.flatpickr-day:not(.flatpickr-disabled):not(.prevMonthDay):not(.nextMonthDay):hover::before {
+  content: '' !important;
+  position: absolute !important;
+  inset: -2px !important;
+  border-radius: 8px !important;
+  background: rgba(59, 130, 246, 0.1) !important;
+  z-index: -1 !important;
+}
+
+/* Улучшение для выбранных дат */
+.flatpickr-day.selected::after {
+  content: '' !important;
+  position: absolute !important;
+  inset: -3px !important;
+  border-radius: 10px !important;
+  border: 2px solid rgba(96, 165, 250, 0.5) !important;
+  z-index: -1 !important;
+  animation: pulse 2s infinite !important;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+/* Стили для поля ввода календаря */
+input[readonly].flatpickr-input {
+  background: linear-gradient(135deg, #111827 0%, #1f2937 100%) !important;
+}
+
+input[readonly].flatpickr-input:focus {
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Кастомный скроллбар для блока входящих платежей */
+.payments-scroll::-webkit-scrollbar {
+  width: 6px;
+  display: block;
+}
+
+.payments-scroll::-webkit-scrollbar-track {
+  background: #1f2937;
+  border-radius: 10px;
+}
+
+.payments-scroll::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 10px;
+}
+
+.payments-scroll::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+.payments-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #4b5563 #1f2937;
+}
+
