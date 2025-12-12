@@ -50,6 +50,7 @@ export default function OperatorChatPage() {
     status: string
     statusDetail: string | null
     bookmaker: string | null
+    bank: string | null
     createdAt: string
     processedAt: string | null
   }>>([])
@@ -1265,7 +1266,7 @@ export default function OperatorChatPage() {
                                 alt={request.bank || 'bank'}
                                 className="w-full h-full object-cover"
                               />
-                            </div>
+                              </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center space-x-2 mb-1">
                                 <span className="text-sm font-semibold text-white truncate">
@@ -1280,9 +1281,9 @@ export default function OperatorChatPage() {
                               <div className="flex items-center flex-wrap gap-2 text-[11px] text-gray-400">
                                 <span>{formatRequestDate(request.createdAt)}</span>
                                 {transactionType && transactionType !== '-' && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-600 text-white">
-                                    {transactionType}
-                                  </span>
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-600 text-white">
+                                      {transactionType}
+                                    </span>
                                 )}
                               </div>
                             </div>
@@ -1297,8 +1298,8 @@ export default function OperatorChatPage() {
                               })}
                             </p>
                             <div className="flex items-center justify-end gap-2">
-                              <div className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-800 text-gray-100 border border-gray-700">
-                                {statusLabel}
+                            <div className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-800 text-gray-100 border border-gray-700">
+                              {statusLabel}
                               </div>
                               {isRejected && (
                                 <button
