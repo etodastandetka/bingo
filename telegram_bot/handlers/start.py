@@ -41,28 +41,43 @@ async def check_channel_subscription(bot: Bot, user_id: int, channel: str) -> bo
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext, bot: Bot):
+    logger.info(f"Received /start from user {message.from_user.id}")
     lang = await get_lang_from_state(state)
     
-    # Проверяем блокировку пользователя
+    # Проверяем блокировку пользователя (с таймаутом)
     try:
-        blocked_check = await APIClient.check_blocked(str(message.from_user.id))
+        import asyncio
+        blocked_check = await asyncio.wait_for(
+            APIClient.check_blocked(str(message.from_user.id)),
+            timeout=3.0
+        )
         if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
             blocked_data = blocked_check.get('data', {})
             blocked_message = blocked_data.get('message', 'Вы заблокированы')
             await message.answer(blocked_message)
             return
+    except asyncio.TimeoutError:
+        logger.warning(f"Timeout checking blocked status for user {message.from_user.id}")
+        # Продолжаем работу, если проверка не удалась
     except Exception as e:
         logger.error(f"Error checking blocked status for user {message.from_user.id}: {e}", exc_info=True)
         # Продолжаем работу, если проверка не удалась
     
-    # Проверяем pause режим
+    # Проверяем pause режим (с таймаутом)
     settings = {}
     try:
-        settings = await APIClient.get_payment_settings()
+        import asyncio
+        settings = await asyncio.wait_for(
+            APIClient.get_payment_settings(),
+            timeout=3.0
+        )
         if settings.get('pause', False):
             maintenance_message = settings.get('maintenance_message', get_text(lang, 'start', 'bot_paused'))
             await message.answer(maintenance_message)
             return
+    except asyncio.TimeoutError:
+        logger.warning(f"Timeout fetching payment settings")
+        # Если не удалось получить настройки, продолжаем работу
     except Exception as e:
         logger.warning(f"Error fetching payment settings: {e}")
         # Если не удалось получить настройки, продолжаем работу
@@ -72,54 +87,74 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     channel = settings.get('channel') or Config.CHANNEL
     # Убеждаемся что channel - строка
     if require_subscription and channel and isinstance(channel, str) and channel.strip():
-        is_subscribed = await check_channel_subscription(bot, message.from_user.id, channel)
-        
-        if not is_subscribed:
-            # Показываем сообщение с кнопкой подписки
-            subscribe_text = get_text(lang, 'start', 'subscribe_required', channel=channel)
-            if not subscribe_text or subscribe_text.startswith('['):
-                subscribe_text = f"📢 Пожалуйста, подпишитесь на наш канал: {channel}" if lang == 'ru' else f"📢 Биздин каналга жазылыңыз: {channel}"
+        try:
+            import asyncio
+            is_subscribed = await asyncio.wait_for(
+                check_channel_subscription(bot, message.from_user.id, channel),
+                timeout=5.0
+            )
             
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text=get_text(lang, 'start', 'subscribe_button', default='📢 Подписаться на канал'),
-                    url=f"https://t.me/{channel.lstrip('@')}"
-                )],
-                [InlineKeyboardButton(
-                    text=get_text(lang, 'start', 'check_subscription', default='✅ Я подписался'),
-                    callback_data='check_subscription'
-                )]
-            ])
-            
-            await message.answer(subscribe_text, reply_markup=keyboard)
-            return
+            if not is_subscribed:
+                # Показываем сообщение с кнопкой подписки
+                subscribe_text = get_text(lang, 'start', 'subscribe_required', channel=channel)
+                if not subscribe_text or subscribe_text.startswith('['):
+                    subscribe_text = f"📢 Пожалуйста, подпишитесь на наш канал: {channel}" if lang == 'ru' else f"📢 Биздин каналга жазылыңыз: {channel}"
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(
+                        text=get_text(lang, 'start', 'subscribe_button', default='📢 Подписаться на канал'),
+                        url=f"https://t.me/{channel.lstrip('@')}"
+                    )],
+                    [InlineKeyboardButton(
+                        text=get_text(lang, 'start', 'check_subscription', default='✅ Я подписался'),
+                        callback_data='check_subscription'
+                    )]
+                ])
+                
+                await message.answer(subscribe_text, reply_markup=keyboard)
+                return
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout checking channel subscription for user {message.from_user.id}")
+            # Продолжаем работу, если проверка не удалась
+        except Exception as e:
+            logger.warning(f"Error checking channel subscription: {e}")
+            # Продолжаем работу, если проверка не удалась
     
     # Если подписан или канал не настроен, показываем главное меню
-    first_name = message.from_user.first_name or ('kotik' if lang == 'ru' else 'баатыр')
-    
-    text = f"""{get_text(lang, 'start', 'greeting', name=first_name)}
+    try:
+        first_name = message.from_user.first_name or ('kotik' if lang == 'ru' else 'баатыр')
+        
+        text = f"""{get_text(lang, 'start', 'greeting', name=first_name)}
 
 {get_text(lang, 'start', 'auto_deposit')}
 {get_text(lang, 'start', 'auto_withdraw')}
 {get_text(lang, 'start', 'working')}
 
 {get_text(lang, 'start', 'support', support=Config.SUPPORT)}"""
-    
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text=get_text(lang, 'menu', 'deposit')),
-                KeyboardButton(text=get_text(lang, 'menu', 'withdraw'))
+        
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [
+                    KeyboardButton(text=get_text(lang, 'menu', 'deposit')),
+                    KeyboardButton(text=get_text(lang, 'menu', 'withdraw'))
+                ],
+                [
+                    KeyboardButton(text=get_text(lang, 'menu', 'instruction')),
+                    KeyboardButton(text=get_text(lang, 'menu', 'language'))
+                ]
             ],
-            [
-                KeyboardButton(text=get_text(lang, 'menu', 'instruction')),
-                KeyboardButton(text=get_text(lang, 'menu', 'language'))
-            ]
-        ],
-        resize_keyboard=True
-    )
-    
-    await message.answer(text, reply_markup=keyboard)
+            resize_keyboard=True
+        )
+        
+        await message.answer(text, reply_markup=keyboard)
+        logger.info(f"Successfully sent /start response to user {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Error sending /start response to user {message.from_user.id}: {e}", exc_info=True)
+        # Пытаемся отправить хотя бы простое сообщение
+        try:
+            await message.answer("Привет! Используйте кнопки меню для работы с ботом.")
+        except:
+            pass
 
 @router.callback_query(F.data == 'check_subscription')
 async def check_subscription_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):

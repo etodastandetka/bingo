@@ -36,8 +36,15 @@ async def main():
     
     # Обработка ошибок
     try:
-        # Запуск polling
-        await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
+        # Запуск polling с обработкой ошибок
+        await dp.start_polling(
+            bot, 
+            allowed_updates=["message", "callback_query"],
+            handle_as_tasks=True,
+            close_bot_session=True
+        )
+    except KeyboardInterrupt:
+        logger.info("Получен сигнал остановки")
     except Exception as e:
         logger.error(f"Ошибка при запуске polling: {e}", exc_info=True)
         raise
