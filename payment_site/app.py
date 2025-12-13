@@ -163,45 +163,14 @@ def generate_qr_image(qr_hash, unique_id=None):
     text_img = Image.new('RGBA', (int(max_text_width * 2.5), int(total_text_height * 2.5)), (255, 255, 255, 0))
     text_draw = ImageDraw.Draw(text_img)
     
-    # Позиционируем текст в центре временного изображения
+    # Позиционируем текст точно в центре временного изображения
     x_offset = int(max_text_width * 1.25)
     y_offset1 = int(total_text_height * 0.5)
     y_offset2 = y_offset1 + text_height + line_spacing
     
-    # Получаем размеры текста для создания фона
-    try:
-        bbox1 = text_draw.textbbox((x_offset, y_offset1), text_line1, font=font)
-        bbox2 = text_draw.textbbox((x_offset, y_offset2), text_line2, font=font)
-        # Добавляем отступы для фона
-        padding = 8
-        bg_x1 = min(bbox1[0], bbox2[0]) - padding
-        bg_y1 = bbox1[1] - padding
-        bg_x2 = max(bbox1[2], bbox2[2]) + padding
-        bg_y2 = bbox2[3] + padding
-    except:
-        # Fallback если не удалось получить bbox
-        bg_x1 = x_offset - int(max_text_width * 0.5) - 8
-        bg_y1 = y_offset1 - 8
-        bg_x2 = x_offset + int(max_text_width * 0.5) + 8
-        bg_y2 = y_offset2 + text_height + 8
-    
-    # Рисуем полупрозрачный белый фон под текстом (чтобы текст был виден на черных модулях QR)
-    text_draw.rectangle([bg_x1, bg_y1, bg_x2, bg_y2], fill=(255, 255, 255, 180))  # Полупрозрачный белый фон
-    
-    # Рисуем обе строки текста с красивой обводкой (красный цвет с белой обводкой для лучшей видимости)
-    # Сначала рисуем белую обводку (тень) для каждой строки
-    stroke_width = 3  # Увеличена толщина обводки
-    for adj_x in range(-stroke_width, stroke_width + 1):
-        for adj_y in range(-stroke_width, stroke_width + 1):
-            if adj_x != 0 or adj_y != 0:
-                # Обводка для первой строки
-                text_draw.text((x_offset + adj_x, y_offset1 + adj_y), text_line1, font=font, fill=(255, 255, 255, 200))
-                # Обводка для второй строки
-                text_draw.text((x_offset + adj_x, y_offset2 + adj_y), text_line2, font=font, fill=(255, 255, 255, 200))
-    
-    # Теперь рисуем основной красный текст поверх обводки
-    text_draw.text((x_offset, y_offset1), text_line1, font=font, fill=(255, 0, 0, 255))  # Полностью непрозрачный красный
-    text_draw.text((x_offset, y_offset2), text_line2, font=font, fill=(255, 0, 0, 255))  # Полностью непрозрачный красный
+    # Рисуем красный текст без обводки и без фона (прозрачный красный)
+    text_draw.text((x_offset, y_offset1), text_line1, font=font, fill=(255, 0, 0, 180))  # Прозрачный красный
+    text_draw.text((x_offset, y_offset2), text_line2, font=font, fill=(255, 0, 0, 180))  # Прозрачный красный
     
     # Поворачиваем текст на -45 градусов
     text_img = text_img.rotate(-45, expand=True, fillcolor=(255, 255, 255, 0))
