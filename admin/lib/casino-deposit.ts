@@ -140,23 +140,45 @@ export async function depositCashdeskAPI(
   try {
     // userId здесь - это ID казино (accountId), не Telegram ID
     console.log(`[Cashdesk Deposit] Bookmaker: ${bookmaker}, Casino User ID: ${userId}, Amount: ${amount}`)
+    console.log(`[Cashdesk Deposit] Config - hash: ${hash?.substring(0, 10)}..., cashdeskid: ${cashdeskid}, login: ${login}`)
     
     const confirm = generateConfirm(userId, hash, isMelbet)
     const sign = isMelbet
       ? generateSignForDepositMelbet(userId, amount, hash, cashierpass, cashdeskid)
       : generateSignForDeposit1xbet(userId, amount, hash, cashierpass, cashdeskid)
+    
+    // Дополнительное логирование для отладки подписи
+    if (isMelbet) {
+      const step1String = `hash=${hash}&lng=ru&userid=${userId.toLowerCase()}`
+      const step2String = `summa=${amount}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
+      console.log(`[Cashdesk Deposit] Melbet signature steps:`)
+      console.log(`  Step1 string: ${step1String}`)
+      console.log(`  Step2 string: ${step2String}`)
+    } else {
+      const step1String = `hash=${hash}&lng=ru&userid=${userId}`
+      const step2String = `summa=${amount}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
+      console.log(`[Cashdesk Deposit] 1xbet signature steps:`)
+      console.log(`  Step1 string: ${step1String}`)
+      console.log(`  Step2 string: ${step2String}`)
+    }
 
     const url = `${baseUrl}Deposit/${userId}/Add`
     const authHeader = generateBasicAuth(login, cashierpass)
 
+    // cashdeskId должен быть числом согласно документации
+    const cashdeskIdNum = typeof cashdeskid === 'string' ? parseInt(cashdeskid, 10) : Number(cashdeskid)
+    
     const requestBody = {
-      cashdeskId: String(cashdeskid),
+      cashdeskId: cashdeskIdNum,
       lng: 'ru',
       summa: amount,
       confirm: confirm,
     }
 
-    console.log(`[Cashdesk Deposit] URL: ${url}, Request body:`, requestBody)
+    console.log(`[Cashdesk Deposit] URL: ${url}`)
+    console.log(`[Cashdesk Deposit] Sign: ${sign}`)
+    console.log(`[Cashdesk Deposit] Confirm: ${confirm}`)
+    console.log(`[Cashdesk Deposit] Request body:`, JSON.stringify(requestBody, null, 2))
 
     const response = await fetch(url, {
       method: 'POST',
@@ -234,26 +256,19 @@ export async function depositMostbetAPI(
     // userId здесь - это ID казино (accountId), не Telegram ID
     console.log(`[Mostbet Deposit] Casino Player ID: ${userId}, Amount: ${amount}`)
     
-    // Получаем timestamp в UTC+0 формате 'YYYY-MM-DD HH:MM:SS'
+    // Получаем timestamp
     const now = new Date()
-    const year = now.getUTCFullYear()
-    const month = String(now.getUTCMonth() + 1).padStart(2, '0')
-    const day = String(now.getUTCDate()).padStart(2, '0')
-    const hours = String(now.getUTCHours()).padStart(2, '0')
-    const minutes = String(now.getUTCMinutes()).padStart(2, '0')
-    const seconds = String(now.getUTCSeconds()).padStart(2, '0')
-    const timestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+    const timestamp = now.toISOString().slice(0, 19).replace('T', ' ')
 
     // Формируем путь и тело запроса
     const cashpointIdStr = String(cashpointId)
     const path = `/mbc/gateway/v1/api/cashpoint/${cashpointIdStr}/player/deposit`
     const requestBodyData = {
-      brandId: config.brand_id || 1, // По умолчанию Mostbet (brandId: 1)
+      brandId: config.brand_id || 1, // По умолчанию Mostbet
       playerId: String(userId), // ID игрока в казино
       amount: amount,
-      currency: 'RUB', // Валюта согласно документации
+      currency: 'RUB', // Изменено на RUB согласно документации
     }
-    // Важно: JSON.stringify без пробелов и переводов строк для подписи
     const requestBody = JSON.stringify(requestBodyData)
 
     // API key может быть с префиксом или без
