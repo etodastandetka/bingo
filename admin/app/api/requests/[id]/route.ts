@@ -192,7 +192,7 @@ export async function PATCH(
         // Получаем username админа
         const adminUsername = await getAdminUsername()
 
-        let notificationMessage = ''
+        let notificationMessage: string | null = ''
 
         if (['completed', 'approved', 'auto_completed', 'autodeposit_success'].includes(body.status)) {
           // Успешное пополнение или вывод
