@@ -108,6 +108,25 @@ module.exports = {
       max_memory_restart: '500M',
       instances: 1,
       exec_mode: 'fork'
+    },
+    {
+      name: 'bingo-email-watcher',
+      cwd: './admin',
+      script: 'npm',
+      args: 'run start:email-watcher',
+      env: {
+        NODE_ENV: 'production',
+        API_BASE_URL: 'http://localhost:3001/api',
+        NEXT_PUBLIC_API_URL: 'http://localhost:3001'
+      },
+      error_file: './logs/email-watcher-error.log',
+      out_file: './logs/email-watcher-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_memory_restart: '300M',
+      instances: 1,
+      exec_mode: 'fork'
     }
   ]
 };
