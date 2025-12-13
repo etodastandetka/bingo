@@ -57,38 +57,59 @@ export async function getCasinoConfig(bookmaker: string) {
   
   // Mostbet / MBCash
   if (normalizedBookmaker.includes('mostbet') || normalizedBookmaker === 'mostbet') {
-    const setting = await prisma.botConfiguration.findFirst({ where: { key: 'mostbet_api_config' } })
-    if (setting) {
-      const config = typeof setting.value === 'string' ? JSON.parse(setting.value) : setting.value
-      // Поддерживаем оба варианта: cashpoint_id и cashpointId
-      const cashpointId = config.cashpoint_id || config.cashpointId
-      const apiKey = config.api_key || config.api
-      const secret = config.secret
-      const project = config.x_project || config.project || 'MBC'
+    try {
+      const setting = await prisma.botConfiguration.findFirst({ where: { key: 'mostbet_api_config' } })
       
-      if (apiKey && secret && cashpointId) {
-        console.log(`[Mostbet Config] Loaded from DB: api_key=${apiKey.substring(0, 20)}..., cashpoint_id=${cashpointId}`)
-        return {
-          api_key: apiKey,
-          secret: secret,
-          cashpoint_id: String(cashpointId),
-          x_project: project,
-          brand_id: config.brand_id || 1,
+      if (setting) {
+        console.log(`[Mostbet Config] Found setting in DB, value type: ${typeof setting.value}`)
+        let config: any
+        try {
+          config = typeof setting.value === 'string' ? JSON.parse(setting.value) : setting.value
+          console.log(`[Mostbet Config] Parsed config:`, JSON.stringify(config).substring(0, 200))
+        } catch (parseError: any) {
+          console.error(`[Mostbet Config] Failed to parse config:`, parseError.message)
+          config = setting.value
+        }
+        
+        // Поддерживаем оба варианта: cashpoint_id и cashpointId, api_key и api, x_project и project
+        const cashpointId = config.cashpoint_id || config.cashpointId
+        const apiKey = config.api_key || config.api
+        const secret = config.secret
+        const project = config.x_project || config.project || 'MBC'
+        
+        console.log(`[Mostbet Config] Extracted values: apiKey=${!!apiKey}, secret=${!!secret}, cashpointId=${cashpointId}, project=${project}`)
+        
+        if (apiKey && secret && cashpointId) {
+          const result = {
+            api_key: String(apiKey),
+            secret: String(secret),
+            cashpoint_id: String(cashpointId),
+            x_project: String(project),
+            brand_id: parseInt(String(config.brand_id || 1)),
+          }
+          console.log(`[Mostbet Config] ✅ Successfully loaded from DB: api_key=${result.api_key.substring(0, 25)}..., cashpoint_id=${result.cashpoint_id}, project=${result.x_project}`)
+          return result
+        } else {
+          console.warn(`[Mostbet Config] ⚠️ Config found in DB but missing required fields: apiKey=${!!apiKey}, secret=${!!secret}, cashpointId=${cashpointId}`)
+          console.warn(`[Mostbet Config] Full config object:`, JSON.stringify(config))
         }
       } else {
-        console.warn(`[Mostbet Config] Config found in DB but missing required fields: api_key=${!!apiKey}, secret=${!!secret}, cashpoint_id=${!!cashpointId}`)
+        console.warn(`[Mostbet Config] ⚠️ Config not found in DB (key: mostbet_api_config)`)
       }
-    } else {
-      console.warn(`[Mostbet Config] Config not found in DB (key: mostbet_api_config)`)
+    } catch (dbError: any) {
+      console.error(`[Mostbet Config] ❌ Database error:`, dbError.message)
     }
+    
     // Fallback на переменные окружения или новые дефолтные значения
-    return {
+    const fallbackConfig = {
       api_key: process.env.MOSTBET_API_KEY || 'api-key:1b896249-f0dc-45ff-826e-4175c72d1e0e',
       secret: process.env.MOSTBET_SECRET || '73353b6b-868e-4561-9128-dce1c91bd24e',
       cashpoint_id: process.env.MOSTBET_CASHPOINT_ID || '92905',
       x_project: process.env.MOSTBET_X_PROJECT || 'MBC',
       brand_id: parseInt(process.env.MOSTBET_BRAND_ID || '1'),
     }
+    console.log(`[Mostbet Config] 🔄 Using fallback config: api_key=${fallbackConfig.api_key.substring(0, 25)}..., cashpoint_id=${fallbackConfig.cashpoint_id}`)
+    return fallbackConfig
   }
 
   // 1win
