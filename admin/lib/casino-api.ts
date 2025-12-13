@@ -148,6 +148,13 @@ async function getCashdeskBalance(
 async function getMostbetBalance(cfg: MostbetConfig): Promise<BalanceResult> {
   try {
     const crypto = require('crypto')
+    // Пытаемся использовать библиотеку js-sha3 для SHA3-256, если Node.js не поддерживает
+    let jsSha3: any = null
+    try {
+      jsSha3 = require('js-sha3')
+    } catch (e) {
+      // Библиотека не установлена, попробуем использовать встроенный crypto
+    }
 
     // Получаем timestamp в формате 'YYYY-MM-DD HH:MM:SS'
     const now = new Date()
@@ -171,19 +178,63 @@ async function getMostbetBalance(cfg: MostbetConfig): Promise<BalanceResult> {
     // Для GET запроса REQUEST_BODY пустой
     const signString = `${apiKeyFormatted}${path}${timestamp}`
     
-    // Пытаемся использовать SHA3-256, если не поддерживается - используем SHA256
+    // Пытаемся использовать SHA3-256, если не поддерживается - используем библиотеку sha3
     let signature: string
+    let usedSha3 = false
     try {
+      // Сначала пробуем встроенный crypto (Node.js 16+)
       signature = crypto
         .createHmac('sha3-256', cfg.secret)
         .update(signString)
         .digest('hex')
-    } catch (e) {
-      // Fallback на SHA256
-      signature = crypto
-        .createHmac('sha256', cfg.secret)
-        .update(signString)
-        .digest('hex')
+      usedSha3 = true
+      console.log(`[Mostbet Balance] Using SHA3-256 via crypto.createHmac`)
+    } catch (e: any) {
+      // Если встроенный не поддерживается, пробуем библиотеку js-sha3 для HMAC SHA3-256
+      if (jsSha3) {
+        try {
+          // Реализуем HMAC SHA3-256 вручную
+          // HMAC(key, message) = H(K XOR opad || H(K XOR ipad || message))
+          const blockSize = 136 // для SHA3-256 block size = 136 bytes
+          const key = Buffer.from(cfg.secret, 'utf8')
+          let keyBuffer = key
+          if (key.length > blockSize) {
+            keyBuffer = Buffer.from(jsSha3.sha3_256.array(key), 'hex')
+          }
+          if (keyBuffer.length < blockSize) {
+            keyBuffer = Buffer.concat([keyBuffer, Buffer.alloc(blockSize - keyBuffer.length, 0)])
+          }
+          
+          const ipad = Buffer.alloc(blockSize, 0x36)
+          const opad = Buffer.alloc(blockSize, 0x5c)
+          
+          const iKeyPad = Buffer.from(keyBuffer.map((b, i) => b ^ ipad[i]))
+          const oKeyPad = Buffer.from(keyBuffer.map((b, i) => b ^ opad[i]))
+          
+          const innerHash = jsSha3.sha3_256.array(Buffer.concat([iKeyPad, Buffer.from(signString, 'utf8')]))
+          const outerHash = jsSha3.sha3_256.array(Buffer.concat([oKeyPad, Buffer.from(innerHash)]))
+          signature = Buffer.from(outerHash).toString('hex')
+          usedSha3 = true
+          console.log(`[Mostbet Balance] Using SHA3-256 via js-sha3 library`)
+        } catch (sha3Error: any) {
+          console.error(`[Mostbet Balance] SHA3 library error: ${sha3Error.message}`)
+          // Fallback на SHA256 (НЕ БУДЕТ РАБОТАТЬ!)
+          console.warn(`[Mostbet Balance] SHA3-256 not available, using SHA256 - THIS WILL CAUSE 401 ERROR!`)
+          signature = crypto
+            .createHmac('sha256', cfg.secret)
+            .update(signString)
+            .digest('hex')
+          usedSha3 = false
+        }
+      } else {
+        // Fallback на SHA256 (НЕ БУДЕТ РАБОТАТЬ!)
+        console.warn(`[Mostbet Balance] SHA3-256 not supported (${e.message}), js-sha3 library not available, using SHA256 - THIS WILL CAUSE 401 ERROR!`)
+        signature = crypto
+          .createHmac('sha256', cfg.secret)
+          .update(signString)
+          .digest('hex')
+        usedSha3 = false
+      }
     }
 
     const headers = {
@@ -195,12 +246,13 @@ async function getMostbetBalance(cfg: MostbetConfig): Promise<BalanceResult> {
     }
 
     console.log(`[Mostbet Balance] URL: ${url}`)
+    console.log(`[Mostbet Balance] Full signature string:`, signString)
+    console.log(`[Mostbet Balance] Signature algorithm: ${usedSha3 ? 'SHA3-256' : 'SHA256 (FALLBACK - WILL FAIL!)'}`)
     console.log(`[Mostbet Balance] Headers:`, {
       'X-Api-Key': apiKeyFormatted.substring(0, 20) + '...',
       'X-Timestamp': timestamp,
       'X-Signature': signature.substring(0, 20) + '...',
     })
-    console.log(`[Mostbet Balance] Signature string:`, signString.substring(0, 100) + '...')
 
     const response = await fetch(url, { headers, method: 'GET' })
 
