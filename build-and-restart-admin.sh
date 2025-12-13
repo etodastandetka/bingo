@@ -20,7 +20,25 @@ if [ ! -d ".next/standalone" ]; then
     exit 1
 fi
 
+# Проверяем, что статические файлы скопированы
+if [ ! -d ".next/standalone/public" ]; then
+    echo "⚠️  Предупреждение: папка public не найдена в standalone build"
+    echo "Копируем файлы из public в .next/standalone/public..."
+    mkdir -p .next/standalone/public
+    cp -r public/* .next/standalone/public/ 2>/dev/null || true
+fi
+
+# Проверяем наличие изображений
+if [ ! -d ".next/standalone/public/images" ]; then
+    echo "⚠️  Предупреждение: папка images не найдена"
+    echo "Копируем изображения..."
+    mkdir -p .next/standalone/public/images
+    cp -r public/images/* .next/standalone/public/images/ 2>/dev/null || true
+fi
+
 echo "✅ Сборка завершена успешно!"
+echo "📁 Проверка статических файлов:"
+ls -la .next/standalone/public/images/ 2>/dev/null || echo "⚠️  Изображения не найдены"
 
 # Возвращаемся в корень
 cd /var/www/bingo_bot || exit 1
