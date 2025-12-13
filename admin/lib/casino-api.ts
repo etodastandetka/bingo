@@ -73,9 +73,9 @@ const CASHDESK_CONFIG: Record<string, CashdeskConfig> = {
 }
 
 const MOSTBET_CONFIG: MostbetConfig = {
-  api_key: process.env.MOSTBET_API_KEY || 'api-key:3d83ac24-7fd2-498d-84b4-f2a7e80401fb',
-  secret: process.env.MOSTBET_SECRET || 'baa104d1-73a6-4914-866a-ddbbe0aae11a',
-  cashpoint_id: parseInt(process.env.MOSTBET_CASHPOINT_ID || '48436'),
+  api_key: process.env.MOSTBET_API_KEY || 'api-key:1b896249-f0dc-45ff-826e-4175c72d1e0e',
+  secret: process.env.MOSTBET_SECRET || '73353b6b-868e-4561-9128-dce1c91bd24e',
+  cashpoint_id: parseInt(process.env.MOSTBET_CASHPOINT_ID || '92905'),
   x_project: process.env.MOSTBET_X_PROJECT || 'MBC',
   brand_id: parseInt(process.env.MOSTBET_BRAND_ID || '1'),
 }
