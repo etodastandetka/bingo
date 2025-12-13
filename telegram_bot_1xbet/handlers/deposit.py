@@ -205,32 +205,25 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         params['created_at'] = str(int(time.time() * 1000))
         
         # Формируем URL с правильно закодированными параметрами
-        payment_url = f"{Config.PAYMENT_SITE_URL}/pay?{urlencode(params)}"
-        
-        # Для кнопки используем продакшн URL (Telegram не принимает localhost)
-        # Для текста используем localhost если он указан в конфиге
-        button_url = payment_url
-        text_url = payment_url
-        
-        # Если в конфиге localhost, используем fallback URL для кнопки
+        # Всегда используем продакшн URL для пользователей (Telegram не принимает localhost)
         if 'localhost' in Config.PAYMENT_SITE_URL.lower():
-            # Для кнопки используем fallback URL из конфига
-            button_url = f"{Config.PAYMENT_FALLBACK_URL}/pay?{urlencode(params)}"
-            # Для текста оставляем localhost
-            text_url = payment_url
+            # Если в конфиге localhost, используем fallback URL
+            payment_url = f"{Config.PAYMENT_FALLBACK_URL}/pay?{urlencode(params)}"
+        else:
+            payment_url = f"{Config.PAYMENT_SITE_URL}/pay?{urlencode(params)}"
         
         # Отправляем ссылку в тексте и обычную кнопку с URL
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='💳 Перейти к оплате', url=button_url)]
+            [InlineKeyboardButton(text='💳 Перейти к оплате', url=payment_url)]
         ])
         
-        # Формируем текст с ссылкой (используем localhost для текста)
+        # Формируем текст с ссылкой (всегда используем продакшн URL)
         payment_text = get_text(lang, 'deposit', 'go_to_payment', 
                                amount=amount_with_cents, 
                                casino=data.get("casino_name"), 
                                account_id=account_id)
-        payment_text += f"\n\n🔗 {text_url}"
+        payment_text += f"\n\n🔗 {payment_url}"
         
         await message.answer(
             payment_text,
