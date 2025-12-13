@@ -339,22 +339,26 @@ export async function getPlatformLimits(): Promise<
     // Mostbet - загружаем конфигурацию из БД
     try {
       const { getCasinoConfig } = await import('./casino-config')
+      console.log(`[Mostbet Limits] Loading config from DB...`)
       const mostbetConfigFromDB = await getCasinoConfig('mostbet')
       
       if (mostbetConfigFromDB && mostbetConfigFromDB.api_key && mostbetConfigFromDB.secret && mostbetConfigFromDB.cashpoint_id) {
         const mostbetCfg: MostbetConfig = {
-          api_key: mostbetConfigFromDB.api_key,
-          secret: mostbetConfigFromDB.secret,
+          api_key: String(mostbetConfigFromDB.api_key),
+          secret: String(mostbetConfigFromDB.secret),
           cashpoint_id: parseInt(String(mostbetConfigFromDB.cashpoint_id)),
-          x_project: mostbetConfigFromDB.x_project || 'MBC',
-          brand_id: mostbetConfigFromDB.brand_id || 1,
+          x_project: String(mostbetConfigFromDB.x_project || 'MBC'),
+          brand_id: parseInt(String(mostbetConfigFromDB.brand_id || 1)),
         }
+        console.log(`[Mostbet Limits] ✅ Using config from DB: cashpoint_id=${mostbetCfg.cashpoint_id}, api_key=${mostbetCfg.api_key.substring(0, 25)}...`)
         const mostbetBal = await getMostbetBalance(mostbetCfg)
         console.log(`[Mostbet Limits] Balance: ${mostbetBal.balance}, Limit: ${mostbetBal.limit}`)
         limits.push({ key: 'mostbet', name: 'Mostbet', limit: mostbetBal.limit })
       } else {
-        // Fallback на переменные окружения
+        // Fallback на переменные окружения или дефолтные значения
+        console.warn(`[Mostbet Limits] ⚠️ Config from DB incomplete, using fallback values`)
         const mostbetCfg = MOSTBET_CONFIG
+        console.log(`[Mostbet Limits] Using fallback config: api_key=${mostbetCfg.api_key.substring(0, 25)}..., cashpoint_id=${mostbetCfg.cashpoint_id}`)
         if (mostbetCfg.cashpoint_id > 0) {
           const mostbetBal = await getMostbetBalance(mostbetCfg)
           limits.push({ key: 'mostbet', name: 'Mostbet', limit: mostbetBal.limit })
@@ -362,8 +366,9 @@ export async function getPlatformLimits(): Promise<
           limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
         }
       }
-    } catch (error) {
-      console.error('Error loading Mostbet config for limits:', error)
+    } catch (error: any) {
+      console.error('❌ Error loading Mostbet config for limits:', error.message || error)
+      console.error('Error stack:', error.stack)
       limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
     }
 
