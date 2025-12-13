@@ -206,10 +206,10 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         else:
             payment_url = f"{Config.PAYMENT_SITE_URL}/pay?{urlencode(params)}"
         
-        # Отправляем ссылку в тексте и обычную кнопку с URL
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        # Отправляем кнопку с мини-приложением (WebApp)
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='💳 Перейти к оплате', url=payment_url)]
+            [InlineKeyboardButton(text='💳 Перейти к оплате', web_app=WebAppInfo(url=payment_url))]
         ])
         
         # Формируем текст без ссылки (ссылка только в кнопке)
