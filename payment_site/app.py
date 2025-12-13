@@ -106,20 +106,22 @@ def generate_qr_image(qr_hash, unique_id=None):
     except:
         bg_font = ImageFont.load_default()
     
-    # Рисуем повторяющийся текст "BINGO KG" по всей площади (фон - как на изображении)
+    # Рисуем повторяющийся текст "BINGO KG" по всей площади (фон - светло-серый водяной знак)
     watermark_text = "BINGO KG"
     spacing = int(width * 0.18)
+    # Светло-серый цвет для водяных знаков (более светлый, чтобы не мешать QR коду)
+    watermark_color = (200, 200, 200, 40)  # Светло-серый с низкой прозрачностью
     for i in range(-spacing, width + spacing, spacing):
         for j in range(-spacing, height + spacing, spacing):
-            # Горизонтально (более заметный)
-            draw.text((i, j), watermark_text, font=bg_font, fill=(180, 180, 180, 60))
+            # Горизонтально
+            draw.text((i, j), watermark_text, font=bg_font, fill=watermark_color)
             # Диагонально (смещение)
-            draw.text((i + spacing//2, j + spacing//2), watermark_text, font=bg_font, fill=(180, 180, 180, 55))
+            draw.text((i + spacing//2, j + spacing//2), watermark_text, font=bg_font, fill=(200, 200, 200, 35))
     
-    # Добавляем диагональный текст водяного знака поверх QR кода (как на изображении)
+    # Добавляем диагональный текст поверх QR кода (на 2 строки)
     try:
         # Размер шрифта для диагонального текста (уменьшен для лучшей читаемости QR)
-        font_size = int(width * 0.065)  # Уменьшено с 0.095 до 0.065
+        font_size = int(width * 0.055)  # Еще уменьшено для лучшей читаемости
         try:
             # Пытаемся использовать жирный шрифт
             font = ImageFont.truetype("arialbd.ttf", font_size)  # Bold Arial
@@ -134,29 +136,41 @@ def generate_qr_image(qr_hash, unique_id=None):
     except:
         font = ImageFont.load_default()
     
-    # Основной текст (универсальный, без упоминания казино)
-    text = "ПОПОЛНЕНИЕ БАЛАНСА ОНЛАЙН"
+    # Текст на 2 строки
+    text_line1 = "ПОПОЛНЕНИЕ"
+    text_line2 = "ОНЛАЙН"
     
-    # Получаем размеры текста
+    # Получаем размеры текста для обеих строк
     try:
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
+        bbox1 = draw.textbbox((0, 0), text_line1, font=font)
+        bbox2 = draw.textbbox((0, 0), text_line2, font=font)
+        text_width1 = bbox1[2] - bbox1[0]
+        text_width2 = bbox2[2] - bbox2[0]
+        text_height = bbox1[3] - bbox1[1]
+        max_text_width = max(text_width1, text_width2)
     except:
         # Fallback для старых версий PIL
-        text_width = len(text) * font_size * 0.6
+        text_width1 = len(text_line1) * font_size * 0.6
+        text_width2 = len(text_line2) * font_size * 0.6
         text_height = font_size
+        max_text_width = max(text_width1, text_width2)
     
-    # Создаем временное изображение для поворота текста
-    text_img = Image.new('RGBA', (int(text_width * 2.0), int(text_height * 2.0)), (255, 255, 255, 0))
+    # Расстояние между строками
+    line_spacing = int(text_height * 0.3)
+    total_text_height = text_height * 2 + line_spacing
+    
+    # Создаем временное изображение для поворота текста (с запасом для 2 строк)
+    text_img = Image.new('RGBA', (int(max_text_width * 2.2), int(total_text_height * 2.2)), (255, 255, 255, 0))
     text_draw = ImageDraw.Draw(text_img)
     
-    # Рисуем текст (просто красный, без белой обводки)
-    x_offset = int(text_width * 0.5)
-    y_offset = int(text_height * 0.5)
+    # Позиционируем текст в центре временного изображения
+    x_offset = int(max_text_width * 1.1)
+    y_offset1 = int(total_text_height * 0.5)
+    y_offset2 = y_offset1 + text_height + line_spacing
     
-    # Основной текст (очень яркий красный, жирный, достаточно видимый, но не мешает сканированию)
-    text_draw.text((x_offset, y_offset), text, font=font, fill=(255, 0, 0, 200))  # Максимально яркий красный
+    # Рисуем обе строки текста (белый цвет для лучшей видимости на QR коде)
+    text_draw.text((x_offset, y_offset1), text_line1, font=font, fill=(255, 255, 255, 180))  # Белый с прозрачностью
+    text_draw.text((x_offset, y_offset2), text_line2, font=font, fill=(255, 255, 255, 180))  # Белый с прозрачностью
     
     # Поворачиваем текст на -45 градусов
     text_img = text_img.rotate(-45, expand=True, fillcolor=(255, 255, 255, 0))
