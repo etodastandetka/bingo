@@ -24,25 +24,20 @@ async def main():
     bot = Bot(token=Config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     
-    # Регистрация роутеров
+    # Регистрация роутеров (chat.router должен быть последним, чтобы не перехватывать команды)
     dp.include_router(start.router)
     dp.include_router(deposit.router)
     dp.include_router(withdraw.router)
     dp.include_router(language.router)
     dp.include_router(instruction.router)
-    dp.include_router(chat.router)
+    dp.include_router(chat.router)  # Последним, чтобы не перехватывать команды
     
     logger.info("Бот запущен!")
     
     # Обработка ошибок
     try:
-        # Запуск polling с обработкой ошибок
-        await dp.start_polling(
-            bot, 
-            allowed_updates=["message", "callback_query"],
-            handle_as_tasks=True,
-            close_bot_session=True
-        )
+        # Запуск polling (как в рабочем 1xbet боте)
+        await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
     except KeyboardInterrupt:
         logger.info("Получен сигнал остановки")
     except Exception as e:
