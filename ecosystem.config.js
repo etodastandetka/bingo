@@ -3,8 +3,8 @@ module.exports = {
     {
       name: 'bingo-admin',
       cwd: './admin',
-      script: 'npm',
-      args: 'start',
+      script: 'node',
+      args: '.next/standalone/server.js',
       env: {
         NODE_ENV: 'production',
         PORT: 3001
