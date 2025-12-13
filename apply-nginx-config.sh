@@ -27,6 +27,37 @@ if [ ! -f "$PROJECT_DIR/nginx-admin.conf" ] || [ ! -f "$PROJECT_DIR/nginx-paymen
     exit 1
 fi
 
+# Проверяем структуру сертификатов
+echo -e "${YELLOW}🔍 Проверка SSL сертификатов...${NC}"
+CERTBOT_OUTPUT=$(certbot certificates 2>/dev/null || echo "")
+
+# Определяем путь к сертификату
+if [ -f /etc/letsencrypt/live/gdsfafdsdf.me/fullchain.pem ]; then
+    CERT_PATH="gdsfafdsdf.me"
+    echo -e "${GREEN}✅ Сертификат найден: gdsfafdsdf.me${NC}"
+elif [ -f /etc/letsencrypt/live/erwerewrew.me/fullchain.pem ]; then
+    CERT_PATH="erwerewrew.me"
+    echo -e "${GREEN}✅ Сертификат найден: erwerewrew.me${NC}"
+else
+    echo -e "${RED}❌ SSL сертификаты не найдены!${NC}"
+    echo "Выполните: sudo certbot --nginx -d gdsfafdsdf.me -d erwerewrew.me"
+    exit 1
+fi
+
+# Проверяем, какие домены в сертификате
+if [ -f /etc/letsencrypt/live/$CERT_PATH/fullchain.pem ]; then
+    CERT_DOMAINS=$(openssl x509 -in /etc/letsencrypt/live/$CERT_PATH/fullchain.pem -noout -text 2>/dev/null | grep -oP 'DNS:\K[^,]+' | tr '\n' ' ' || echo "")
+    echo -e "${YELLOW}📋 Домены в сертификате: $CERT_DOMAINS${NC}"
+    
+    # Если в сертификате оба домена, используем один путь для обоих
+    if echo "$CERT_DOMAINS" | grep -q "gdsfafdsdf.me" && echo "$CERT_DOMAINS" | grep -q "erwerewrew.me"; then
+        echo -e "${GREEN}✅ Сертификат покрывает оба домена${NC}"
+        USE_SAME_CERT=true
+    else
+        USE_SAME_CERT=false
+    fi
+fi
+
 # Создаем резервную копию текущих конфигов
 echo -e "${YELLOW}💾 Создание резервных копий...${NC}"
 if [ -f /etc/nginx/sites-available/bingo-admin ]; then
@@ -41,11 +72,10 @@ echo -e "${YELLOW}📋 Копирование конфигурационных �
 cp "$PROJECT_DIR/nginx-admin.conf" /etc/nginx/sites-available/bingo-admin
 cp "$PROJECT_DIR/nginx-payment.conf" /etc/nginx/sites-available/bingo-payment
 
-# Проверяем, что certbot уже настроил сертификаты
-if [ -f /etc/letsencrypt/live/gdsfafdsdf.me/fullchain.pem ]; then
-    echo -e "${GREEN}✅ SSL сертификаты найдены${NC}"
-else
-    echo -e "${YELLOW}⚠️  SSL сертификаты не найдены. Убедитесь, что certbot выполнен успешно${NC}"
+# Если нужно, обновляем путь к сертификату в payment конфиге
+if [ "$USE_SAME_CERT" = true ] && [ "$CERT_PATH" = "gdsfafdsdf.me" ]; then
+    echo -e "${YELLOW}🔧 Обновление пути к сертификату в payment конфиге...${NC}"
+    sed -i "s|/etc/letsencrypt/live/erwerewrew.me/|/etc/letsencrypt/live/$CERT_PATH/|g" /etc/nginx/sites-available/bingo-payment
 fi
 
 # Проверка конфигурации
@@ -71,6 +101,9 @@ else
     echo -e "${RED}❌ Ошибка в конфигурации Nginx!${NC}"
     echo "Проверьте конфигурацию вручную:"
     echo "   sudo nginx -t"
+    echo ""
+    echo "Проверьте сертификаты:"
+    echo "   sudo certbot certificates"
+    echo "   sudo bash check-certificates.sh"
     exit 1
 fi
-
