@@ -159,13 +159,30 @@ def generate_qr_image(qr_hash, unique_id=None):
     line_spacing = int(text_height * 0.4)
     total_text_height = text_height * 2 + line_spacing
     
-    # Создаем временное изображение для поворота текста (с запасом для 2 строк)
-    text_img = Image.new('RGBA', (int(max_text_width * 2.5), int(total_text_height * 2.5)), (255, 255, 255, 0))
+    # Вычисляем размеры текста для правильного центрирования
+    # Создаем временное изображение для измерения
+    temp_img = Image.new('RGBA', (int(max_text_width * 2), int(total_text_height * 2)), (255, 255, 255, 0))
+    temp_draw = ImageDraw.Draw(temp_img)
+    
+    # Получаем точные размеры текста
+    try:
+        bbox1 = temp_draw.textbbox((0, 0), text_line1, font=font)
+        bbox2 = temp_draw.textbbox((0, 0), text_line2, font=font)
+        text_width1 = bbox1[2] - bbox1[0]
+        text_width2 = bbox2[2] - bbox2[0]
+        actual_max_width = max(text_width1, text_width2)
+    except:
+        actual_max_width = max_text_width
+    
+    # Создаем временное изображение для поворота текста (достаточно большое для поворота)
+    # Размер должен быть достаточным для диагонального размещения
+    diagonal_size = int((actual_max_width + total_text_height) * 1.5)
+    text_img = Image.new('RGBA', (diagonal_size, diagonal_size), (255, 255, 255, 0))
     text_draw = ImageDraw.Draw(text_img)
     
     # Позиционируем текст точно в центре временного изображения
-    x_offset = int(max_text_width * 1.25)
-    y_offset1 = int(total_text_height * 0.5)
+    x_offset = (diagonal_size - actual_max_width) // 2
+    y_offset1 = (diagonal_size - total_text_height) // 2
     y_offset2 = y_offset1 + text_height + line_spacing
     
     # Рисуем красный текст без обводки и без фона (более заметный красный)
@@ -175,7 +192,7 @@ def generate_qr_image(qr_hash, unique_id=None):
     # Поворачиваем текст на -45 градусов
     text_img = text_img.rotate(-45, expand=True, fillcolor=(255, 255, 255, 0))
     
-    # Позиционируем в центре QR кода
+    # Позиционируем повернутый текст точно в центре QR кода
     text_x = (width - text_img.width) // 2
     text_y = (height - text_img.height) // 2
     
