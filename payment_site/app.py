@@ -168,9 +168,9 @@ def generate_qr_image(qr_hash, unique_id=None):
     y_offset1 = int(total_text_height * 0.5)
     y_offset2 = y_offset1 + text_height + line_spacing
     
-    # Рисуем красный текст без обводки и без фона (прозрачный красный)
-    text_draw.text((x_offset, y_offset1), text_line1, font=font, fill=(255, 0, 0, 180))  # Прозрачный красный
-    text_draw.text((x_offset, y_offset2), text_line2, font=font, fill=(255, 0, 0, 180))  # Прозрачный красный
+    # Рисуем красный текст без обводки и без фона (более заметный красный)
+    text_draw.text((x_offset, y_offset1), text_line1, font=font, fill=(255, 0, 0, 220))  # Красный с хорошей видимостью
+    text_draw.text((x_offset, y_offset2), text_line2, font=font, fill=(255, 0, 0, 220))  # Красный с хорошей видимостью
     
     # Поворачиваем текст на -45 градусов
     text_img = text_img.rotate(-45, expand=True, fillcolor=(255, 255, 255, 0))
