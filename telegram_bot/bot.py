@@ -24,13 +24,15 @@ async def main():
     bot = Bot(token=Config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     
-    # Регистрация роутеров (chat.router должен быть последним, чтобы не перехватывать команды)
+    # Регистрация роутеров
+    # Важно: chat.router регистрируется последним с низким приоритетом
     dp.include_router(start.router)
     dp.include_router(deposit.router)
     dp.include_router(withdraw.router)
     dp.include_router(language.router)
     dp.include_router(instruction.router)
-    dp.include_router(chat.router)  # Последним, чтобы не перехватывать команды
+    # Временно отключаем chat.router для отладки
+    # dp.include_router(chat.router)
     
     logger.info("Бот запущен!")
     
