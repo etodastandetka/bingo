@@ -12,6 +12,12 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Защита от двойной отправки
+    if (loading) {
+      return
+    }
+    
     setError('')
     setLoading(true)
 
@@ -21,8 +27,15 @@ export default function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Важно для cookies
         body: JSON.stringify({ username, password }),
       })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Network error' }))
+        setError(errorData.error || `HTTP error! status: ${response.status}`)
+        return
+      }
 
       const data = await response.json()
 
@@ -31,11 +44,20 @@ export default function LoginPage() {
         return
       }
 
+      // Небольшая задержка для установки cookies перед редиректом
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Редирект на dashboard
       router.push('/dashboard')
-      router.refresh()
+      // Небольшая задержка перед refresh для гарантии установки cookies
+      setTimeout(() => {
+        router.refresh()
+      }, 200)
     } catch (err: any) {
-      setError(err.message || 'Login failed')
+      console.error('Login error:', err)
+      setError(err.message || 'Login failed. Please check your connection.')
     } finally {
+      // Гарантируем, что loading всегда сбрасывается
       setLoading(false)
     }
   }

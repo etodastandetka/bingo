@@ -98,11 +98,28 @@ export async function POST(request: NextRequest) {
       createApiResponse({ user: result.user, message: 'Login successful' })
     )
 
+    // Определяем, используется ли HTTPS
+    const url = new URL(request.url)
+    const isHttps = url.protocol === 'https:' || 
+                   request.headers.get('x-forwarded-proto') === 'https' ||
+                   process.env.FORCE_SECURE_COOKIES === 'true'
+    
+    // Устанавливаем secure только для HTTPS соединений
+    const isSecure = isHttps && process.env.NODE_ENV === 'production'
+
+    console.log('🍪 Setting auth cookie:', {
+      secure: isSecure,
+      protocol: url.protocol,
+      forwardedProto: request.headers.get('x-forwarded-proto'),
+      nodeEnv: process.env.NODE_ENV
+    })
+
     response.cookies.set('auth_token', result.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecure,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/',
     })
 
     return response
