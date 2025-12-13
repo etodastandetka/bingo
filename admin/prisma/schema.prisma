@@ -92,6 +92,7 @@ model Request {
   photoFileUrl     String?           @map("photo_file_url")
   bank             String?           @db.VarChar(100)
   phone            String?           @db.VarChar(20)
+  notificationMessageId BigInt?      @map("notification_message_id")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
   processedAt      DateTime?         @map("processed_at")

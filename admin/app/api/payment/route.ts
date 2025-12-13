@@ -338,6 +338,27 @@ export async function POST(request: NextRequest) {
         },
       })
 
+      // Отправляем сообщение пользователю о том, что заявка в проверке
+      if (validType === 'deposit') {
+        try {
+          const { sendNotificationToUser } = await import('@/lib/send-notification')
+          const notificationMessage = '⏳ Ожидайте, ваша заявка в проверке. Бам подтвердили или отклонили.'
+          
+          const notificationResult = await sendNotificationToUser(userIdBigInt, notificationMessage)
+          
+          // Сохраняем message_id в заявке для последующего редактирования
+          if (notificationResult.success && notificationResult.messageId) {
+            await prisma.request.update({
+              where: { id: newRequest.id },
+              data: { notificationMessageId: BigInt(notificationResult.messageId) }
+            })
+          }
+        } catch (notificationError) {
+          // Игнорируем ошибки отправки уведомлений, чтобы не блокировать создание заявки
+          console.error('Failed to send notification after payment:', notificationError)
+        }
+      }
+
       if (uncreated_request_id) {
         const uncreatedIdNum = parseInt(uncreated_request_id, 10)
         if (!Number.isNaN(uncreatedIdNum)) {
