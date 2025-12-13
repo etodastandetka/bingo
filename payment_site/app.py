@@ -118,10 +118,10 @@ def generate_qr_image(qr_hash, unique_id=None):
             # Диагонально (смещение)
             draw.text((i + spacing//2, j + spacing//2), watermark_text, font=bg_font, fill=(200, 200, 200, 35))
     
-    # Добавляем диагональный текст поверх QR кода (на 2 строки)
+    # Добавляем диагональный текст поверх QR кода (на 2 строки, увеличенный размер)
     try:
-        # Размер шрифта для диагонального текста (уменьшен для лучшей читаемости QR)
-        font_size = int(width * 0.055)  # Еще уменьшено для лучшей читаемости
+        # Размер шрифта для диагонального текста (увеличен для лучшей видимости)
+        font_size = int(width * 0.075)  # Увеличено с 0.055 до 0.075
         try:
             # Пытаемся использовать жирный шрифт
             font = ImageFont.truetype("arialbd.ttf", font_size)  # Bold Arial
@@ -138,7 +138,7 @@ def generate_qr_image(qr_hash, unique_id=None):
     
     # Текст на 2 строки
     text_line1 = "ПОПОЛНЕНИЕ"
-    text_line2 = "ОНЛАЙН"
+    text_line2 = "ОНЛАЙН КАЗИНО"
     
     # Получаем размеры текста для обеих строк
     try:
@@ -156,21 +156,32 @@ def generate_qr_image(qr_hash, unique_id=None):
         max_text_width = max(text_width1, text_width2)
     
     # Расстояние между строками
-    line_spacing = int(text_height * 0.3)
+    line_spacing = int(text_height * 0.4)
     total_text_height = text_height * 2 + line_spacing
     
     # Создаем временное изображение для поворота текста (с запасом для 2 строк)
-    text_img = Image.new('RGBA', (int(max_text_width * 2.2), int(total_text_height * 2.2)), (255, 255, 255, 0))
+    text_img = Image.new('RGBA', (int(max_text_width * 2.5), int(total_text_height * 2.5)), (255, 255, 255, 0))
     text_draw = ImageDraw.Draw(text_img)
     
     # Позиционируем текст в центре временного изображения
-    x_offset = int(max_text_width * 1.1)
+    x_offset = int(max_text_width * 1.25)
     y_offset1 = int(total_text_height * 0.5)
     y_offset2 = y_offset1 + text_height + line_spacing
     
-    # Рисуем обе строки текста (красный цвет, как на оригинале)
-    text_draw.text((x_offset, y_offset1), text_line1, font=font, fill=(255, 0, 0, 200))  # Красный с прозрачностью
-    text_draw.text((x_offset, y_offset2), text_line2, font=font, fill=(255, 0, 0, 200))  # Красный с прозрачностью
+    # Рисуем обе строки текста с красивой обводкой (красный цвет с белой обводкой для лучшей видимости)
+    # Сначала рисуем белую обводку (тень) для каждой строки
+    stroke_width = 2
+    for adj_x in range(-stroke_width, stroke_width + 1):
+        for adj_y in range(-stroke_width, stroke_width + 1):
+            if adj_x != 0 or adj_y != 0:
+                # Обводка для первой строки
+                text_draw.text((x_offset + adj_x, y_offset1 + adj_y), text_line1, font=font, fill=(255, 255, 255, 150))
+                # Обводка для второй строки
+                text_draw.text((x_offset + adj_x, y_offset2 + adj_y), text_line2, font=font, fill=(255, 255, 255, 150))
+    
+    # Теперь рисуем основной красный текст поверх обводки
+    text_draw.text((x_offset, y_offset1), text_line1, font=font, fill=(255, 0, 0, 220))  # Яркий красный
+    text_draw.text((x_offset, y_offset2), text_line2, font=font, fill=(255, 0, 0, 220))  # Яркий красный
     
     # Поворачиваем текст на -45 градусов
     text_img = text_img.rotate(-45, expand=True, fillcolor=(255, 255, 255, 0))
