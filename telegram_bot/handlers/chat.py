@@ -1,5 +1,6 @@
 from aiogram import Router, F, Bot
 from aiogram.types import Message
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from translations import get_text
 from api_client import APIClient
@@ -77,10 +78,10 @@ async def save_message_to_db(
         logger.error(f"Error saving message to DB: {e}", exc_info=True)
         return None
 
-@router.message(F.text)
+@router.message(F.text & ~Command())  # Обрабатываем только текстовые сообщения, НЕ команды
 async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
     """Обработка текстовых сообщений в чате (автоматически для всех сообщений)"""
-    # Сначала проверяем команды - если это команда, не обрабатываем
+    # Команды уже отфильтрованы через ~Command(), но на всякий случай проверяем
     if message.text and message.text.startswith('/'):
         return  # Игнорируем команды - они обрабатываются другими роутерами
     
