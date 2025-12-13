@@ -342,7 +342,19 @@ export async function getPlatformLimits(): Promise<
       console.log(`[Mostbet Limits] Loading config from DB...`)
       const mostbetConfigFromDB = await getCasinoConfig('mostbet')
       
-      if (mostbetConfigFromDB && 'api_key' in mostbetConfigFromDB && 'secret' in mostbetConfigFromDB && 'cashpoint_id' in mostbetConfigFromDB && mostbetConfigFromDB.api_key && mostbetConfigFromDB.secret && mostbetConfigFromDB.cashpoint_id) {
+      // Type guard для проверки что это конфигурация Mostbet
+      const isMostbetConfig = (config: any): config is { api_key: string; secret: string; cashpoint_id: string; x_project?: string; brand_id?: number } => {
+        return config && 
+               typeof config === 'object' && 
+               'api_key' in config && 
+               'secret' in config && 
+               'cashpoint_id' in config &&
+               typeof config.api_key === 'string' &&
+               typeof config.secret === 'string' &&
+               (typeof config.cashpoint_id === 'string' || typeof config.cashpoint_id === 'number')
+      }
+      
+      if (isMostbetConfig(mostbetConfigFromDB) && mostbetConfigFromDB.api_key && mostbetConfigFromDB.secret && mostbetConfigFromDB.cashpoint_id) {
         const mostbetCfg: MostbetConfig = {
           api_key: String(mostbetConfigFromDB.api_key),
           secret: String(mostbetConfigFromDB.secret),
