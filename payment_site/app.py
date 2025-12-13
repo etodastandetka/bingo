@@ -168,9 +168,9 @@ def generate_qr_image(qr_hash, unique_id=None):
     y_offset1 = int(total_text_height * 0.5)
     y_offset2 = y_offset1 + text_height + line_spacing
     
-    # Рисуем обе строки текста (белый цвет для лучшей видимости на QR коде)
-    text_draw.text((x_offset, y_offset1), text_line1, font=font, fill=(255, 255, 255, 180))  # Белый с прозрачностью
-    text_draw.text((x_offset, y_offset2), text_line2, font=font, fill=(255, 255, 255, 180))  # Белый с прозрачностью
+    # Рисуем обе строки текста (красный цвет, как на оригинале)
+    text_draw.text((x_offset, y_offset1), text_line1, font=font, fill=(255, 0, 0, 200))  # Красный с прозрачностью
+    text_draw.text((x_offset, y_offset2), text_line2, font=font, fill=(255, 0, 0, 200))  # Красный с прозрачностью
     
     # Поворачиваем текст на -45 градусов
     text_img = text_img.rotate(-45, expand=True, fillcolor=(255, 255, 255, 0))
