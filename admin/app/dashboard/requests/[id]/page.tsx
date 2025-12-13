@@ -719,25 +719,25 @@ export default function RequestDetailPage() {
       if (data.success) {
         // Если привязано поступление — помечаем его обработанным
         if (selectedPaymentId) {
-          const paymentResponse = await fetch(`/api/incoming-payments/${selectedPaymentId}/process`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              requestId: request.id,
-            }),
-          })
+        const paymentResponse = await fetch(`/api/incoming-payments/${selectedPaymentId}/process`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestId: request.id,
+          }),
+        })
 
-          const paymentData = await paymentResponse.json()
+        const paymentData = await paymentResponse.json()
 
           if (!paymentData.success) {
             pushToast('Ошибка при обработке пополнения: ' + (paymentData.error || 'Неизвестная ошибка'), 'error')
           } else {
-            // Обновляем список пополнений
-            setSimilarPayments(prev => prev.map(p => 
-              p.id === selectedPaymentId 
-                ? { ...p, isProcessed: true, requestId: request.id }
-                : p
-            ))
+          // Обновляем список пополнений
+          setSimilarPayments(prev => prev.map(p => 
+            p.id === selectedPaymentId 
+              ? { ...p, isProcessed: true, requestId: request.id }
+              : p
+          ))
           }
         }
 
@@ -750,10 +750,10 @@ export default function RequestDetailPage() {
           processedAt: new Date().toISOString(),
         } : null)
 
-        setSelectedPaymentId(null)
+          setSelectedPaymentId(null)
         setSelectedPaymentPreview(null)
         pushToast('Подтверждено.', 'success')
-      } else {
+        } else {
         pushToast('Ошибка при обновлении заявки: ' + (data.error || 'Неизвестная ошибка'), 'error')
       }
     } catch (error) {
@@ -1056,144 +1056,144 @@ export default function RequestDetailPage() {
       {(request.status === 'pending' || request.status === 'deferred') && request.requestType === 'deposit' && (
         <div className="mx-4 mb-4 bg-gray-800 rounded-2xl p-4 border border-gray-700 space-y-4">
           <div className="flex space-x-2">
-            <div className="flex-1 relative">
-              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Поиск по сумме..."
-                value={searchAmount}
-                onChange={(e) => setSearchAmount(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <button 
-              onClick={handleSearchPayments}
+              <div className="flex-1 relative">
+                <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Поиск по сумме..."
+                  value={searchAmount}
+                  onChange={(e) => setSearchAmount(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <button 
+                onClick={handleSearchPayments}
               className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-            >
+              >
               Найти
-            </button>
-          </div>
-          <div className="flex space-x-4">
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={exactAmount}
-                onChange={(e) => setExactAmount(e.target.checked)}
-                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
-              />
-              <span className="text-sm text-gray-300">Точная сумма</span>
-            </label>
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={processedOnly}
-                onChange={(e) => setProcessedOnly(e.target.checked)}
-                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
-              />
-              <span className="text-sm text-gray-300">Обработанные</span>
-            </label>
+              </button>
+            </div>
+            <div className="flex space-x-4">
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={exactAmount}
+                  onChange={(e) => setExactAmount(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-300">Точная сумма</span>
+              </label>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={processedOnly}
+                  onChange={(e) => setProcessedOnly(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-300">Обработанные</span>
+              </label>
           </div>
 
           <div className="max-h-[500px] overflow-y-auto pr-2 payments-scroll">
             {similarPayments.length === 0 ? (
               <p className="text-sm text-gray-500">Ничего не найдено</p>
             ) : (
-              <div className="space-y-2">
-                {similarPayments.map((payment) => {
-                  const isSelected = selectedPaymentId === payment.id
-                  const isProcessed = payment.isProcessed
-                  
-                  // Форматируем дату для отображения
-                  const paymentDate = payment.paymentDate 
-                    ? formatDate(payment.paymentDate)
-                    : payment.createdAt 
-                      ? formatDate(payment.createdAt)
-                      : ''
+            <div className="space-y-2">
+              {similarPayments.map((payment) => {
+                const isSelected = selectedPaymentId === payment.id
+                const isProcessed = payment.isProcessed
+                
+                // Форматируем дату для отображения
+                const paymentDate = payment.paymentDate 
+                  ? formatDate(payment.paymentDate)
+                  : payment.createdAt 
+                    ? formatDate(payment.createdAt)
+                    : ''
 
-                  const formattedAmount = parseFloat(payment.amount).toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })
+                const formattedAmount = parseFloat(payment.amount).toLocaleString('en-US', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
 
-                  const handleSelectPayment = () => {
-                    if (isProcessed) return
-                    const nextSelected = isSelected ? null : payment.id
-                    setSelectedPaymentId(nextSelected)
-                    setSelectedPaymentPreview(nextSelected ? formattedAmount : null)
-                  }
+                const handleSelectPayment = () => {
+                  if (isProcessed) return
+                  const nextSelected = isSelected ? null : payment.id
+                  setSelectedPaymentId(nextSelected)
+                  setSelectedPaymentPreview(nextSelected ? formattedAmount : null)
+                }
 
-                  return (
-                    <div
-                      key={payment.id}
-                      onClick={handleSelectPayment}
-                      className={`relative flex items-center rounded-xl p-3 cursor-pointer transition-all ${
-                        isProcessed
-                          ? 'bg-gray-700 opacity-60 cursor-not-allowed border border-gray-600'
-                          : isSelected
-                          ? 'bg-blue-500 bg-opacity-20 border-2 border-blue-500'
-                          : 'bg-gray-900 border border-gray-700 hover:border-gray-600'
-                      }`}
-                    >
-                      {/* Левая полоска */}
-                      <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${
-                        isProcessed ? 'bg-gray-500' : isSelected ? 'bg-blue-500' : 'bg-gray-600'
-                      }`}></div>
-                      
-                      <div className="flex-1 ml-4 min-w-0">
-                        <p className="text-sm font-medium text-white mb-1 truncate">
-                          Перевод по QR
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {paymentDate}
-                        </p>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2 flex-shrink-0">
-                        <p className="text-base font-semibold text-green-500 whitespace-nowrap">
-                          +{formattedAmount}
-                        </p>
-                        {!isProcessed && (
-                          <svg className="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        )}
-                      </div>
+                return (
+                  <div
+                    key={payment.id}
+                    onClick={handleSelectPayment}
+                    className={`relative flex items-center rounded-xl p-3 cursor-pointer transition-all ${
+                      isProcessed
+                        ? 'bg-gray-700 opacity-60 cursor-not-allowed border border-gray-600'
+                        : isSelected
+                        ? 'bg-blue-500 bg-opacity-20 border-2 border-blue-500'
+                        : 'bg-gray-900 border border-gray-700 hover:border-gray-600'
+                    }`}
+                  >
+                    {/* Левая полоска */}
+                    <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${
+                      isProcessed ? 'bg-gray-500' : isSelected ? 'bg-blue-500' : 'bg-gray-600'
+                    }`}></div>
+                    
+                    <div className="flex-1 ml-4 min-w-0">
+                      <p className="text-sm font-medium text-white mb-1 truncate">
+                        Перевод по QR
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {paymentDate}
+                      </p>
                     </div>
-                  )
-                })}
-              </div>
+                    
+                    <div className="flex items-center space-x-2 flex-shrink-0">
+                      <p className="text-base font-semibold text-green-500 whitespace-nowrap">
+                        +{formattedAmount}
+                      </p>
+                      {!isProcessed && (
+                        <svg className="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
             )}
           </div>
           
-        </div>
-      )}
+                </div>
+              )}
 
       {/* Постоянные кнопки подтверждения / отмены выбора (для депозитов в ожидании/отложенных) */}
       {(request.status === 'pending' || request.status === 'deferred') && request.requestType === 'deposit' && (
         <div className="mx-4 mb-4 flex space-x-3">
-          <button
+                <button
             onClick={() => {
               setPaymentModalAction('approve')
               setPaymentModalOpen(true)
             }}
-            disabled={confirming}
+                  disabled={confirming}
             className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors"
-          >
+                >
             Подтвердить
-          </button>
-          <button
-            onClick={() => {
+                </button>
+                <button
+                  onClick={() => {
               setPaymentModalAction('reject')
               setPaymentModalOpen(true)
-            }}
-            disabled={confirming}
+                  }}
+                  disabled={confirming}
             className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-gray-700 text-white font-bold py-3 px-4 rounded-xl transition-colors"
-          >
+                >
             Отклонить
-          </button>
-        </div>
+                </button>
+            </div>
       )}
 
       {/* Детали заявки */}

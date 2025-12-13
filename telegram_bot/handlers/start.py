@@ -2,11 +2,13 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+import logging
 from config import Config
 from translations import get_text
 from api_client import APIClient
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 def get_user_lang(state: FSMContext) -> str:
     """Получить язык пользователя (по умолчанию русский)"""
@@ -34,7 +36,7 @@ async def check_channel_subscription(bot: Bot, user_id: int, channel: str) -> bo
         return chat_member.status in ['member', 'administrator', 'creator']
     except Exception as e:
         # Если канал не найден или ошибка, считаем что подписан (чтобы не блокировать бота)
-        print(f"Error checking channel subscription: {e}")
+        logger.warning(f"Error checking channel subscription: {e}")
         return True
 
 @router.message(Command("start"))
@@ -50,7 +52,7 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
             await message.answer(blocked_message)
             return
     except Exception as e:
-        print(f"Error checking blocked status: {e}")
+        logger.error(f"Error checking blocked status for user {message.from_user.id}: {e}", exc_info=True)
         # Продолжаем работу, если проверка не удалась
     
     # Проверяем pause режим
@@ -61,8 +63,9 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
             maintenance_message = settings.get('maintenance_message', get_text(lang, 'start', 'bot_paused'))
             await message.answer(maintenance_message)
             return
-    except Exception:
-        pass  # Если не удалось получить настройки, продолжаем работу
+    except Exception as e:
+        logger.warning(f"Error fetching payment settings: {e}")
+        # Если не удалось получить настройки, продолжаем работу
     
     # Проверяем подписку на канал (только если включена)
     require_subscription = settings.get('require_channel_subscription', True)

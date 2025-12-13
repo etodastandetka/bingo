@@ -18,6 +18,8 @@ async def main():
         logger.error("BOT_TOKEN не установлен! Проверьте файл .env")
         return
     
+    logger.info(f"Инициализация бота с API_BASE_URL: {Config.API_BASE_URL}")
+    
     # Инициализация бота и диспетчера
     bot = Bot(token=Config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
@@ -32,8 +34,13 @@ async def main():
     
     logger.info("Бот запущен!")
     
-    # Запуск polling
-    await dp.start_polling(bot)
+    # Обработка ошибок
+    try:
+        # Запуск polling
+        await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
+    except Exception as e:
+        logger.error(f"Ошибка при запуске polling: {e}", exc_info=True)
+        raise
 
 if __name__ == '__main__':
     try:

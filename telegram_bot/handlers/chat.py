@@ -74,7 +74,7 @@ async def save_message_to_db(
             ) as response:
                 return await response.json()
     except Exception as e:
-        print(f"Error saving message to DB: {e}")
+        logger.error(f"Error saving message to DB: {e}", exc_info=True)
         return None
 
 @router.message(F.text)
@@ -163,7 +163,7 @@ async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
             await message.answer(blocked_message)
             return
     except Exception as e:
-        print(f"Error checking blocked status: {e}")
+        logger.error(f"Error checking blocked status: {e}", exc_info=True)
         # Продолжаем работу, если проверка не удалась
     
     # Сохраняем сообщение пользователя в БД

@@ -41,8 +41,8 @@ export async function GET(
       }),
       uncreatedModel
         ? uncreatedModel.findMany({
-            where: { userId, status: { in: ['not_created', 'pending_check'] } },
-            orderBy: { createdAt: 'desc' },
+        where: { userId, status: { in: ['not_created', 'pending_check'] } },
+        orderBy: { createdAt: 'desc' },
           })
         : Promise.resolve([]),
     ])
