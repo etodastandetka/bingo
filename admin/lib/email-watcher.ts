@@ -512,6 +512,18 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
         // Это почти как реальное время, но с небольшой задержкой
         idleInterval = setInterval(async () => {
           try {
+            // Проверяем, не изменился ли активный реквизит
+            const requisiteChanged = await checkActiveRequisiteChanged()
+            if (requisiteChanged) {
+              console.log('🔄 Active requisite changed during IDLE mode - reconnecting...')
+              if (idleInterval) clearInterval(idleInterval)
+              if (keepAliveInterval) clearInterval(keepAliveInterval)
+              imap.end()
+              // Выходим из функции, чтобы основной цикл переподключился
+              resolve()
+              return
+            }
+
             await checkEmails(settings)
           } catch (error: any) {
             if (error.textCode === 'AUTHENTICATIONFAILED') {
@@ -625,6 +637,40 @@ async function checkTimeouts(): Promise<void> {
 // Флаг для отслеживания первого запуска после перезапуска
 let isFirstRun = true
 
+// Храним текущий активный реквизит для отслеживания изменений
+let currentActiveRequisiteId: number | null = null
+
+/**
+ * Проверка изменения активного реквизита
+ */
+async function checkActiveRequisiteChanged(): Promise<boolean> {
+  try {
+    const activeRequisite = await prisma.botRequisite.findFirst({
+      where: { isActive: true },
+      select: { id: true },
+    })
+
+    const newActiveId = activeRequisite?.id || null
+
+    if (newActiveId !== currentActiveRequisiteId) {
+      const changed = currentActiveRequisiteId !== null // Если это не первый запуск
+      currentActiveRequisiteId = newActiveId
+      
+      if (changed) {
+        console.log(`🔄 Active requisite changed! Old ID: ${currentActiveRequisiteId}, New ID: ${newActiveId}`)
+        console.log('   Reconnecting with new credentials...')
+      }
+      
+      return changed
+    }
+
+    return false
+  } catch (error) {
+    console.error('❌ Error checking active requisite:', error)
+    return false
+  }
+}
+
 /**
  * Запуск watcher в режиме реального времени (IDLE)
  */
@@ -644,8 +690,28 @@ export async function startWatcher(): Promise<void> {
     console.warn('⚠️ Initial timeout check failed:', error.message)
   })
 
+  // Проверяем изменение активного реквизита каждые 30 секунд
+  const requisiteCheckInterval = setInterval(async () => {
+    const changed = await checkActiveRequisiteChanged()
+    if (changed) {
+      // Если реквизит изменился, текущее подключение будет переподключено в цикле
+      console.log('🔄 Active requisite changed - will reconnect on next iteration')
+    }
+  }, 30000) // Каждые 30 секунд
+
+  // Инициализируем текущий активный реквизит
+  await checkActiveRequisiteChanged()
+
   while (true) {
     try {
+      // Проверяем изменение активного реквизита перед каждым подключением
+      const requisiteChanged = await checkActiveRequisiteChanged()
+      if (requisiteChanged) {
+        console.log('🔄 Active requisite changed - reconnecting with new credentials...')
+        // Небольшая задержка перед переподключением
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+      }
+
       const settings = await getWatcherSettings()
 
       if (!settings.enabled) {
