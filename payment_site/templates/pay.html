@@ -1611,6 +1611,82 @@
             }
         };
         
+        // Проверка существующей активной заявки
+        async function checkExistingRequest() {
+            if (!telegramUserId) {
+                console.warn('⚠️ Cannot check existing request: no user ID');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/payment`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        telegram_user_id: telegramUserId,
+                        type: 'deposit',
+                        amount: 0, // Временное значение для проверки
+                    }),
+                });
+
+                const data = await response.json();
+                
+                if (!data.success && data.error) {
+                    // Если есть ошибка о существующей заявке, показываем сообщение
+                    if (data.error.includes('Заявка уже отправлена') || data.error.includes('Время на оплату истекло')) {
+                        const errorMessage = data.error;
+                        
+                        // Показываем сообщение и закрываем мини-приложение
+                        if (tg) {
+                            tg.showPopup({
+                                title: '⚠️ Внимание',
+                                message: errorMessage,
+                                buttons: [{
+                                    type: 'ok',
+                                    text: 'Понятно'
+                                }]
+                            }).then(() => {
+                                // Закрываем мини-приложение после нажатия OK
+                                if (tg && tg.close) {
+                                    tg.close();
+                                }
+                            });
+                        } else {
+                            alert(errorMessage);
+                        }
+                        
+                        // Блокируем форму
+                        document.body.innerHTML = `
+                            <div style="
+                                background: linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #1e3a8a 50%, #1e40af 75%, #2563eb 100%);
+                                color: #ffffff;
+                                padding: 40px 20px;
+                                height: 100vh;
+                                width: 100vw;
+                                display: flex;
+                                flex-direction: column;
+                                align-items: center;
+                                justify-content: center;
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                text-align: center;
+                            ">
+                                <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+                                <h1 style="font-size: 24px; margin-bottom: 12px; font-weight: 600;">${errorMessage}</h1>
+                            </div>
+                        `;
+                        return true; // Заявка существует
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error checking existing request:', error);
+                // Продолжаем работу, если проверка не удалась
+            }
+            
+            return false; // Заявки нет, можно продолжать
+        }
+
         // Инициализация при загрузке страницы
         if (tg && tg.initDataUnsafe?.user) {
             console.log('✅ Telegram WebApp initialized');
@@ -1621,16 +1697,21 @@
         // Инициализируем все компоненты (всегда, независимо от Telegram)
         initReceiptUpload();
         
-        // Загружаем настройки и затем инициализируем остальное
-        loadPaymentSettings().then(async () => {
-            await createUncreatedOnce();
-            setupBankButtons(); // Показываем банки после загрузки настроек
-            loadQR(); // Загружаем QR код
-        }).catch((error) => {
-            console.error('❌ Error initializing payment form:', error);
-            // В случае ошибки все равно показываем форму с настройками по умолчанию
-            setupBankButtons();
-            loadQR();
+        // Проверяем существующую заявку перед инициализацией формы
+        checkExistingRequest().then((hasExistingRequest) => {
+            if (!hasExistingRequest) {
+                // Загружаем настройки и затем инициализируем остальное
+                loadPaymentSettings().then(async () => {
+                    await createUncreatedOnce();
+                    setupBankButtons(); // Показываем банки после загрузки настроек
+                    loadQR(); // Загружаем QR код
+                }).catch((error) => {
+                    console.error('❌ Error initializing payment form:', error);
+                    // В случае ошибки все равно показываем форму с настройками по умолчанию
+                    setupBankButtons();
+                    loadQR();
+                });
+            }
         });
     </script>
 </body>
