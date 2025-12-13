@@ -194,16 +194,35 @@ async function getMostbetBalance(cfg: MostbetConfig): Promise<BalanceResult> {
       'Accept': '*/*',
     }
 
+    console.log(`[Mostbet Balance] URL: ${url}`)
+    console.log(`[Mostbet Balance] Headers:`, {
+      'X-Api-Key': apiKeyFormatted.substring(0, 20) + '...',
+      'X-Timestamp': timestamp,
+      'X-Signature': signature.substring(0, 20) + '...',
+    })
+    console.log(`[Mostbet Balance] Signature string:`, signString.substring(0, 100) + '...')
+
     const response = await fetch(url, { headers, method: 'GET' })
+
+    console.log(`[Mostbet Balance] Response status: ${response.status}`)
 
     if (response.ok) {
       const data = await response.json()
+      console.log(`[Mostbet Balance] Response data:`, data)
       if (data && typeof data.balance !== 'undefined') {
+        const balance = parseFloat(String(data.balance)) || 0
+        const limit = balance // Лимит равен балансу
+        console.log(`[Mostbet Balance] Parsed balance: ${balance}, limit: ${limit}`)
         return {
-          balance: parseFloat(data.balance) || 0,
-          limit: parseFloat(data.balance) || 0, // Лимит равен балансу
+          balance: balance,
+          limit: limit,
         }
+      } else {
+        console.warn(`[Mostbet Balance] Response missing balance field:`, data)
       }
+    } else {
+      const errorText = await response.text()
+      console.error(`[Mostbet Balance] Error response (${response.status}):`, errorText)
     }
   } catch (error) {
     console.error('Error getting Mostbet balance:', error)
@@ -265,12 +284,34 @@ export async function getPlatformLimits(): Promise<
       limits.push({ key: '1win', name: '1WIN', limit: 0 })
     }
 
-    // Mostbet
-    const mostbetCfg = MOSTBET_CONFIG
-    if (mostbetCfg.cashpoint_id > 0) {
-      const mostbetBal = await getMostbetBalance(mostbetCfg)
-      limits.push({ key: 'mostbet', name: 'Mostbet', limit: mostbetBal.limit })
-    } else {
+    // Mostbet - загружаем конфигурацию из БД
+    try {
+      const { getCasinoConfig } = await import('./casino-config')
+      const mostbetConfigFromDB = await getCasinoConfig('mostbet')
+      
+      if (mostbetConfigFromDB && mostbetConfigFromDB.api_key && mostbetConfigFromDB.secret && mostbetConfigFromDB.cashpoint_id) {
+        const mostbetCfg: MostbetConfig = {
+          api_key: mostbetConfigFromDB.api_key,
+          secret: mostbetConfigFromDB.secret,
+          cashpoint_id: parseInt(String(mostbetConfigFromDB.cashpoint_id)),
+          x_project: mostbetConfigFromDB.x_project || 'MBC',
+          brand_id: mostbetConfigFromDB.brand_id || 1,
+        }
+        const mostbetBal = await getMostbetBalance(mostbetCfg)
+        console.log(`[Mostbet Limits] Balance: ${mostbetBal.balance}, Limit: ${mostbetBal.limit}`)
+        limits.push({ key: 'mostbet', name: 'Mostbet', limit: mostbetBal.limit })
+      } else {
+        // Fallback на переменные окружения
+        const mostbetCfg = MOSTBET_CONFIG
+        if (mostbetCfg.cashpoint_id > 0) {
+          const mostbetBal = await getMostbetBalance(mostbetCfg)
+          limits.push({ key: 'mostbet', name: 'Mostbet', limit: mostbetBal.limit })
+        } else {
+          limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
+        }
+      }
+    } catch (error) {
+      console.error('Error loading Mostbet config for limits:', error)
       limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
     }
 

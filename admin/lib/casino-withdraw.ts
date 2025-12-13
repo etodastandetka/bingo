@@ -146,13 +146,20 @@ export async function checkWithdrawAmountMostbet(
   try {
     console.log(`[Mostbet Check Withdraw] Player ID: ${playerId}, Code: ${code}`)
     
-    // Получаем timestamp
+    // Получаем timestamp в UTC+0 формате 'YYYY-MM-DD HH:MM:SS'
     const now = new Date()
-    const timestamp = now.toISOString().slice(0, 19).replace('T', ' ')
+    const year = now.getUTCFullYear()
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(now.getUTCDate()).padStart(2, '0')
+    const hours = String(now.getUTCHours()).padStart(2, '0')
+    const minutes = String(now.getUTCMinutes()).padStart(2, '0')
+    const seconds = String(now.getUTCSeconds()).padStart(2, '0')
+    const timestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 
     // Шаг 1: Получаем список выводов
     const cashpointIdStr = String(cashpointId)
-    const listPath = `/mbc/gateway/v1/api/cashpoint/${cashpointIdStr}/player/cashout/list/page?page=1&size=10&searchString=${playerId}`
+    // Используем searchString для поиска по playerId
+    const listPath = `/mbc/gateway/v1/api/cashpoint/${cashpointIdStr}/player/cashout/list/page?page=0&size=10&searchString=${encodeURIComponent(playerId)}`
     const listUrl = `${baseUrl}${listPath}`
 
     // API key может быть с префиксом или без
@@ -204,29 +211,44 @@ export async function checkWithdrawAmountMostbet(
 
     console.log(`[Mostbet Check Withdraw] List response:`, listData)
 
-    // Ищем вывод с нужным кодом или берем первый NEW
+    // Ищем вывод для данного игрока
     const withdrawals = listData.items || []
-    let withdrawal = withdrawals.find((w: any) => w.status === 'NEW')
+    console.log(`[Mostbet Check Withdraw] Found ${withdrawals.length} withdrawals for player ${playerId}`)
+    
+    // Ищем заявку на вывод для данного игрока (может быть NEW, PROCESSING и т.д.)
+    let withdrawal = withdrawals.find((w: any) => 
+      String(w.playerId) === String(playerId) && 
+      (w.status === 'NEW' || w.status === 'ACCEPTED' || w.status === 'PROCESSING')
+    )
+
+    if (!withdrawal) {
+      // Если не нашли активную, берем первую в списке
+      withdrawal = withdrawals.find((w: any) => String(w.playerId) === String(playerId))
+    }
 
     if (!withdrawal) {
       return {
         success: false,
-        message: 'No pending withdrawal found',
+        message: `No withdrawal found for player ${playerId}`,
       }
     }
 
     const transactionId = withdrawal.transactionId
-    const amount = withdrawal.amount || 0
+    const amount = parseFloat(String(withdrawal.amount || 0))
+    
+    console.log(`[Mostbet Check Withdraw] Found withdrawal: transactionId=${transactionId}, amount=${amount}, status=${withdrawal.status}`)
 
     // Шаг 2: Подтверждаем вывод кодом
     const confirmPath = `/mbc/gateway/v1/api/cashpoint/${cashpointIdStr}/player/cashout/confirmation`
     const confirmUrl = `${baseUrl}${confirmPath}`
-    const confirmBody = JSON.stringify({
+    const confirmBodyData = {
       code: code,
       transactionId: transactionId,
-    })
+    }
+    // Важно: JSON.stringify без пробелов для подписи
+    const confirmBody = JSON.stringify(confirmBodyData)
 
-    // Генерируем подпись для подтверждения
+    // Генерируем подпись для подтверждения: <API_KEY><PATH><REQUEST_BODY><TIMESTAMP>
     const confirmSignString = `${apiKeyFormatted}${confirmPath}${confirmBody}${timestamp}`
     let confirmSignature: string
     try {
@@ -235,6 +257,7 @@ export async function checkWithdrawAmountMostbet(
         .update(confirmSignString)
         .digest('hex')
     } catch (e) {
+      console.warn('[Mostbet Check Withdraw] SHA3-256 not supported, using SHA256')
       confirmSignature = crypto
         .createHmac('sha256', secret)
         .update(confirmSignString)
@@ -250,7 +273,15 @@ export async function checkWithdrawAmountMostbet(
       'Accept': '*/*',
     }
 
-    console.log(`[Mostbet Check Withdraw] Confirm URL: ${confirmUrl}, Body:`, confirmBody)
+    console.log(`[Mostbet Check Withdraw] Confirm URL: ${confirmUrl}`)
+    console.log(`[Mostbet Check Withdraw] Confirm Headers:`, {
+      'X-Api-Key': apiKeyFormatted.substring(0, 20) + '...',
+      'X-Timestamp': timestamp,
+      'X-Signature': confirmSignature.substring(0, 20) + '...',
+      'X-Project': config.x_project || 'MBC',
+    })
+    console.log(`[Mostbet Check Withdraw] Confirm Body:`, confirmBodyData)
+    console.log(`[Mostbet Check Withdraw] Signature string:`, confirmSignString.substring(0, 100) + '...')
 
     const confirmResponse = await fetch(confirmUrl, {
       method: 'POST',
@@ -272,13 +303,27 @@ export async function checkWithdrawAmountMostbet(
 
     console.log(`[Mostbet Check Withdraw] Confirm response:`, confirmData)
 
-    if (confirmResponse.ok && confirmData.status === 'CONFIRMED') {
+    // По документации статус может быть NEW, PROCESSING, COMPLETED и т.д.
+    // COMPLETED означает успешное завершение
+    if (confirmResponse.ok) {
+      const status = confirmData.status
       const finalAmount = confirmData.amount || amount || 0
-      return {
-        success: true,
-        amount: parseFloat(String(finalAmount)),
-        transactionId: transactionId,
-        message: 'Withdrawal confirmed successfully',
+      
+      if (status === 'COMPLETED' || status === 'NEW' || status === 'ACCEPTED' || status === 'PROCESSING') {
+        return {
+          success: true,
+          amount: parseFloat(String(finalAmount)),
+          transactionId: transactionId,
+          message: `Withdrawal ${status === 'COMPLETED' ? 'completed' : 'confirmed'} successfully`,
+        }
+      }
+      
+      // Если статус NEW_ERROR или другая ошибка
+      if (status === 'NEW_ERROR' || status === 'PROCESSING_ERROR' || status === 'CANCELED' || status === 'EXPIRED') {
+        return {
+          success: false,
+          message: confirmData.message || confirmData.error || `Withdrawal failed with status: ${status}`,
+        }
       }
     }
 

@@ -234,19 +234,26 @@ export async function depositMostbetAPI(
     // userId здесь - это ID казино (accountId), не Telegram ID
     console.log(`[Mostbet Deposit] Casino Player ID: ${userId}, Amount: ${amount}`)
     
-    // Получаем timestamp
+    // Получаем timestamp в UTC+0 формате 'YYYY-MM-DD HH:MM:SS'
     const now = new Date()
-    const timestamp = now.toISOString().slice(0, 19).replace('T', ' ')
+    const year = now.getUTCFullYear()
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(now.getUTCDate()).padStart(2, '0')
+    const hours = String(now.getUTCHours()).padStart(2, '0')
+    const minutes = String(now.getUTCMinutes()).padStart(2, '0')
+    const seconds = String(now.getUTCSeconds()).padStart(2, '0')
+    const timestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 
     // Формируем путь и тело запроса
     const cashpointIdStr = String(cashpointId)
     const path = `/mbc/gateway/v1/api/cashpoint/${cashpointIdStr}/player/deposit`
     const requestBodyData = {
-      brandId: config.brand_id || 1, // По умолчанию Mostbet
+      brandId: config.brand_id || 1, // По умолчанию Mostbet (brandId: 1)
       playerId: String(userId), // ID игрока в казино
       amount: amount,
-      currency: 'RUB', // Изменено на RUB согласно документации
+      currency: 'RUB', // Валюта согласно документации
     }
+    // Важно: JSON.stringify без пробелов и переводов строк для подписи
     const requestBody = JSON.stringify(requestBodyData)
 
     // API key может быть с префиксом или без
