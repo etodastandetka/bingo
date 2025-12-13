@@ -129,7 +129,8 @@ async def set_operator_chat_status(user_id: int, is_closed: bool):
                 if await do_patch(api_url):
                     return True
                 # fallback на прод
-                api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+                from config import Config
+                api_url = Config.API_FALLBACK_URL
 
             return await do_patch(api_url)
     except Exception as e:
@@ -152,7 +153,8 @@ async def check_existing_messages(user_id: int) -> bool:
                             data = await response.json()
                             return bool(data.get('success') and data.get('data', {}).get('messages'))
                 except:
-                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+                    from config import Config
+                api_url = Config.API_FALLBACK_URL
             
             async with session.get(
                 f'{api_url}/users/{user_id}/chat?limit=1&botType=operator'

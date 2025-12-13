@@ -617,10 +617,11 @@
         let uniqueId = '{{ unique_id }}' || '';
         let uncreatedRequestId = null;
         
-        // Определяем базовый URL для API (можно настроить через переменную окружения или использовать относительный путь)
+        // Определяем базовый URL для API
+        // Используем домен админки из конфига или определяем автоматически
         const API_BASE_URL = window.location.origin.includes('localhost') 
             ? 'http://localhost:3001/api' 
-            : window.location.origin.replace(/:\d+$/, ':3001') + '/api';
+            : 'https://gdsfafdsdf.me/api'; // Домен админки из domains.json
         
         // Инициализация данных (всегда, независимо от Telegram)
         amount = parseFloat('{{ amount }}') || 0;

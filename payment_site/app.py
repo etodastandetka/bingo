@@ -6,15 +6,37 @@ import qrcode
 import io
 import base64
 import os
+import json
 import ssl
 import hashlib
 from datetime import datetime, timedelta
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
 CORS(app)
 
-API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:3001/api')
+# Загружаем конфигурацию доменов из корня проекта
+def load_domains_config():
+    """Загружает конфигурацию доменов из domains.json"""
+    try:
+        # Путь к domains.json в корне проекта (на уровень выше payment_site)
+        domains_path = Path(__file__).parent.parent / 'domains.json'
+        if domains_path.exists():
+            with open(domains_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Warning: Could not load domains.json: {e}")
+    return None
+
+# Загружаем конфигурацию доменов
+domains_config = load_domains_config()
+
+# Определяем API_BASE_URL из конфига или .env
+if domains_config and 'domains' in domains_config:
+    API_BASE_URL = os.getenv('API_BASE_URL', domains_config['domains'].get('admin_api', 'http://localhost:3001/api'))
+else:
+    API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:3001/api')
 
 # Отключаем проверку SSL для внутренних запросов
 ssl_context = ssl.create_default_context()

@@ -64,7 +64,7 @@ class APIClient:
                         return await response.json()
                 except:
                     # Если локальный недоступен, используем продакшн
-                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+                    api_url = Config.API_FALLBACK_URL
             
             async with session.post(
                 f'{api_url}/payment',
@@ -102,8 +102,9 @@ class APIClient:
                                 data = await response.json()
                                 return data if data.get('success') else {}
                     except:
-                        # Если локальный недоступен, используем продакшн
-                        api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+                        # Если локальный недоступен, используем fallback из конфига
+                        from config import Config
+                        api_url = Config.API_FALLBACK_URL
                 
                 async with session.get(
                     f'{api_url}/public/payment-settings',
@@ -144,7 +145,7 @@ class APIClient:
                         return await response.json()
                 except:
                     # Если локальный недоступен, используем продакшн
-                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+                    api_url = Config.API_FALLBACK_URL
             
             async with session.post(
                 f'{api_url}/public/check-blocked',
@@ -174,7 +175,7 @@ class APIClient:
                         return await response.json()
                 except:
                     # Если локальный недоступен, используем продакшн
-                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+                    api_url = Config.API_FALLBACK_URL
             
             async with session.post(
                 f'{api_url}/public/check-player',
@@ -206,7 +207,7 @@ class APIClient:
                         return await response.json()
                 except:
                     # Если локальный недоступен, используем продакшн
-                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+                    api_url = Config.API_FALLBACK_URL
             
             async with session.post(
                 f'{api_url}/check-withdraw-amount',

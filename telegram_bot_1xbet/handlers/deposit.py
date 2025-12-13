@@ -212,11 +212,11 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         button_url = payment_url
         text_url = payment_url
         
-        # Если в конфиге localhost, используем продакшн URL для кнопки
+        # Если в конфиге localhost, используем fallback URL для кнопки
         if 'localhost' in Config.PAYMENT_SITE_URL.lower():
-            # Для кнопки используем продакшн URL
-            button_url = f"https://gldwueprxkmbtqsnva.ru/pay?{urlencode(params)}"
-            # Для текста оставляем localhost (http://localhost:3003)
+            # Для кнопки используем fallback URL из конфига
+            button_url = f"{Config.PAYMENT_FALLBACK_URL}/pay?{urlencode(params)}"
+            # Для текста оставляем localhost
             text_url = payment_url
         
         # Отправляем ссылку в тексте и обычную кнопку с URL

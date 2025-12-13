@@ -65,7 +65,8 @@ async def save_message_to_db(
                     ) as response:
                         return await response.json()
                 except:
-                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+                    from config import Config
+                    api_url = Config.API_FALLBACK_URL
             
             async with session.post(
                 f'{api_url}/chat-message',
@@ -128,7 +129,8 @@ async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
                                     telegram_message_id=sent_message.message_id
                                 )
                 except:
-                    api_url = 'https://fqxgmrzplndwsyvkeu.ru/api'
+                    from config import Config
+                    api_url = Config.API_FALLBACK_URL
             
             async with session.get(
                 f'{api_url}/users/{user_id}/chat?limit=1&botType=main'
