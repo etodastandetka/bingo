@@ -132,21 +132,8 @@ export async function POST(request: NextRequest) {
       return errorResponse
     }
 
-    if (!amount || amount === null || amount === undefined || amount === '') {
-      console.error('❌ Payment API: Missing or invalid amount', { amount })
-      const errorResponse = NextResponse.json(
-        createApiResponse(null, 'Missing or invalid amount'),
-        { 
-          status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-          }
-        }
-      )
-      return errorResponse
-    }
-
-    // Преобразуем userId в BigInt (если это строка с числом)
+    // Проверяем, есть ли уже активная заявка у пользователя (pending или processing)
+    // которая была создана менее 5 минут назад
     let userIdBigInt: bigint
     try {
       if (typeof finalUserId === 'string') {
@@ -167,6 +154,72 @@ export async function POST(request: NextRequest) {
       )
       return errorResponse
     }
+
+    // Проверяем активные заявки пользователя
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+    const existingRequest = await prisma.request.findFirst({
+      where: {
+        userId: userIdBigInt,
+        requestType: 'deposit',
+        status: {
+          in: ['pending', 'processing']
+        },
+        createdAt: {
+          gte: fiveMinutesAgo
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    })
+
+    if (existingRequest) {
+      const timeElapsed = Date.now() - existingRequest.createdAt.getTime()
+      const timeRemaining = Math.max(0, 5 * 60 * 1000 - timeElapsed)
+      const minutesRemaining = Math.floor(timeRemaining / 60000)
+      const secondsRemaining = Math.floor((timeRemaining % 60000) / 1000)
+
+      let errorMessage = 'Заявка уже отправлена'
+      if (timeRemaining > 0) {
+        errorMessage = `Заявка уже отправлена. Ожидайте проверки. Осталось времени: ${minutesRemaining}:${String(secondsRemaining).padStart(2, '0')}`
+      } else {
+        errorMessage = 'Время на оплату истекло. Создайте новую заявку.'
+      }
+
+      console.log('⚠️ Payment API: Active request exists', {
+        requestId: existingRequest.id,
+        status: existingRequest.status,
+        createdAt: existingRequest.createdAt.toISOString(),
+        timeRemaining: `${minutesRemaining}:${String(secondsRemaining).padStart(2, '0')}`
+      })
+
+      const errorResponse = NextResponse.json(
+        createApiResponse(null, errorMessage),
+        { 
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
+      )
+      return errorResponse
+    }
+
+    if (!amount || amount === null || amount === undefined || amount === '') {
+      console.error('❌ Payment API: Missing or invalid amount', { amount })
+      const errorResponse = NextResponse.json(
+        createApiResponse(null, 'Missing or invalid amount'),
+        { 
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
+      )
+      return errorResponse
+    }
+
+    // userIdBigInt уже определен выше при проверке существующей заявки
 
     // Проверка блокировки пользователя по userId (Telegram ID)
     const user = await prisma.botUser.findUnique({
