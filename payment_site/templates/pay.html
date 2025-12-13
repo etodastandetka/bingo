@@ -1372,26 +1372,15 @@
                             console.log('✅ Request ID updated from response:', requestId);
                         }
                         
-                        // Формируем URL для страницы успеха
-                        const successParams = new URLSearchParams();
-                        if (requestId) successParams.append('request_id', requestId.toString());
-                        if (amount) successParams.append('amount', amount.toString());
-                        if (casinoId) successParams.append('bookmaker', casinoId.toString());
+                        console.log('✅ Payment request submitted successfully');
                         
-                        const successUrl = `/success?${successParams.toString()}`;
-                        console.log('🔄 Redirecting to success page (update):', successUrl);
-                        console.log('📊 Redirect data:', { requestId, amount, casinoId });
-                        
-                        // Редирект на страницу успеха с небольшой задержкой для отладки
-                        setTimeout(() => {
-                            try {
-                                window.location.href = successUrl;
-                            } catch (e) {
-                                console.error('❌ Redirect error:', e);
-                                // Fallback: попробуем через location.replace
-                                window.location.replace(successUrl);
-                            }
-                        }, 100);
+                        // Закрываем мини-приложение вместо редиректа на страницу успеха
+                        if (tg && tg.close) {
+                            console.log('🔄 Closing mini app...');
+                            tg.close();
+                        } else {
+                            console.warn('⚠️ Telegram WebApp not available, cannot close mini app');
+                        }
                     } else {
                         throw new Error(data.error || 'Не удалось обновить заявку');
                     }
@@ -1575,26 +1564,15 @@
                             }
                         }
                         
-                        // Формируем URL для страницы успеха
-                        const successParams = new URLSearchParams();
-                        if (requestId) successParams.append('request_id', requestId.toString());
-                        if (amount) successParams.append('amount', amount.toString());
-                        if (casinoId) successParams.append('bookmaker', casinoId.toString());
+                        console.log('✅ Payment request submitted successfully');
                         
-                        const successUrl = `/success?${successParams.toString()}`;
-                        console.log('🔄 Redirecting to success page (create):', successUrl);
-                        console.log('📊 Redirect data:', { requestId, amount, casinoId });
-                        
-                        // Редирект на страницу успеха с небольшой задержкой для отладки
-                        setTimeout(() => {
-                            try {
-                                window.location.href = successUrl;
-                            } catch (e) {
-                                console.error('❌ Redirect error:', e);
-                                // Fallback: попробуем через location.replace
-                                window.location.replace(successUrl);
-                            }
-                        }, 100);
+                        // Закрываем мини-приложение вместо редиректа на страницу успеха
+                        if (tg && tg.close) {
+                            console.log('🔄 Closing mini app...');
+                            tg.close();
+                        } else {
+                            console.warn('⚠️ Telegram WebApp not available, cannot close mini app');
+                        }
                     } else {
                         const errorMsg = data.error || data.message || 'Не удалось создать заявку';
                         console.error('❌ Server returned error:', errorMsg);
