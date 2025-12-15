@@ -74,13 +74,22 @@ export default function RequestsPage() {
       if (filter.status) params.append('status', filter.status)
 
       const response = await fetch(`/api/requests?${params.toString()}`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
 
-      if (data.success) {
+      if (data.success && data.data) {
         setRequests(data.data.requests || [])
+      } else {
+        console.error('API returned error:', data.error || 'Unknown error')
+        setRequests([])
       }
     } catch (error) {
       console.error('Failed to fetch requests:', error)
+      setRequests([])
     } finally {
       if (showLoading) {
         setLoading(false)

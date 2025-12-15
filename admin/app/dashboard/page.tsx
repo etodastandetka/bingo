@@ -106,9 +106,14 @@ export default function DashboardPage() {
       })
       
       clearTimeout(timeoutId)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
 
-      if (data.success) {
+      if (data.success && data.data) {
         const requestsList = data.data.requests || []
         // Обновляем только если список изменился (новые заявки или изменения)
         const currentCount = requestsList.length
@@ -119,6 +124,8 @@ export default function DashboardPage() {
           setRequests(requestsList)
           setLastRequestCount(currentCount)
         }
+      } else {
+        console.error('API returned error:', data.error || 'Unknown error')
       }
     } catch (error: any) {
       if (error.name !== 'AbortError') {

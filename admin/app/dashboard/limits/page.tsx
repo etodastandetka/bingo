@@ -127,13 +127,22 @@ export default function LimitsPage() {
       if (end) params.append('end', end)
 
       const response = await fetch(`/api/limits/stats?${params.toString()}`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
 
-      if (data.success) {
+      if (data.success && data.data) {
         setStats(data.data)
+      } else {
+        console.error('API returned error:', data.error || 'Unknown error')
+        setStats(null)
       }
     } catch (error) {
       console.error('Failed to fetch limits stats:', error)
+      setStats(null)
     } finally {
       setLoading(false)
     }

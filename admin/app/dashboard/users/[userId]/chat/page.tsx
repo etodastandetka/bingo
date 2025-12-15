@@ -67,14 +67,20 @@ export default function ChatPage() {
         fetch(`/api/users/${params.userId}/profile-photo`)
       ])
 
+      if (!chatRes.ok || !userRes.ok) {
+        throw new Error(`HTTP error! status: ${chatRes.status || userRes.status}`)
+      }
+
       const chatData = await chatRes.json()
       const userData = await userRes.json()
       const photoData = await photoRes.json()
 
-      if (chatData.success && chatData.data.messages) {
+      if (chatData.success && chatData.data?.messages) {
         // Разворачиваем, чтобы старые были сверху
         const reversedMessages = [...chatData.data.messages].reverse()
         setMessages(reversedMessages)
+      } else {
+        setMessages([])
       }
 
       if (userData.success && userData.data) {
@@ -89,6 +95,7 @@ export default function ChatPage() {
       }
     } catch (error) {
       console.error('Failed to fetch chat data:', error)
+      setMessages([])
     } finally {
       setLoading(false)
     }

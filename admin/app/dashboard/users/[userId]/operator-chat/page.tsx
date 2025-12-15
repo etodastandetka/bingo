@@ -119,12 +119,21 @@ export default function OperatorChatPage() {
   const fetchQuickReplies = async () => {
     try {
       const response = await fetch('/api/quick-replies')
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
-      if (data.success) {
+      if (data.success && data.data) {
         setQuickReplies(data.data.replies || [])
+      } else {
+        console.error('API returned error:', data.error || 'Unknown error')
+        setQuickReplies([])
       }
     } catch (error) {
       console.error('Failed to fetch quick replies:', error)
+      setQuickReplies([])
     }
   }
 
@@ -218,11 +227,15 @@ export default function OperatorChatPage() {
         fetch(`/api/users/${params.userId}/profile-photo`)
       ])
 
+      if (!chatRes.ok || !userRes.ok) {
+        throw new Error(`HTTP error! status: ${chatRes.status || userRes.status}`)
+      }
+
       const chatData = await chatRes.json()
       const userData = await userRes.json()
       const photoData = await photoRes.json()
 
-      if (chatData.success && chatData.data.messages) {
+      if (chatData.success && chatData.data?.messages) {
         // Разворачиваем, чтобы старые были сверху (для правильного отображения)
         const reversedMessages = [...chatData.data.messages].reverse()
         // Объединяем с временными сообщениями (если есть) и убираем дубликаты

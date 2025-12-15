@@ -33,13 +33,22 @@ export default function UsersPage() {
       if (search) params.append('search', search)
 
       const response = await fetch(`/api/users?${params.toString()}`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
 
-      if (data.success) {
+      if (data.success && data.data) {
         setUsers(data.data.users || [])
+      } else {
+        console.error('API returned error:', data.error || 'Unknown error')
+        setUsers([])
       }
     } catch (error) {
       console.error('Failed to fetch users:', error)
+      setUsers([])
     } finally {
       setLoading(false)
     }

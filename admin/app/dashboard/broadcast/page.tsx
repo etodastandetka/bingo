@@ -26,12 +26,21 @@ export default function BroadcastPage() {
   const fetchStats = async () => {
     try {
       const response = await fetch('/api/broadcast/stats')
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
-      if (data.success) {
-        setTotalUsers(data.data.totalUsers)
+      if (data.success && data.data) {
+        setTotalUsers(data.data.totalUsers || 0)
+      } else {
+        console.error('API returned error:', data.error || 'Unknown error')
+        setTotalUsers(0)
       }
     } catch (error) {
       console.error('Failed to fetch stats:', error)
+      setTotalUsers(0)
     }
   }
 
@@ -39,13 +48,22 @@ export default function BroadcastPage() {
     setLoading(true)
     try {
       const response = await fetch('/api/broadcast/history')
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
 
-      if (data.success) {
-        setBroadcasts(data.data.broadcasts)
+      if (data.success && data.data) {
+        setBroadcasts(data.data.broadcasts || [])
+      } else {
+        console.error('API returned error:', data.error || 'Unknown error')
+        setBroadcasts([])
       }
     } catch (error) {
       console.error('Failed to fetch broadcast history:', error)
+      setBroadcasts([])
     } finally {
       setLoading(false)
     }

@@ -51,13 +51,20 @@ export default function OperatorChatsPage() {
       params.append('_t', Date.now().toString())
 
       const response = await fetch(`/api/operator-chats?${params}`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
 
-      if (data.success) {
+      if (data.success && data.data) {
         setChats(data.data.chats || [])
         setTotalUnread(data.data.totalUnread || 0)
       } else {
-        console.error('❌ API returned error:', data.error)
+        console.error('❌ API returned error:', data.error || 'Unknown error')
+        setChats([])
+        setTotalUnread(0)
       }
     } catch (error) {
       console.error('Failed to fetch chats:', error)

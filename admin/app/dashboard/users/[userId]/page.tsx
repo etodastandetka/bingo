@@ -75,19 +75,31 @@ export default function UserDetailPage() {
         fetch(`/api/users/${params.userId}/profile-photo`)
       ])
 
+      if (!userRes.ok) {
+        throw new Error(`HTTP error! status: ${userRes.status}`)
+      }
+
       const userData = await userRes.json()
       const photoData = await photoRes.json()
 
-      if (userData.success) {
-        setUser(userData.data)
-        setIsActive(userData.data.isActive !== undefined ? userData.data.isActive : true)
+      if (userData.success && userData.data) {
+        // Убеждаемся, что transactions всегда массив
+        const user = {
+          ...userData.data,
+          transactions: userData.data.transactions || []
+        }
+        setUser(user)
+        setIsActive(user.isActive !== undefined ? user.isActive : true)
+      } else {
+        console.error('Failed to fetch user:', userData.error || 'Unknown error')
       }
 
-      if (photoData.success && photoData.data.photoUrl) {
+      if (photoData.success && photoData.data?.photoUrl) {
         setPhotoUrl(photoData.data.photoUrl)
       }
     } catch (error) {
       console.error('Failed to fetch user:', error)
+      // Не устанавливаем user в null, чтобы показать сообщение об ошибке
     } finally {
       setLoading(false)
     }
@@ -341,8 +353,9 @@ export default function UserDetailPage() {
   const displayUsername = user.username ? `@${user.username}` : null
   
   // Статистика по пополнениям и выводам
-  const deposits = user.transactions.filter(t => t.transType === 'deposit')
-  const withdrawals = user.transactions.filter(t => t.transType === 'withdraw')
+  const transactions = user.transactions || []
+  const deposits = transactions.filter(t => t.transType === 'deposit')
+  const withdrawals = transactions.filter(t => t.transType === 'withdraw')
   const totalDeposits = deposits.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0)
   const totalWithdrawals = withdrawals.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0)
 
@@ -499,9 +512,9 @@ export default function UserDetailPage() {
       {/* Список транзакций */}
       <div className="mx-4">
         <h3 className="text-lg font-semibold text-white mb-3">Транзакции</h3>
-        {user.transactions.length > 0 ? (
+        {transactions.length > 0 ? (
           <div className="space-y-2">
-            {user.transactions.slice(0, 10).map((tx) => (
+            {transactions.slice(0, 10).map((tx) => (
               <div
                 key={tx.id}
                 className="bg-gray-900 rounded-xl p-4 border border-gray-800 hover:border-blue-500 transition-colors"

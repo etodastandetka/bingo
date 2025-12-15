@@ -58,12 +58,16 @@ export default function HistoryPage() {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
       const data = await response.json()
 
-      if (data.success) {
+      if (data.success && data.data) {
         setTransactions(data.data.transactions || [])
       } else {
-        console.error('API returned error:', data.error)
+        console.error('API returned error:', data.error || 'Unknown error')
         setTransactions([])
       }
     } catch (error: any) {

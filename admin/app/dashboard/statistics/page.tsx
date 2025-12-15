@@ -133,13 +133,22 @@ export default function StatisticsPage() {
       if (end) params.append('endDate', end)
 
       const response = await fetch(`/api/statistics?${params.toString()}`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
 
-      if (data.success) {
+      if (data.success && data.data) {
         setStats(data.data)
+      } else {
+        console.error('API returned error:', data.error || 'Unknown error')
+        setStats(null)
       }
     } catch (error) {
       console.error('Failed to fetch statistics:', error)
+      setStats(null)
     } finally {
       setLoading(false)
     }
