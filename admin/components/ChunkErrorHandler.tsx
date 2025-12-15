@@ -97,6 +97,15 @@ export default function ChunkErrorHandler() {
       }
     }
 
+    const getCleanUrl = () => {
+      const url = new URL(window.location.href)
+      // Удаляем все параметры nocache
+      url.searchParams.delete('nocache')
+      // Добавляем новый параметр для обхода кеша
+      url.searchParams.set('nocache', Date.now().toString())
+      return url.toString()
+    }
+
     const reloadPage = () => {
       if (reloadAttempted) return
       
@@ -104,6 +113,7 @@ export default function ChunkErrorHandler() {
       const lastReloadTime = getLastReloadTime()
       const timeSinceLastReload = Date.now() - lastReloadTime
       const SESSION_TIMEOUT = 60000 // 1 минута - если прошло больше, считаем новую сессию
+      const MIN_RELOAD_INTERVAL = 2000 // Минимум 2 секунды между попытками
 
       // Если прошло больше минуты с последней попытки, сбрасываем счетчик (новая сессия)
       const isNewSession = timeSinceLastReload > SESSION_TIMEOUT || timeSinceLastReload === 0
@@ -126,26 +136,40 @@ export default function ChunkErrorHandler() {
         return
       }
 
-      // Первая попытка всегда выполняется немедленно (reloadCount === 0 или новая сессия)
+      // Если прошло меньше MIN_RELOAD_INTERVAL с последней попытки, ждем
+      // Это предотвращает множественные быстрые перезагрузки
+      if (timeSinceLastReload > 0 && timeSinceLastReload < MIN_RELOAD_INTERVAL) {
+        const waitTime = MIN_RELOAD_INTERVAL - timeSinceLastReload
+        console.warn(`[ChunkErrorHandler] Too soon after last reload. Waiting ${Math.ceil(waitTime / 1000)}s...`)
+        setTimeout(() => {
+          reloadAttempted = false
+          reloadPage()
+        }, waitTime)
+        return
+      }
+
+      // Первая попытка или если прошло достаточно времени - перезагружаем немедленно
       const isFirstAttempt = currentCount === 0
+      const shouldReloadImmediately = isFirstAttempt || timeSinceLastReload >= MIN_RELOAD_INTERVAL
       
-      if (isFirstAttempt) {
+      if (shouldReloadImmediately) {
         reloadAttempted = true
         incrementReloadCount()
-        console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt 1/${MAX_RELOAD_ATTEMPTS}), clearing cache and reloading...`)
+        const attemptNumber = currentCount + 1
+        console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt ${attemptNumber}/${MAX_RELOAD_ATTEMPTS}), clearing cache and reloading...`)
         
         // Очищаем кеш и перезагружаем немедленно
         clearAllCaches().then(() => {
-          // Используем location.href для принудительной перезагрузки без кеша
-          window.location.href = window.location.href.split('#')[0] + '?nocache=' + Date.now()
+          // Используем replace вместо href, чтобы не накапливать историю
+          window.location.replace(getCleanUrl())
         }).catch(() => {
           // Если очистка кеша не удалась, все равно перезагружаем
-          window.location.href = window.location.href.split('#')[0] + '?nocache=' + Date.now()
+          window.location.replace(getCleanUrl())
         })
         return
       }
 
-      // Для последующих попыток проверяем cooldown
+      // Для остальных случаев проверяем cooldown
       if (timeSinceLastReload < RELOAD_COOLDOWN) {
         const waitTime = RELOAD_COOLDOWN - timeSinceLastReload
         console.warn(`[ChunkErrorHandler] Reload cooldown active. Waiting ${Math.ceil(waitTime / 1000)}s...`)
@@ -163,9 +187,9 @@ export default function ChunkErrorHandler() {
       
       // Очищаем кеш и перезагружаем
       clearAllCaches().then(() => {
-        window.location.href = window.location.href.split('#')[0] + '?nocache=' + Date.now()
+        window.location.replace(getCleanUrl())
       }).catch(() => {
-        window.location.href = window.location.href.split('#')[0] + '?nocache=' + Date.now()
+        window.location.replace(getCleanUrl())
       })
     }
 
