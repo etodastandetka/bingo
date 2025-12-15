@@ -12,14 +12,25 @@ NC='\033[0m'
 
 echo -e "${GREEN}🔄 Обновление Admin Panel...${NC}"
 
-PROJECT_DIR="$HOME/projects/bingo_bot"
-if [ ! -d "$PROJECT_DIR" ]; then
-    PROJECT_DIR="/var/www/bingo_bot"
-fi
+# Определяем директорию проекта
+# Сначала проверяем, где находится скрипт, и работаем относительно него
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_DIR="$SCRIPT_DIR"
 
-if [ ! -d "$PROJECT_DIR" ]; then
-    echo -e "${RED}❌ Проект не найден!${NC}"
-    exit 1
+# Если скрипт в корне проекта, используем его
+if [ -d "$PROJECT_DIR/admin" ]; then
+    echo -e "${GREEN}✓ Проект найден: $PROJECT_DIR${NC}"
+else
+    # Пробуем стандартные пути
+    if [ -d "/var/www/bingo_bot/admin" ]; then
+        PROJECT_DIR="/var/www/bingo_bot"
+    elif [ -d "$HOME/projects/bingo_bot/admin" ]; then
+        PROJECT_DIR="$HOME/projects/bingo_bot"
+    else
+        echo -e "${RED}❌ Проект не найден!${NC}"
+        echo "Проверьте, что скрипт находится в корне проекта bingo_bot"
+        exit 1
+    fi
 fi
 
 cd "$PROJECT_DIR/admin"
