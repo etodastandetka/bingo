@@ -47,6 +47,16 @@ export default function ChunkErrorHandler() {
     }
 
     // Очищаем счетчик при успешной загрузке страницы (через 2 секунды)
+    // Также проверяем, не устарел ли счетчик (если прошло больше минуты)
+    const lastReloadTime = getLastReloadTime()
+    const timeSinceLastReload = Date.now() - lastReloadTime
+    const SESSION_TIMEOUT = 60000 // 1 минута
+    
+    if (timeSinceLastReload > SESSION_TIMEOUT || timeSinceLastReload === 0) {
+      // Если прошло больше минуты или это первая загрузка, очищаем счетчик
+      clearReloadCount()
+    }
+    
     setTimeout(() => {
       clearReloadCount()
     }, 2000)
@@ -64,7 +74,6 @@ export default function ChunkErrorHandler() {
       // Если прошло больше минуты с последней попытки, сбрасываем счетчик (новая сессия)
       if (timeSinceLastReload > SESSION_TIMEOUT && reloadCount > 0) {
         clearReloadCount()
-        const resetCount = 0
         console.warn('[ChunkErrorHandler] Session timeout, resetting reload count')
         
         reloadAttempted = true
@@ -94,8 +103,10 @@ export default function ChunkErrorHandler() {
         return
       }
 
-      // Первая попытка всегда выполняется немедленно
-      if (reloadCount === 0) {
+      // Первая попытка всегда выполняется немедленно (reloadCount === 0 или прошло больше минуты)
+      const isFirstAttempt = reloadCount === 0 || (timeSinceLastReload > SESSION_TIMEOUT)
+      
+      if (isFirstAttempt) {
         reloadAttempted = true
         incrementReloadCount()
         console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt 1/${MAX_RELOAD_ATTEMPTS}), reloading page in 100ms...`)

@@ -63,6 +63,16 @@ export default function RootLayout({
                 }
                 
                 // Очищаем счетчик при успешной загрузке страницы (через 2 секунды)
+                // Также проверяем, не устарел ли счетчик (если прошло больше минуты)
+                var lastReloadTime = getLastReloadTime();
+                var timeSinceLastReload = Date.now() - lastReloadTime;
+                var SESSION_TIMEOUT = 60000; // 1 минута
+                
+                if (timeSinceLastReload > SESSION_TIMEOUT || timeSinceLastReload === 0) {
+                  // Если прошло больше минуты или это первая загрузка, очищаем счетчик
+                  clearReloadCount();
+                }
+                
                 setTimeout(function() {
                   clearReloadCount();
                 }, 2000);
@@ -112,8 +122,10 @@ export default function RootLayout({
                     return;
                   }
                   
-                  // Первая попытка всегда выполняется немедленно
-                  if (reloadCount === 0) {
+                  // Первая попытка всегда выполняется немедленно (reloadCount === 0 или прошло больше минуты)
+                  var isFirstAttempt = reloadCount === 0 || (timeSinceLastReload > SESSION_TIMEOUT);
+                  
+                  if (isFirstAttempt) {
                     reloadAttempted = true;
                     incrementReloadCount();
                     console.warn('[ChunkErrorHandler] Chunk load error detected (attempt 1/' + MAX_RELOAD_ATTEMPTS + '), reloading page in 100ms...');
