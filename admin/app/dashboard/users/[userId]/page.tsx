@@ -54,6 +54,7 @@ export default function UserDetailPage() {
   const [user, setUser] = useState<UserDetail | null>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string>('')
   const [isEditingNote, setIsEditingNote] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
@@ -70,17 +71,23 @@ export default function UserDetailPage() {
 
   const fetchUser = async () => {
     try {
+      setError(null)
       const [userRes, photoRes] = await Promise.all([
         fetch(`/api/users/${params.userId}`),
         fetch(`/api/users/${params.userId}/profile-photo`)
       ])
 
       if (!userRes.ok) {
+        if (userRes.status === 404) {
+          setError('Пользователь не найден')
+          setUser(null)
+          return
+        }
         throw new Error(`HTTP error! status: ${userRes.status}`)
       }
 
-      const userData = await userRes.json()
-      const photoData = await photoRes.json()
+      const userData = await userRes.json().catch(() => ({ success: false, error: 'Ошибка парсинга ответа' }))
+      const photoData = await photoRes.json().catch(() => ({ success: false }))
 
       if (userData.success && userData.data) {
         // Убеждаемся, что transactions всегда массив
@@ -91,15 +98,18 @@ export default function UserDetailPage() {
         setUser(user)
         setIsActive(user.isActive !== undefined ? user.isActive : true)
       } else {
-        console.error('Failed to fetch user:', userData.error || 'Unknown error')
+        const errorMsg = userData.error || 'Не удалось загрузить данные пользователя'
+        setError(errorMsg)
+        console.error('Failed to fetch user:', errorMsg)
       }
 
       if (photoData.success && photoData.data?.photoUrl) {
         setPhotoUrl(photoData.data.photoUrl)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch user:', error)
-      // Не устанавливаем user в null, чтобы показать сообщение об ошибке
+      setError(error?.message || 'Ошибка при загрузке данных пользователя')
+      setUser(null)
     } finally {
       setLoading(false)
     }
@@ -107,7 +117,14 @@ export default function UserDetailPage() {
 
   const handleToggleActive = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.checked
+    const oldValue = isActive
     setUpdatingActive(true)
+    
+    // Оптимистично обновляем UI
+    setIsActive(newValue)
+    if (user) {
+      setUser({ ...user, isActive: newValue })
+    }
     
     try {
       const response = await fetch(`/api/users/${params.userId}`, {
@@ -118,24 +135,28 @@ export default function UserDetailPage() {
         body: JSON.stringify({ isActive: newValue }),
       })
 
-      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
 
-      if (data.success) {
-        setIsActive(newValue)
-        // Обновляем данные пользователя
-        if (user) {
-          setUser({ ...user, isActive: newValue })
-        }
-      } else {
+      const data = await response.json().catch(() => ({ success: false, error: 'Ошибка парсинга ответа' }))
+
+      if (!data.success) {
         // Если ошибка, возвращаем переключатель в исходное состояние
-        setIsActive(!newValue)
+        setIsActive(oldValue)
+        if (user) {
+          setUser({ ...user, isActive: oldValue })
+        }
         alert(data.error || 'Не удалось обновить статус пользователя')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update user active status:', error)
       // Возвращаем переключатель в исходное состояние
-      setIsActive(!newValue)
-      alert('Ошибка при обновлении статуса пользователя')
+      setIsActive(oldValue)
+      if (user) {
+        setUser({ ...user, isActive: oldValue })
+      }
+      alert(error?.message || 'Ошибка при обновлении статуса пользователя')
     } finally {
       setUpdatingActive(false)
     }
@@ -144,9 +165,13 @@ export default function UserDetailPage() {
   const fetchNote = async () => {
     try {
       const response = await fetch(`/api/users/${params.userId}/note`)
-      const data = await response.json()
+      if (!response.ok) {
+        console.warn('Failed to fetch note:', response.status)
+        return
+      }
+      const data = await response.json().catch(() => ({ success: false }))
       if (data.success) {
-        setNote(data.data.note || '')
+        setNote(data.data?.note || '')
       }
     } catch (error) {
       console.error('Failed to fetch note:', error)
@@ -161,16 +186,21 @@ export default function UserDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: note }),
       })
-      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json().catch(() => ({ success: false, error: 'Ошибка парсинга ответа' }))
       if (data.success) {
         setIsEditingNote(false)
         alert('Заметка сохранена')
       } else {
-        alert('Ошибка при сохранении заметки')
+        alert(data.error || 'Ошибка при сохранении заметки')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save note:', error)
-      alert('Ошибка при сохранении заметки')
+      alert(error?.message || 'Ошибка при сохранении заметки')
     } finally {
       setSavingNote(false)
     }
@@ -322,9 +352,19 @@ export default function UserDetailPage() {
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     // Если изображение не загрузилось, заменяем на дефолтное
     const target = e.target as HTMLImageElement
-    if (target.src !== '/images/mbank.png') {
-      target.src = '/images/mbank.png'
+    try {
+      if (target.src && !target.src.includes('/images/mbank.png')) {
+        target.src = '/images/mbank.png'
+        target.onerror = null // Предотвращаем бесконечный цикл
+      }
+    } catch (err) {
+      console.warn('Error handling image error:', err)
     }
+  }
+
+  const handleProfilePhotoError = () => {
+    // Если фото профиля не загрузилось, просто скрываем его
+    setPhotoUrl(null)
   }
 
   if (loading) {
@@ -335,29 +375,54 @@ export default function UserDetailPage() {
     )
   }
 
-  if (!user) {
+  if (!user && !loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-white text-lg font-medium">Пользователь не найден</p>
-        <button
-          onClick={() => router.back()}
-          className="mt-4 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
-        >
-          Назад
-        </button>
+      <div className="flex flex-col items-center justify-center py-20 px-4">
+        <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 max-w-md w-full text-center">
+          <svg className="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-white text-lg font-medium mb-2">
+            {error || 'Пользователь не найден'}
+          </p>
+          <div className="flex gap-3 justify-center mt-6">
+            <button
+              onClick={() => router.back()}
+              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Назад
+            </button>
+            <button
+              onClick={() => {
+                setLoading(true)
+                setError(null)
+                fetchUser()
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Повторить
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
 
-  const displayName = user.firstName || user.username || `ID: ${user.userId}`
-  const displayUsername = user.username ? `@${user.username}` : null
+  const displayName = user?.firstName || user?.username || `ID: ${user?.userId || params.userId}`
+  const displayUsername = user?.username ? `@${user.username}` : null
   
   // Статистика по пополнениям и выводам
-  const transactions = user.transactions || []
+  const transactions = user?.transactions || []
   const deposits = transactions.filter(t => t.transType === 'deposit')
   const withdrawals = transactions.filter(t => t.transType === 'withdraw')
-  const totalDeposits = deposits.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0)
-  const totalWithdrawals = withdrawals.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0)
+  const totalDeposits = deposits.reduce((sum, t) => {
+    const amount = parseFloat(t.amount || '0')
+    return isNaN(amount) ? sum : sum + amount
+  }, 0)
+  const totalWithdrawals = withdrawals.reduce((sum, t) => {
+    const amount = parseFloat(t.amount || '0')
+    return isNaN(amount) ? sum : sum + amount
+  }, 0)
 
   return (
     <div className="py-4">
@@ -392,6 +457,8 @@ export default function UserDetailPage() {
               src={photoUrl}
               alt={displayName}
               className="w-16 h-16 rounded-full object-cover border-2 border-blue-500"
+              onError={handleProfilePhotoError}
+              loading="lazy"
             />
           ) : (
             <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center border-2 border-blue-500">
