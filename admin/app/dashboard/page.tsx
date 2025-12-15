@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -66,6 +67,9 @@ export default function DashboardPage() {
       window.removeEventListener('focus', handleFocus)
       window.removeEventListener('storage', handleStorageChange)
     }
+    // Мы намеренно не добавляем fetchRequests в зависимости,
+    // чтобы не пересоздавать интервал и обработчики на каждый ререндер
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]) // Убрали isFetching из зависимостей
 
   const fetchRequests = async (showLoading = true) => {
@@ -195,38 +199,47 @@ export default function DashboardPage() {
     // Дефолтная иконка банка, если банк не указан
     const defaultBank = '/images/mbank.png'
     
-    if (!bank) return defaultBank
+    if (!bank || bank.trim() === '') return defaultBank
     
-    const normalized = bank.toLowerCase()
+    const normalized = bank.toLowerCase().trim()
     
-    // Маппинг банков на изображения
-    if (normalized.includes('demirbank') || normalized.includes('demir')) {
-      return '/images/demirbank.jpg'
-    }
-    if (normalized.includes('omoney') || normalized.includes('o!money')) {
-      return '/images/omoney.jpg'
-    }
-    if (normalized.includes('balance')) {
-      return '/images/balance.jpg'
-    }
-    if (normalized.includes('bakai')) {
-      return '/images/bakai.jpg'
-    }
-    if (normalized.includes('megapay')) {
-      return '/images/megapay.jpg'
-    }
-    if (normalized.includes('mbank')) {
+    // Маппинг банков на изображения (проверяем ID банков и различные варианты написания)
+    // Сначала проверяем точные совпадения с ID банков
+    if (normalized === 'mbank' || normalized === 'm-bank' || normalized.includes('mbank')) {
       return '/images/mbank.png'
     }
-    if (normalized.includes('optima')) {
+    if (normalized === 'omoney' || normalized === 'o!money' || normalized.includes('omoney') || normalized.includes('о деньги') || normalized.includes('o!money')) {
+      return '/images/omoney.jpg'
+    }
+    if (normalized === 'demirbank' || normalized === 'demir' || normalized.includes('demirbank') || normalized.includes('demir')) {
+      return '/images/demirbank.jpg'
+    }
+    if (normalized === 'balance' || normalized === 'balance.kg' || normalized.includes('balance')) {
+      return '/images/balance.jpg'
+    }
+    if (normalized === 'bakai' || normalized.includes('bakai')) {
+      return '/images/bakai.jpg'
+    }
+    if (normalized === 'megapay' || normalized.includes('megapay')) {
+      return '/images/megapay.jpg'
+    }
+    if (normalized === 'optima' || normalized.includes('optima') || normalized.includes('оптима')) {
       return '/images/optima.jpg'
     }
-    if (normalized.includes('companion')) {
+    if (normalized === 'companion' || normalized === 'kompanion' || normalized.includes('companion') || normalized.includes('компаньон')) {
       return '/images/companion.png'
     }
     
     // Если банк указан, но не распознан - возвращаем дефолтную иконку
     return defaultBank
+  }
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    // Если изображение не загрузилось, заменяем на дефолтное
+    const target = e.target as HTMLImageElement
+    if (target.src !== '/images/mbank.png') {
+      target.src = '/images/mbank.png'
+    }
   }
 
     const getTransactionType = (request: Request) => {
@@ -358,6 +371,8 @@ export default function DashboardPage() {
                           src={getBankImage(request.bank)}
                           alt={request.bank || 'Bank'}
                           className="w-full h-full object-cover"
+                          onError={handleImageError}
+                          loading="lazy"
                         />
                       </div>
 

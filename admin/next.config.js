@@ -9,9 +9,6 @@ const nextConfig = {
   compress: true, // Включить gzip сжатие
   poweredByHeader: false, // Убрать заголовок X-Powered-By для безопасности
   
-  // Убеждаемся, что статические файлы правильно обрабатываются
-  // В standalone режиме Next.js автоматически копирует public/ в .next/standalone/public/
-  
   // Оптимизация изображений
   images: {
     formats: ['image/avif', 'image/webp'],

@@ -73,9 +73,9 @@ const CASHDESK_CONFIG: Record<string, CashdeskConfig> = {
 }
 
 const MOSTBET_CONFIG: MostbetConfig = {
-  api_key: process.env.MOSTBET_API_KEY || 'api-key:1b896249-f0dc-45ff-826e-4175c72d1e0e',
-  secret: process.env.MOSTBET_SECRET || '73353b6b-868e-4561-9128-dce1c91bd24e',
-  cashpoint_id: parseInt(process.env.MOSTBET_CASHPOINT_ID || '92905'),
+  api_key: process.env.MOSTBET_API_KEY || 'api-key:3d83ac24-7fd2-498d-84b4-f2a7e80401fb',
+  secret: process.env.MOSTBET_SECRET || 'baa104d1-73a6-4914-866a-ddbbe0aae11a',
+  cashpoint_id: parseInt(process.env.MOSTBET_CASHPOINT_ID || '48436'),
   x_project: process.env.MOSTBET_X_PROJECT || 'MBC',
   brand_id: parseInt(process.env.MOSTBET_BRAND_ID || '1'),
 }
@@ -148,13 +148,6 @@ async function getCashdeskBalance(
 async function getMostbetBalance(cfg: MostbetConfig): Promise<BalanceResult> {
   try {
     const crypto = require('crypto')
-    // Пытаемся использовать библиотеку js-sha3 для SHA3-256, если Node.js не поддерживает
-    let jsSha3: any = null
-    try {
-      jsSha3 = require('js-sha3')
-    } catch (e) {
-      // Библиотека не установлена, попробуем использовать встроенный crypto
-    }
 
     // Получаем timestamp в формате 'YYYY-MM-DD HH:MM:SS'
     const now = new Date()
@@ -178,63 +171,19 @@ async function getMostbetBalance(cfg: MostbetConfig): Promise<BalanceResult> {
     // Для GET запроса REQUEST_BODY пустой
     const signString = `${apiKeyFormatted}${path}${timestamp}`
     
-    // Пытаемся использовать SHA3-256, если не поддерживается - используем библиотеку sha3
+    // Пытаемся использовать SHA3-256, если не поддерживается - используем SHA256
     let signature: string
-    let usedSha3 = false
     try {
-      // Сначала пробуем встроенный crypto (Node.js 16+)
       signature = crypto
         .createHmac('sha3-256', cfg.secret)
         .update(signString)
         .digest('hex')
-      usedSha3 = true
-      console.log(`[Mostbet Balance] Using SHA3-256 via crypto.createHmac`)
-    } catch (e: any) {
-      // Если встроенный не поддерживается, пробуем библиотеку js-sha3 для HMAC SHA3-256
-      if (jsSha3) {
-        try {
-          // Реализуем HMAC SHA3-256 вручную
-          // HMAC(key, message) = H(K XOR opad || H(K XOR ipad || message))
-          const blockSize = 136 // для SHA3-256 block size = 136 bytes
-          const key = Buffer.from(cfg.secret, 'utf8')
-          let keyBuffer = key
-          if (key.length > blockSize) {
-            keyBuffer = Buffer.from(jsSha3.sha3_256.array(key), 'hex')
-          }
-          if (keyBuffer.length < blockSize) {
-            keyBuffer = Buffer.concat([keyBuffer, Buffer.alloc(blockSize - keyBuffer.length, 0)])
-          }
-          
-          const ipad = Buffer.alloc(blockSize, 0x36)
-          const opad = Buffer.alloc(blockSize, 0x5c)
-          
-          const iKeyPad = Buffer.from(keyBuffer.map((b, i) => b ^ ipad[i]))
-          const oKeyPad = Buffer.from(keyBuffer.map((b, i) => b ^ opad[i]))
-          
-          const innerHash = jsSha3.sha3_256.array(Buffer.concat([iKeyPad, Buffer.from(signString, 'utf8')]))
-          const outerHash = jsSha3.sha3_256.array(Buffer.concat([oKeyPad, Buffer.from(innerHash)]))
-          signature = Buffer.from(outerHash).toString('hex')
-          usedSha3 = true
-          console.log(`[Mostbet Balance] Using SHA3-256 via js-sha3 library`)
-        } catch (sha3Error: any) {
-          console.error(`[Mostbet Balance] SHA3 library error: ${sha3Error.message}`)
-          // Fallback на SHA256 (НЕ БУДЕТ РАБОТАТЬ!)
-          console.warn(`[Mostbet Balance] SHA3-256 not available, using SHA256 - THIS WILL CAUSE 401 ERROR!`)
-          signature = crypto
-            .createHmac('sha256', cfg.secret)
-            .update(signString)
-            .digest('hex')
-          usedSha3 = false
-        }
-      } else {
-        // Fallback на SHA256 (НЕ БУДЕТ РАБОТАТЬ!)
-        console.warn(`[Mostbet Balance] SHA3-256 not supported (${e.message}), js-sha3 library not available, using SHA256 - THIS WILL CAUSE 401 ERROR!`)
-        signature = crypto
-          .createHmac('sha256', cfg.secret)
-          .update(signString)
-          .digest('hex')
-        usedSha3 = false
-      }
+    } catch (e) {
+      // Fallback на SHA256
+      signature = crypto
+        .createHmac('sha256', cfg.secret)
+        .update(signString)
+        .digest('hex')
     }
 
     const headers = {
@@ -245,36 +194,16 @@ async function getMostbetBalance(cfg: MostbetConfig): Promise<BalanceResult> {
       'Accept': '*/*',
     }
 
-    console.log(`[Mostbet Balance] URL: ${url}`)
-    console.log(`[Mostbet Balance] Full signature string:`, signString)
-    console.log(`[Mostbet Balance] Signature algorithm: ${usedSha3 ? 'SHA3-256' : 'SHA256 (FALLBACK - WILL FAIL!)'}`)
-    console.log(`[Mostbet Balance] Headers:`, {
-      'X-Api-Key': apiKeyFormatted.substring(0, 20) + '...',
-      'X-Timestamp': timestamp,
-      'X-Signature': signature.substring(0, 20) + '...',
-    })
-
     const response = await fetch(url, { headers, method: 'GET' })
-
-    console.log(`[Mostbet Balance] Response status: ${response.status}`)
 
     if (response.ok) {
       const data = await response.json()
-      console.log(`[Mostbet Balance] Response data:`, data)
       if (data && typeof data.balance !== 'undefined') {
-        const balance = parseFloat(String(data.balance)) || 0
-        const limit = balance // Лимит равен балансу
-        console.log(`[Mostbet Balance] Parsed balance: ${balance}, limit: ${limit}`)
         return {
-          balance: balance,
-          limit: limit,
+          balance: parseFloat(data.balance) || 0,
+          limit: parseFloat(data.balance) || 0, // Лимит равен балансу
         }
-      } else {
-        console.warn(`[Mostbet Balance] Response missing balance field:`, data)
       }
-    } else {
-      const errorText = await response.text()
-      console.error(`[Mostbet Balance] Error response (${response.status}):`, errorText)
     }
   } catch (error) {
     console.error('Error getting Mostbet balance:', error)
@@ -336,51 +265,12 @@ export async function getPlatformLimits(): Promise<
       limits.push({ key: '1win', name: '1WIN', limit: 0 })
     }
 
-    // Mostbet - загружаем конфигурацию из БД
-    try {
-      const { getCasinoConfig } = await import('./casino-config')
-      console.log(`[Mostbet Limits] Loading config from DB...`)
-      const mostbetConfigFromDB = await getCasinoConfig('mostbet')
-      
-      // Type guard для проверки что это конфигурация Mostbet
-      const isMostbetConfig = (config: any): config is { api_key: string; secret: string; cashpoint_id: string; x_project?: string; brand_id?: number } => {
-        return config && 
-               typeof config === 'object' && 
-               'api_key' in config && 
-               'secret' in config && 
-               'cashpoint_id' in config &&
-               typeof config.api_key === 'string' &&
-               typeof config.secret === 'string' &&
-               (typeof config.cashpoint_id === 'string' || typeof config.cashpoint_id === 'number')
-      }
-      
-      if (isMostbetConfig(mostbetConfigFromDB) && mostbetConfigFromDB.api_key && mostbetConfigFromDB.secret && mostbetConfigFromDB.cashpoint_id) {
-        const mostbetCfg: MostbetConfig = {
-          api_key: String(mostbetConfigFromDB.api_key),
-          secret: String(mostbetConfigFromDB.secret),
-          cashpoint_id: parseInt(String(mostbetConfigFromDB.cashpoint_id)),
-          x_project: String(mostbetConfigFromDB.x_project || 'MBC'),
-          brand_id: parseInt(String(mostbetConfigFromDB.brand_id || 1)),
-        }
-        console.log(`[Mostbet Limits] ✅ Using config from DB: cashpoint_id=${mostbetCfg.cashpoint_id}, api_key=${mostbetCfg.api_key.substring(0, 25)}...`)
-        const mostbetBal = await getMostbetBalance(mostbetCfg)
-        console.log(`[Mostbet Limits] Balance: ${mostbetBal.balance}, Limit: ${mostbetBal.limit}`)
-        limits.push({ key: 'mostbet', name: 'Mostbet', limit: mostbetBal.limit })
-      } else {
-        // Fallback на переменные окружения или дефолтные значения
-        console.warn(`[Mostbet Limits] ⚠️ Config from DB incomplete, using fallback values`)
-        const mostbetCfg = MOSTBET_CONFIG
-        console.log(`[Mostbet Limits] Using fallback config: api_key=${mostbetCfg.api_key.substring(0, 25)}..., cashpoint_id=${mostbetCfg.cashpoint_id}`)
-        if (mostbetCfg.cashpoint_id > 0) {
-          const mostbetBal = await getMostbetBalance(mostbetCfg)
-          limits.push({ key: 'mostbet', name: 'Mostbet', limit: mostbetBal.limit })
-        } else {
-          limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
-        }
-      }
-    } catch (error: any) {
-      console.error('❌ Error loading Mostbet config for limits:', error.message || error)
-      console.error('Error stack:', error.stack)
+    // Mostbet
+    const mostbetCfg = MOSTBET_CONFIG
+    if (mostbetCfg.cashpoint_id > 0) {
+      const mostbetBal = await getMostbetBalance(mostbetCfg)
+      limits.push({ key: 'mostbet', name: 'Mostbet', limit: mostbetBal.limit })
+    } else {
       limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
     }
 

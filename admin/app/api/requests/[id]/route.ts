@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, createApiResponse } from '@/lib/api-helpers'
-import { sendNotificationToUser, formatDepositMessage, formatWithdrawMessage, formatRejectMessage, getAdminUsername, editNotificationMessage } from '@/lib/send-notification'
+import { sendNotificationToUser, formatDepositMessage, formatWithdrawMessage, formatRejectMessage, getAdminUsername } from '@/lib/send-notification'
 
 // Отключаем кеширование для актуальных данных
 export const dynamic = 'force-dynamic'
@@ -192,7 +192,7 @@ export async function PATCH(
         // Получаем username админа
         const adminUsername = await getAdminUsername()
 
-        let notificationMessage: string | null = ''
+        let notificationMessage = ''
 
         if (['completed', 'approved', 'auto_completed', 'autodeposit_success'].includes(body.status)) {
           // Успешное пополнение или вывод
@@ -205,29 +205,6 @@ export async function PATCH(
           } else {
             notificationMessage = formatWithdrawMessage(amount, casino, accountId, adminUsername, lang)
           }
-          
-          // Если есть сохраненное message_id, редактируем сообщение вместо отправки нового
-          if (currentRequest.notificationMessageId) {
-            try {
-              const { editNotificationMessage } = await import('@/lib/send-notification')
-              const editResult = await editNotificationMessage(
-                currentRequest.userId,
-                currentRequest.notificationMessageId,
-                notificationMessage
-              )
-              if (editResult.success) {
-                console.log(`✅ Notification message edited for request ${currentRequest.id}`)
-                notificationMessage = null // Не отправляем новое сообщение
-              } else {
-                console.warn(`⚠️ Failed to edit notification, will send new message: ${editResult.error}`)
-                // Если редактирование не удалось, отправляем новое сообщение
-              }
-            } catch (editError) {
-              console.error('Error editing notification:', editError)
-              // Если редактирование не удалось, отправляем новое сообщение
-            }
-          }
-          
           // Сообщение в оператор-боте
           sendOperatorMessage(
             updatedRequest.userId,

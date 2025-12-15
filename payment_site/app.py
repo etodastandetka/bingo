@@ -106,22 +106,20 @@ def generate_qr_image(qr_hash, unique_id=None):
     except:
         bg_font = ImageFont.load_default()
     
-    # Рисуем повторяющийся текст "BINGO KG" по всей площади (фон - светло-серый водяной знак)
+    # Рисуем повторяющийся текст "BINGO KG" по всей площади (фон - как на изображении)
     watermark_text = "BINGO KG"
     spacing = int(width * 0.18)
-    # Светло-серый цвет для водяных знаков (более светлый, чтобы не мешать QR коду)
-    watermark_color = (200, 200, 200, 40)  # Светло-серый с низкой прозрачностью
     for i in range(-spacing, width + spacing, spacing):
         for j in range(-spacing, height + spacing, spacing):
-            # Горизонтально
-            draw.text((i, j), watermark_text, font=bg_font, fill=watermark_color)
+            # Горизонтально (более заметный)
+            draw.text((i, j), watermark_text, font=bg_font, fill=(180, 180, 180, 60))
             # Диагонально (смещение)
-            draw.text((i + spacing//2, j + spacing//2), watermark_text, font=bg_font, fill=(200, 200, 200, 35))
+            draw.text((i + spacing//2, j + spacing//2), watermark_text, font=bg_font, fill=(180, 180, 180, 55))
     
-    # Добавляем диагональный текст поверх QR кода (на 2 строки, увеличенный размер)
+    # Добавляем диагональный текст водяного знака поверх QR кода (как на изображении)
     try:
-        # Размер шрифта для диагонального текста (увеличен для лучшей видимости)
-        font_size = int(width * 0.075)  # Увеличено с 0.055 до 0.075
+        # Размер шрифта для диагонального текста (немного уменьшен)
+        font_size = int(width * 0.095)
         try:
             # Пытаемся использовать жирный шрифт
             font = ImageFont.truetype("arialbd.ttf", font_size)  # Bold Arial
@@ -136,63 +134,34 @@ def generate_qr_image(qr_hash, unique_id=None):
     except:
         font = ImageFont.load_default()
     
-    # Текст на 2 строки
-    text_line1 = "ПОПОЛНЕНИЕ"
-    text_line2 = "ОНЛАЙН КАЗИНО"
+    # Основной текст (как на изображении)
+    text = "ПОПОЛНЕНИЕ ДЛЯ КАЗИНО"
     
-    # Получаем размеры текста для обеих строк
+    # Получаем размеры текста
     try:
-        bbox1 = draw.textbbox((0, 0), text_line1, font=font)
-        bbox2 = draw.textbbox((0, 0), text_line2, font=font)
-        text_width1 = bbox1[2] - bbox1[0]
-        text_width2 = bbox2[2] - bbox2[0]
-        text_height = bbox1[3] - bbox1[1]
-        max_text_width = max(text_width1, text_width2)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
     except:
         # Fallback для старых версий PIL
-        text_width1 = len(text_line1) * font_size * 0.6
-        text_width2 = len(text_line2) * font_size * 0.6
+        text_width = len(text) * font_size * 0.6
         text_height = font_size
-        max_text_width = max(text_width1, text_width2)
     
-    # Расстояние между строками
-    line_spacing = int(text_height * 0.4)
-    total_text_height = text_height * 2 + line_spacing
-    
-    # Вычисляем размеры текста для правильного центрирования
-    # Создаем временное изображение для измерения
-    temp_img = Image.new('RGBA', (int(max_text_width * 2), int(total_text_height * 2)), (255, 255, 255, 0))
-    temp_draw = ImageDraw.Draw(temp_img)
-    
-    # Получаем точные размеры текста
-    try:
-        bbox1 = temp_draw.textbbox((0, 0), text_line1, font=font)
-        bbox2 = temp_draw.textbbox((0, 0), text_line2, font=font)
-        text_width1 = bbox1[2] - bbox1[0]
-        text_width2 = bbox2[2] - bbox2[0]
-        actual_max_width = max(text_width1, text_width2)
-    except:
-        actual_max_width = max_text_width
-    
-    # Создаем временное изображение для поворота текста (достаточно большое для поворота)
-    # Размер должен быть достаточным для диагонального размещения
-    diagonal_size = int((actual_max_width + total_text_height) * 1.5)
-    text_img = Image.new('RGBA', (diagonal_size, diagonal_size), (255, 255, 255, 0))
+    # Создаем временное изображение для поворота текста
+    text_img = Image.new('RGBA', (int(text_width * 2.0), int(text_height * 2.0)), (255, 255, 255, 0))
     text_draw = ImageDraw.Draw(text_img)
     
-    # Позиционируем текст точно в центре временного изображения
-    x_offset = (diagonal_size - actual_max_width) // 2
-    y_offset1 = (diagonal_size - total_text_height) // 2
-    y_offset2 = y_offset1 + text_height + line_spacing
+    # Рисуем текст (просто красный, без белой обводки)
+    x_offset = int(text_width * 0.5)
+    y_offset = int(text_height * 0.5)
     
-    # Рисуем красный текст без обводки и без фона (более заметный красный)
-    text_draw.text((x_offset, y_offset1), text_line1, font=font, fill=(255, 0, 0, 220))  # Красный с хорошей видимостью
-    text_draw.text((x_offset, y_offset2), text_line2, font=font, fill=(255, 0, 0, 220))  # Красный с хорошей видимостью
+    # Основной текст (очень яркий красный, жирный, достаточно видимый, но не мешает сканированию)
+    text_draw.text((x_offset, y_offset), text, font=font, fill=(255, 0, 0, 200))  # Максимально яркий красный
     
     # Поворачиваем текст на -45 градусов
     text_img = text_img.rotate(-45, expand=True, fillcolor=(255, 255, 255, 0))
     
-    # Позиционируем повернутый текст точно в центре QR кода
+    # Позиционируем в центре QR кода
     text_x = (width - text_img.width) // 2
     text_y = (height - text_img.height) // 2
     

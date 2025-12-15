@@ -3,8 +3,8 @@ module.exports = {
     {
       name: 'bingo-admin',
       cwd: './admin',
-      script: 'node',
-      args: '.next/standalone/server.js',
+      script: 'npm',
+      args: 'start',
       env: {
         NODE_ENV: 'production',
         PORT: 3001
@@ -21,11 +21,11 @@ module.exports = {
     {
       name: 'bingo-bot',
       cwd: './telegram_bot',
-      script: './venv/bin/python3',
-      args: '-u bot.py',
+      script: 'bot.py',
+      interpreter: 'python3',
+      interpreter_args: '-u',
       env: {
-        PYTHONUNBUFFERED: '1',
-        PYTHONIOENCODING: 'utf-8'
+        PYTHONUNBUFFERED: '1'
       },
       error_file: './logs/bot-error.log',
       out_file: './logs/bot-out.log',
@@ -37,64 +37,12 @@ module.exports = {
       exec_mode: 'fork'
     },
     {
-      name: 'bingo-operator-bot',
-      cwd: './telegram_bot',
-      script: './venv/bin/python3',
-      args: '-u operator_bot.py',
-      env: {
-        PYTHONUNBUFFERED: '1',
-        PYTHONIOENCODING: 'utf-8'
-      },
-      error_file: './logs/operator-bot-error.log',
-      out_file: './logs/operator-bot-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      merge_logs: true,
-      autorestart: true,
-      max_memory_restart: '300M',
-      instances: 1,
-      exec_mode: 'fork'
-    },
-    {
-      name: 'bingo-bot-1xbet',
-      cwd: './telegram_bot_1xbet',
-      script: './venv/bin/python3',
-      args: '-u bot.py',
-      env: {
-        PYTHONUNBUFFERED: '1',
-        PYTHONIOENCODING: 'utf-8'
-      },
-      error_file: './logs/bot-1xbet-error.log',
-      out_file: './logs/bot-1xbet-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      merge_logs: true,
-      autorestart: true,
-      max_memory_restart: '300M',
-      instances: 1,
-      exec_mode: 'fork'
-    },
-    {
-      name: 'bingo-bot-mostbet',
-      cwd: './telegram_bot_mostbet',
-      script: './venv/bin/python3',
-      args: '-u bot.py',
-      env: {
-        PYTHONUNBUFFERED: '1',
-        PYTHONIOENCODING: 'utf-8'
-      },
-      error_file: './logs/bot-mostbet-error.log',
-      out_file: './logs/bot-mostbet-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      merge_logs: true,
-      autorestart: true,
-      max_memory_restart: '300M',
-      instances: 1,
-      exec_mode: 'fork'
-    },
-    {
       name: 'bingo-payment',
       cwd: './payment_site',
-      script: './venv/bin/python3',
-      args: '-m gunicorn -w 4 -b 0.0.0.0:3002 --timeout 120 --access-logfile - --error-logfile - app:app',
+      script: 'gunicorn',
+      interpreter: 'python3',
+      interpreter_args: '-u',
+      args: '-w 4 -b 0.0.0.0:3002 --timeout 120 --access-logfile - --error-logfile - app:app',
       env: {
         FLASK_ENV: 'production',
         PYTHONUNBUFFERED: '1',
@@ -106,25 +54,6 @@ module.exports = {
       merge_logs: true,
       autorestart: true,
       max_memory_restart: '500M',
-      instances: 1,
-      exec_mode: 'fork'
-    },
-    {
-      name: 'bingo-email-watcher',
-      cwd: './admin',
-      script: 'npm',
-      args: 'run start:email-watcher',
-      env: {
-        NODE_ENV: 'production',
-        API_BASE_URL: 'http://localhost:3001/api',
-        NEXT_PUBLIC_API_URL: 'http://localhost:3001'
-      },
-      error_file: './logs/email-watcher-error.log',
-      out_file: './logs/email-watcher-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      merge_logs: true,
-      autorestart: true,
-      max_memory_restart: '300M',
       instances: 1,
       exec_mode: 'fork'
     }

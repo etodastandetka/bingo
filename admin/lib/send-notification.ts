@@ -6,7 +6,7 @@ import { prisma } from './prisma'
 export async function sendNotificationToUser(
   userId: bigint,
   message: string
-): Promise<{ success: boolean; error?: string; messageId?: number }> {
+): Promise<{ success: boolean; error?: string }> {
   try {
     const botToken = process.env.BOT_TOKEN
 
@@ -36,8 +36,6 @@ export async function sendNotificationToUser(
       return { success: false, error: telegramData.description || 'Failed to send message' }
     }
 
-    const messageId = telegramData.result.message_id
-
     // Сохраняем сообщение в БД
     try {
       await prisma.chatMessage.create({
@@ -47,7 +45,7 @@ export async function sendNotificationToUser(
           messageType: 'text',
           direction: 'out',
           botType: 'main',
-          telegramMessageId: BigInt(messageId),
+          telegramMessageId: BigInt(telegramData.result.message_id),
         },
       })
     } catch (dbError) {
@@ -55,69 +53,9 @@ export async function sendNotificationToUser(
       console.warn('Failed to save notification to DB:', dbError)
     }
 
-    return { success: true, messageId }
-  } catch (error: any) {
-    console.error('Error sending notification:', error)
-    return { success: false, error: error.message || 'Unknown error' }
-  }
-}
-
-/**
- * Редактирование сообщения в Telegram
- */
-export async function editNotificationMessage(
-  userId: bigint,
-  messageId: bigint,
-  newMessage: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const botToken = process.env.BOT_TOKEN
-
-    if (!botToken) {
-      console.error('BOT_TOKEN not configured')
-      return { success: false, error: 'BOT_TOKEN not configured' }
-    }
-
-    const editMessageUrl = `https://api.telegram.org/bot${botToken}/editMessageText`
-    const telegramResponse = await fetch(editMessageUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chat_id: userId.toString(),
-        message_id: Number(messageId),
-        text: newMessage,
-        parse_mode: 'HTML',
-      })
-    })
-
-    const telegramData = await telegramResponse.json()
-
-    if (!telegramData.ok) {
-      console.error('Failed to edit notification:', telegramData.description)
-      return { success: false, error: telegramData.description || 'Failed to edit message' }
-    }
-
-    // Обновляем сообщение в БД
-    try {
-      await prisma.chatMessage.updateMany({
-        where: {
-          userId,
-          telegramMessageId: messageId,
-        },
-        data: {
-          messageText: newMessage,
-        },
-      })
-    } catch (dbError) {
-      // Игнорируем ошибки обновления в БД
-      console.warn('Failed to update notification in DB:', dbError)
-    }
-
     return { success: true }
   } catch (error: any) {
-    console.error('Error editing notification:', error)
+    console.error('Error sending notification:', error)
     return { success: false, error: error.message || 'Unknown error' }
   }
 }

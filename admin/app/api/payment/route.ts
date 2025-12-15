@@ -81,7 +81,9 @@ export async function POST(request: NextRequest) {
     // Определяем user_id (пробуем разные варианты)
     // Приоритет: telegram_user_id > userId > user_id > playerId
     const finalUserId = telegram_user_id || userId || user_id || playerId
-    const finalAccountId = account_id || user_id || userId || playerId
+    // ВАЖНО: account_id - это ID казино, НЕ Telegram ID!
+    // Не используем user_id/userId/playerId как fallback, так как это Telegram ID, а не ID казино
+    const finalAccountId = account_id ? String(account_id).trim() : null
 
     // Валидация типа - должен быть 'deposit' или 'withdraw'
     const validType = (type === 'deposit' || type === 'withdraw') ? type : 'deposit'
@@ -132,8 +134,30 @@ export async function POST(request: NextRequest) {
       return errorResponse
     }
 
-    // Проверяем, есть ли уже активная заявка у пользователя (pending или processing)
-    // которая была создана менее 5 минут назад
+    // Проверяем amount более строго - он не должен быть 0, null, undefined или пустой строкой
+    const amountStr = amount?.toString().trim() || ''
+    const amountNum = amountStr ? parseFloat(amountStr) : 0
+    
+    if (!amount || amount === null || amount === undefined || amount === '' || amountNum <= 0 || isNaN(amountNum)) {
+      console.error('❌ Payment API: Missing or invalid amount', { 
+        amount, 
+        amountStr, 
+        amountNum,
+        type: typeof amount 
+      })
+      const errorResponse = NextResponse.json(
+        createApiResponse(null, 'Missing or invalid amount: must be a positive number'),
+        { 
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
+      )
+      return errorResponse
+    }
+
+    // Преобразуем userId в BigInt (если это строка с числом)
     let userIdBigInt: bigint
     try {
       if (typeof finalUserId === 'string') {
@@ -154,72 +178,6 @@ export async function POST(request: NextRequest) {
       )
       return errorResponse
     }
-
-    // Проверяем активные заявки пользователя
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
-    const existingRequest = await prisma.request.findFirst({
-      where: {
-        userId: userIdBigInt,
-        requestType: 'deposit',
-        status: {
-          in: ['pending', 'processing']
-        },
-        createdAt: {
-          gte: fiveMinutesAgo
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    })
-
-    if (existingRequest) {
-      const timeElapsed = Date.now() - existingRequest.createdAt.getTime()
-      const timeRemaining = Math.max(0, 5 * 60 * 1000 - timeElapsed)
-      const minutesRemaining = Math.floor(timeRemaining / 60000)
-      const secondsRemaining = Math.floor((timeRemaining % 60000) / 1000)
-
-      let errorMessage = 'Заявка уже отправлена'
-      if (timeRemaining > 0) {
-        errorMessage = `Заявка уже отправлена. Ожидайте проверки. Осталось времени: ${minutesRemaining}:${String(secondsRemaining).padStart(2, '0')}`
-      } else {
-        errorMessage = 'Время на оплату истекло. Создайте новую заявку.'
-      }
-
-      console.log('⚠️ Payment API: Active request exists', {
-        requestId: existingRequest.id,
-        status: existingRequest.status,
-        createdAt: existingRequest.createdAt.toISOString(),
-        timeRemaining: `${minutesRemaining}:${String(secondsRemaining).padStart(2, '0')}`
-      })
-
-      const errorResponse = NextResponse.json(
-        createApiResponse(null, errorMessage),
-        { 
-          status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-          }
-        }
-      )
-      return errorResponse
-    }
-
-    if (!amount || amount === null || amount === undefined || amount === '') {
-      console.error('❌ Payment API: Missing or invalid amount', { amount })
-      const errorResponse = NextResponse.json(
-        createApiResponse(null, 'Missing or invalid amount'),
-        { 
-          status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-          }
-        }
-      )
-      return errorResponse
-    }
-
-    // userIdBigInt уже определен выше при проверке существующей заявки
 
     // Проверка блокировки пользователя по userId (Telegram ID)
     const user = await prisma.botUser.findUnique({
@@ -323,21 +281,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Преобразуем amount в Decimal (Prisma требует Decimal для этого поля)
-    // Убеждаемся, что amount это число
-    const amountNum = typeof amount === 'number' ? amount : parseFloat(amount?.toString() || '0')
-    if (!amountNum || amountNum <= 0 || isNaN(amountNum)) {
-      console.error('❌ Payment API: Invalid amount', { amount, amountNum })
-      const errorResponse = NextResponse.json(
-        createApiResponse(null, 'Invalid amount: must be a positive number'),
-        { 
-          status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-          }
-        }
-      )
-      return errorResponse
-    }
+    // amountNum уже проверен выше, используем его
     const amountDecimal = new Prisma.Decimal(amountNum)
 
     // Обрабатываем фото чека
@@ -390,27 +334,6 @@ export async function POST(request: NextRequest) {
           photoFileUrl: processedPhoto, // Сохраняем base64 фото чека (с префиксом data:image если нужно)
         },
       })
-
-      // Отправляем сообщение пользователю о том, что заявка в проверке
-      if (validType === 'deposit') {
-        try {
-          const { sendNotificationToUser } = await import('@/lib/send-notification')
-          const notificationMessage = '⏳ Ожидайте, ваша заявка в проверке. Бам подтвердили или отклонили.'
-          
-          const notificationResult = await sendNotificationToUser(userIdBigInt, notificationMessage)
-          
-          // Сохраняем message_id в заявке для последующего редактирования
-          if (notificationResult.success && notificationResult.messageId) {
-            await prisma.request.update({
-              where: { id: newRequest.id },
-              data: { notificationMessageId: BigInt(notificationResult.messageId) }
-            })
-          }
-        } catch (notificationError) {
-          // Игнорируем ошибки отправки уведомлений, чтобы не блокировать создание заявки
-          console.error('Failed to send notification after payment:', notificationError)
-        }
-      }
 
       if (uncreated_request_id) {
         const uncreatedIdNum = parseInt(uncreated_request_id, 10)

@@ -383,10 +383,7 @@
         </div>
         
         <div class="block">
-            <div class="block-title" style="text-align: center; margin-bottom: 8px;">
-                <div style="font-size: 16px; font-weight: 700; color: #ffffff; margin-bottom: 4px;">ОТСКАНИРУЙТЕ QR</div>
-                <div style="font-size: 14px; color: #3b82f6; font-weight: 600;">В любом банке</div>
-            </div>
+            <div class="block-title">QR код для любого банка</div>
             <div class="qr-container" id="qrContainer">
                 <div class="loading">Загрузка QR кода...</div>
             </div>
@@ -1375,15 +1372,26 @@
                             console.log('✅ Request ID updated from response:', requestId);
                         }
                         
-                        console.log('✅ Payment request submitted successfully');
+                        // Формируем URL для страницы успеха
+                        const successParams = new URLSearchParams();
+                        if (requestId) successParams.append('request_id', requestId.toString());
+                        if (amount) successParams.append('amount', amount.toString());
+                        if (casinoId) successParams.append('bookmaker', casinoId.toString());
                         
-                        // Закрываем мини-приложение вместо редиректа на страницу успеха
-                        if (tg && tg.close) {
-                            console.log('🔄 Closing mini app...');
-                            tg.close();
-                        } else {
-                            console.warn('⚠️ Telegram WebApp not available, cannot close mini app');
-                        }
+                        const successUrl = `/success?${successParams.toString()}`;
+                        console.log('🔄 Redirecting to success page (update):', successUrl);
+                        console.log('📊 Redirect data:', { requestId, amount, casinoId });
+                        
+                        // Редирект на страницу успеха с небольшой задержкой для отладки
+                        setTimeout(() => {
+                            try {
+                                window.location.href = successUrl;
+                            } catch (e) {
+                                console.error('❌ Redirect error:', e);
+                                // Fallback: попробуем через location.replace
+                                window.location.replace(successUrl);
+                            }
+                        }, 100);
                     } else {
                         throw new Error(data.error || 'Не удалось обновить заявку');
                     }
@@ -1567,15 +1575,26 @@
                             }
                         }
                         
-                        console.log('✅ Payment request submitted successfully');
+                        // Формируем URL для страницы успеха
+                        const successParams = new URLSearchParams();
+                        if (requestId) successParams.append('request_id', requestId.toString());
+                        if (amount) successParams.append('amount', amount.toString());
+                        if (casinoId) successParams.append('bookmaker', casinoId.toString());
                         
-                        // Закрываем мини-приложение вместо редиректа на страницу успеха
-                        if (tg && tg.close) {
-                            console.log('🔄 Closing mini app...');
-                            tg.close();
-                        } else {
-                            console.warn('⚠️ Telegram WebApp not available, cannot close mini app');
-                        }
+                        const successUrl = `/success?${successParams.toString()}`;
+                        console.log('🔄 Redirecting to success page (create):', successUrl);
+                        console.log('📊 Redirect data:', { requestId, amount, casinoId });
+                        
+                        // Редирект на страницу успеха с небольшой задержкой для отладки
+                        setTimeout(() => {
+                            try {
+                                window.location.href = successUrl;
+                            } catch (e) {
+                                console.error('❌ Redirect error:', e);
+                                // Fallback: попробуем через location.replace
+                                window.location.replace(successUrl);
+                            }
+                        }, 100);
                     } else {
                         const errorMsg = data.error || data.message || 'Не удалось создать заявку';
                         console.error('❌ Server returned error:', errorMsg);
@@ -1614,82 +1633,6 @@
             }
         };
         
-        // Проверка существующей активной заявки
-        async function checkExistingRequest() {
-            if (!telegramUserId) {
-                console.warn('⚠️ Cannot check existing request: no user ID');
-                return;
-            }
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/payment`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        telegram_user_id: telegramUserId,
-                        type: 'deposit',
-                        amount: 0, // Временное значение для проверки
-                    }),
-                });
-
-                const data = await response.json();
-                
-                if (!data.success && data.error) {
-                    // Если есть ошибка о существующей заявке, показываем сообщение
-                    if (data.error.includes('Заявка уже отправлена') || data.error.includes('Время на оплату истекло')) {
-                        const errorMessage = data.error;
-                        
-                        // Показываем сообщение и закрываем мини-приложение
-                        if (tg) {
-                            tg.showPopup({
-                                title: '⚠️ Внимание',
-                                message: errorMessage,
-                                buttons: [{
-                                    type: 'ok',
-                                    text: 'Понятно'
-                                }]
-                            }).then(() => {
-                                // Закрываем мини-приложение после нажатия OK
-                                if (tg && tg.close) {
-                                    tg.close();
-                                }
-                            });
-                        } else {
-                            alert(errorMessage);
-                        }
-                        
-                        // Блокируем форму
-                        document.body.innerHTML = `
-                            <div style="
-                                background: linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #1e3a8a 50%, #1e40af 75%, #2563eb 100%);
-                                color: #ffffff;
-                                padding: 40px 20px;
-                                height: 100vh;
-                                width: 100vw;
-                                display: flex;
-                                flex-direction: column;
-                                align-items: center;
-                                justify-content: center;
-                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                                text-align: center;
-                            ">
-                                <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
-                                <h1 style="font-size: 24px; margin-bottom: 12px; font-weight: 600;">${errorMessage}</h1>
-                            </div>
-                        `;
-                        return true; // Заявка существует
-                    }
-                }
-            } catch (error) {
-                console.error('❌ Error checking existing request:', error);
-                // Продолжаем работу, если проверка не удалась
-            }
-            
-            return false; // Заявки нет, можно продолжать
-        }
-
         // Инициализация при загрузке страницы
         if (tg && tg.initDataUnsafe?.user) {
             console.log('✅ Telegram WebApp initialized');
@@ -1700,21 +1643,16 @@
         // Инициализируем все компоненты (всегда, независимо от Telegram)
         initReceiptUpload();
         
-        // Проверяем существующую заявку перед инициализацией формы
-        checkExistingRequest().then((hasExistingRequest) => {
-            if (!hasExistingRequest) {
-                // Загружаем настройки и затем инициализируем остальное
-                loadPaymentSettings().then(async () => {
-                    await createUncreatedOnce();
-                    setupBankButtons(); // Показываем банки после загрузки настроек
-                    loadQR(); // Загружаем QR код
-                }).catch((error) => {
-                    console.error('❌ Error initializing payment form:', error);
-                    // В случае ошибки все равно показываем форму с настройками по умолчанию
-                    setupBankButtons();
-                    loadQR();
-                });
-            }
+        // Загружаем настройки и затем инициализируем остальное
+        loadPaymentSettings().then(async () => {
+            await createUncreatedOnce();
+            setupBankButtons(); // Показываем банки после загрузки настроек
+            loadQR(); // Загружаем QR код
+        }).catch((error) => {
+            console.error('❌ Error initializing payment form:', error);
+            // В случае ошибки все равно показываем форму с настройками по умолчанию
+            setupBankButtons();
+            loadQR();
         });
     </script>
 </body>

@@ -26,6 +26,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       fetchUnreadChats()
     }, 15000)
     return () => clearInterval(interval)
+    // Мы намеренно не добавляем fetchUser/fetchUnreadChats в зависимости,
+    // чтобы не пересоздавать интервал и не дергать авторизацию лишний раз
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchUnreadChats = async () => {

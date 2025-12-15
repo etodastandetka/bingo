@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -221,6 +222,7 @@ export default function RequestDetailPage() {
       window.removeEventListener('focus', handleFocus)
       window.removeEventListener('storage', handleStorageChange)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id])
 
   // Закрываем меню при клике вне его

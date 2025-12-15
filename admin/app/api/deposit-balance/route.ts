@@ -77,11 +77,11 @@ export async function POST(request: NextRequest) {
     requireAuth(request)
 
     const body = await request.json()
-    const { requestId, bookmaker, accountId, amount } = body
+    const { requestId, bookmaker, amount } = body
 
-    if (!requestId || !bookmaker || !accountId || !amount) {
+    if (!requestId || !bookmaker || !amount) {
       return NextResponse.json(
-        createApiResponse(null, 'Missing required fields: requestId, bookmaker, accountId, amount'),
+        createApiResponse(null, 'Missing required fields: requestId, bookmaker, amount'),
         { status: 400 }
       )
     }
@@ -98,12 +98,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ВАЖНО: Используем accountId (ID казино), а не userId (Telegram ID)
+    // ВАЖНО: Используем accountId из заявки (ID казино), а не из body запроса!
+    // accountId из body может быть неправильным (например, Telegram ID)
     // accountId - это ID игрока в казино (например, ID счета 1xbet, Melbet и т.д.)
-    console.log(`[Deposit Balance] Bookmaker: ${bookmaker}, Casino Account ID: ${accountId}, Amount: ${amount}, Request ID: ${requestId}`)
+    const accountId = requestData.accountId
+    
+    if (!accountId || accountId.trim() === '') {
+      return NextResponse.json(
+        createApiResponse(null, 'Request does not have accountId (casino player ID). Cannot deposit.'),
+        { status: 400 }
+      )
+    }
+
+    // Используем bookmaker из заявки, если он не передан в body (или если переданный отличается)
+    const bookmakerToUse = requestData.bookmaker || bookmaker
+    
+    // Используем amount из заявки, если он не передан в body
+    const amountToUse = requestData.amount ? parseFloat(requestData.amount.toString()) : parseFloat(amount)
+    
+    console.log(`[Deposit Balance] Bookmaker: ${bookmakerToUse}, Casino Account ID: ${accountId}, Amount: ${amountToUse}, Request ID: ${requestId}`)
+    console.log(`[Deposit Balance] Request data - bookmaker: ${requestData.bookmaker}, accountId: ${requestData.accountId}, amount: ${requestData.amount?.toString()}`)
     
     // Пополняем баланс через API казино
-    const depositResult = await depositToCasino(bookmaker, accountId, parseFloat(amount))
+    const depositResult = await depositToCasino(bookmakerToUse, accountId, amountToUse)
 
     if (!depositResult.success) {
       console.error(`[Deposit Balance] Failed for ${bookmaker}, accountId: ${accountId}`, depositResult)

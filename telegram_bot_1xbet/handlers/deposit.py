@@ -128,7 +128,13 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
     )
     
     amount_prompt = get_text(lang, 'deposit', 'enter_amount', min=str(Config.DEPOSIT_MIN), max=str(Config.DEPOSIT_MAX))
-    # Убрали данные казино - показываем только запрос суммы
+    if player_info:
+        player_name = player_info.get('name') or player_info.get('Name') or ''
+        player_id_resp = player_info.get('userId') or player_info.get('UserId') or account_id
+        extra = f"\n\nНайден игрок:\nID: {player_id_resp}"
+        if player_name:
+            extra += f"\nИмя: {player_name}"
+        amount_prompt += extra
 
     await message.answer(
         amount_prompt,
@@ -199,25 +205,32 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         params['created_at'] = str(int(time.time() * 1000))
         
         # Формируем URL с правильно закодированными параметрами
-        # Всегда используем продакшн URL для пользователей (Telegram не принимает localhost)
-        if 'localhost' in Config.PAYMENT_SITE_URL.lower():
-            # Если в конфиге localhost, используем fallback URL
-            payment_url = f"{Config.PAYMENT_FALLBACK_URL}/pay?{urlencode(params)}"
-        else:
-            payment_url = f"{Config.PAYMENT_SITE_URL}/pay?{urlencode(params)}"
+        payment_url = f"{Config.PAYMENT_SITE_URL}/pay?{urlencode(params)}"
         
-        # Отправляем кнопку с мини-приложением (WebApp)
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+        # Для кнопки используем продакшн URL (Telegram не принимает localhost)
+        # Для текста используем localhost если он указан в конфиге
+        button_url = payment_url
+        text_url = payment_url
+        
+        # Если в конфиге localhost, используем fallback URL для кнопки
+        if 'localhost' in Config.PAYMENT_SITE_URL.lower():
+            # Для кнопки используем fallback URL из конфига
+            button_url = f"{Config.PAYMENT_FALLBACK_URL}/pay?{urlencode(params)}"
+            # Для текста оставляем localhost
+            text_url = payment_url
+        
+        # Отправляем ссылку в тексте и обычную кнопку с URL
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='💳 Перейти к оплате', web_app=WebAppInfo(url=payment_url))]
+            [InlineKeyboardButton(text='💳 Перейти к оплате', url=button_url)]
         ])
         
-        # Формируем текст без ссылки (ссылка только в кнопке)
+        # Формируем текст с ссылкой (используем localhost для текста)
         payment_text = get_text(lang, 'deposit', 'go_to_payment', 
                                amount=amount_with_cents, 
                                casino=data.get("casino_name"), 
                                account_id=account_id)
-        # Убрали ссылку из текста - она открывается через кнопку (мини-приложение)
+        payment_text += f"\n\n🔗 {text_url}"
         
         await message.answer(
             payment_text,

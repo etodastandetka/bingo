@@ -59,6 +59,9 @@ export default function RequestsPage() {
       window.removeEventListener('focus', handleFocus)
       window.removeEventListener('storage', handleStorageChange)
     }
+    // Мы намеренно не добавляем fetchRequests в зависимости,
+    // чтобы не пересоздавать интервал и обработчики на каждый ререндер
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter])
 
   const fetchRequests = async (showLoading = true) => {

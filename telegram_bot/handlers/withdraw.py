@@ -2,7 +2,6 @@ from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message, FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
-import logging
 from states import WithdrawStates
 from config import Config
 from api_client import APIClient
@@ -12,7 +11,6 @@ import io
 from pathlib import Path
 
 router = Router()
-logger = logging.getLogger(__name__)
 
 async def get_lang_from_state(state: FSMContext) -> str:
     """Получить язык из состояния"""
@@ -33,7 +31,7 @@ async def withdraw_start(message: Message, state: FSMContext):
             await message.answer(blocked_message)
             return
     except Exception as e:
-        logger.error(f"Error checking blocked status: {e}", exc_info=True)
+        print(f"Error checking blocked status: {e}")
         # Продолжаем работу, если проверка не удалась
     
     # Получаем настройки из админки
@@ -297,7 +295,7 @@ async def withdraw_account_id_received(message: Message, state: FSMContext, bot:
             await message.answer(blocked_message)
             return
     except Exception as e:
-        logger.error(f"Error checking blocked accountId: {e}", exc_info=True)
+        print(f"Error checking blocked accountId: {e}")
         # Продолжаем работу, если проверка не удалась
     
     await state.update_data(account_id=account_id)
@@ -360,7 +358,7 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
             error_message = amount_result.get('error') or amount_result.get('message') or 'Не удалось получить сумму вывода'
             await message.answer(f"⚠️ {error_message}")
     except Exception as e:
-        logger.error(f"Error checking withdraw amount: {e}", exc_info=True)
+        print(f"Error checking withdraw amount: {e}")
         amount_check_ok = False
         await message.answer("⚠️ Не удалось проверить сумму вывода. Попробуйте еще раз.")
     
@@ -420,7 +418,7 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
             await message.answer(get_text(lang, 'withdraw', 'error'))
         
     except Exception as e:
-        logger.error(f"Error creating withdraw request: {e}", exc_info=True)
+        print(f"Error creating withdraw request: {e}")
         # Проверяем тип ошибки
         error_msg = str(e).lower()
         if 'connection' in error_msg or 'connect' in error_msg or 'refused' in error_msg:

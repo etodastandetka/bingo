@@ -1,6 +1,5 @@
 from aiogram import Router, F, Bot
 from aiogram.types import Message
-from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from translations import get_text
 from api_client import APIClient
@@ -75,23 +74,19 @@ async def save_message_to_db(
             ) as response:
                 return await response.json()
     except Exception as e:
-        logger.error(f"Error saving message to DB: {e}", exc_info=True)
+        print(f"Error saving message to DB: {e}")
         return None
 
 @router.message(F.text)
 async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
     """Обработка текстовых сообщений в чате (автоматически для всех сообщений)"""
-    # Проверяем команды - если это команда, не обрабатываем
-    if message.text and message.text.startswith('/'):
-        return  # Игнорируем команды - они обрабатываются другими роутерами
-    
     # Проверяем, что пользователь не находится в процессе депозита или вывода
     current_state = await state.get_state()
     if current_state:
         # Если есть активное состояние (депозит/вывод), не обрабатываем как сообщение чата
         return
     
-    # Проверяем, что это не кнопка меню
+    # Проверяем, что это не команда и не кнопка меню
     text = message.text
     menu_buttons = [
         '💰 Пополнить', '💰 Толтуруу',
@@ -101,8 +96,8 @@ async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
         '❌ Операция отменена', '❌ Аракет жокко чыгарылды'
     ]
     
-    if text in menu_buttons:
-        return  # Игнорируем кнопки меню
+    if text in menu_buttons or text.startswith('/'):
+        return  # Игнорируем команды и кнопки меню
     
     # Проверяем, есть ли уже сообщения от этого пользователя (для отправки приветствия при первом сообщении)
     user_id = message.from_user.id
@@ -168,7 +163,7 @@ async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
             await message.answer(blocked_message)
             return
     except Exception as e:
-        logger.error(f"Error checking blocked status: {e}", exc_info=True)
+        print(f"Error checking blocked status: {e}")
         # Продолжаем работу, если проверка не удалась
     
     # Сохраняем сообщение пользователя в БД

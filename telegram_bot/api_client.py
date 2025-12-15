@@ -1,11 +1,7 @@
 import aiohttp
 import ssl
-import logging
 from config import Config
 from typing import Optional, Dict, Any
-
-# Настройка логирования
-logger = logging.getLogger(__name__)
 
 # Отключаем проверку SSL для внутренних запросов
 ssl_context = ssl.create_default_context()
@@ -58,22 +54,7 @@ class APIClient:
             
             # Пробуем сначала локальный API, если не доступен - используем продакшн
             api_url = Config.API_BASE_URL
-            local_api_url = 'http://localhost:3001/api'
-            
-            # Всегда пробуем localhost сначала, если он не является текущим API_BASE_URL
-            if not api_url.startswith('http://localhost'):
-                try:
-                    async with session.post(
-                        f'{local_api_url}/payment',
-                        json=data,
-                        timeout=aiohttp.ClientTimeout(total=2)
-                    ) as response:
-                        if response.status == 200:
-                            return await response.json()
-                except Exception as e:
-                    logger.debug(f"Local API unavailable, using fallback: {e}")
-                    api_url = Config.API_FALLBACK_URL
-            else:
+            if api_url.startswith('http://localhost'):
                 try:
                     async with session.post(
                         f'{api_url}/payment',
@@ -81,14 +62,13 @@ class APIClient:
                         timeout=aiohttp.ClientTimeout(total=2)
                     ) as response:
                         return await response.json()
-                except Exception as e:
-                    logger.warning(f"API request failed, using fallback: {e}")
+                except:
+                    # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
             
             async with session.post(
                 f'{api_url}/payment',
-                json=data,
-                timeout=aiohttp.ClientTimeout(total=10)
+                json=data
             ) as response:
                 return await response.json()
     
@@ -97,27 +77,9 @@ class APIClient:
         """Генерировать QR код для оплаты"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
-            api_url = Config.API_BASE_URL
-            local_api_url = 'http://localhost:3001/api'
-            
-            # Пробуем localhost сначала
-            if not api_url.startswith('http://localhost'):
-                try:
-                    async with session.post(
-                        f'{local_api_url}/public/generate-qr',
-                        json={'amount': amount, 'bank': bank},
-                        timeout=aiohttp.ClientTimeout(total=3)
-                    ) as response:
-                        if response.status == 200:
-                            return await response.json()
-                except Exception as e:
-                    logger.debug(f"Local API unavailable for QR, using fallback: {e}")
-                    api_url = Config.API_FALLBACK_URL
-            
             async with session.post(
-                f'{api_url}/public/generate-qr',
-                json={'amount': amount, 'bank': bank},
-                timeout=aiohttp.ClientTimeout(total=5)
+                f'{Config.API_BASE_URL}/public/generate-qr',
+                json={'amount': amount, 'bank': bank}
             ) as response:
                 return await response.json()
     
@@ -129,45 +91,29 @@ class APIClient:
             try:
                 # Пробуем сначала локальный API, если не доступен - используем продакшн
                 api_url = Config.API_BASE_URL
-                local_api_url = 'http://localhost:3001/api'
-                
-                # Всегда пробуем localhost сначала
-                if not api_url.startswith('http://localhost'):
+                if api_url.startswith('http://localhost'):
                     try:
-                        async with session.get(
-                            f'{local_api_url}/public/payment-settings',
-                            timeout=aiohttp.ClientTimeout(total=1)
-                        ) as response:
-                            if response.status == 200:
-                                data = await response.json()
-                                if data.get('success'):
-                                    return data
-                    except Exception as e:
-                        logger.debug(f"Local API unavailable, using fallback: {e}")
-                        api_url = Config.API_FALLBACK_URL
-                else:
-                    try:
+                        # Прямой запрос с коротким таймаутом
                         async with session.get(
                             f'{api_url}/public/payment-settings',
                             timeout=aiohttp.ClientTimeout(total=1)
                         ) as response:
                             if response.status == 200:
                                 data = await response.json()
-                                if data.get('success'):
-                                    return data
-                    except Exception as e:
-                        logger.warning(f"API request failed, using fallback: {e}")
+                                return data if data.get('success') else {}
+                    except:
+                        # Если локальный недоступен, используем fallback из конфига
+                        from config import Config
                         api_url = Config.API_FALLBACK_URL
                 
-                # Fallback на продакшн
                 async with session.get(
                     f'{api_url}/public/payment-settings',
-                    timeout=aiohttp.ClientTimeout(total=3)
+                    timeout=aiohttp.ClientTimeout(total=2)
                 ) as response:
                     data = await response.json()
                     return data if data.get('success') else {}
             except Exception as e:
-                logger.error(f"Error fetching payment settings: {e}")
+                print(f"Error fetching payment settings: {e}")
                 return {}
     
     @staticmethod
@@ -189,22 +135,7 @@ class APIClient:
             
             # Пробуем сначала локальный API, если не доступен - используем продакшн
             api_url = Config.API_BASE_URL
-            local_api_url = 'http://localhost:3001/api'
-            
-            # Всегда пробуем localhost сначала
-            if not api_url.startswith('http://localhost'):
-                try:
-                    async with session.post(
-                        f'{local_api_url}/public/check-blocked',
-                        json=data,
-                        timeout=aiohttp.ClientTimeout(total=2)
-                    ) as response:
-                        if response.status == 200:
-                            return await response.json()
-                except Exception as e:
-                    logger.debug(f"Local API unavailable, using fallback: {e}")
-                    api_url = Config.API_FALLBACK_URL
-            else:
+            if api_url.startswith('http://localhost'):
                 try:
                     async with session.post(
                         f'{api_url}/public/check-blocked',
@@ -212,14 +143,13 @@ class APIClient:
                         timeout=aiohttp.ClientTimeout(total=2)
                     ) as response:
                         return await response.json()
-                except Exception as e:
-                    logger.warning(f"API request failed, using fallback: {e}")
+                except:
+                    # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
             
             async with session.post(
                 f'{api_url}/public/check-blocked',
-                json=data,
-                timeout=aiohttp.ClientTimeout(total=5)
+                json=data
             ) as response:
                 return await response.json()
     
@@ -235,22 +165,7 @@ class APIClient:
             
             # Пробуем сначала локальный API, если не доступен - используем продакшн
             api_url = Config.API_BASE_URL
-            local_api_url = 'http://localhost:3001/api'
-            
-            # Всегда пробуем localhost сначала
-            if not api_url.startswith('http://localhost'):
-                try:
-                    async with session.post(
-                        f'{local_api_url}/public/check-player',
-                        json=data,
-                        timeout=aiohttp.ClientTimeout(total=5)
-                    ) as response:
-                        if response.status == 200:
-                            return await response.json()
-                except Exception as e:
-                    logger.debug(f"Local API unavailable, using fallback: {e}")
-                    api_url = Config.API_FALLBACK_URL
-            else:
+            if api_url.startswith('http://localhost'):
                 try:
                     async with session.post(
                         f'{api_url}/public/check-player',
@@ -258,8 +173,8 @@ class APIClient:
                         timeout=aiohttp.ClientTimeout(total=5)
                     ) as response:
                         return await response.json()
-                except Exception as e:
-                    logger.warning(f"API request failed, using fallback: {e}")
+                except:
+                    # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
             
             async with session.post(
@@ -282,22 +197,7 @@ class APIClient:
             
             # Пробуем сначала локальный API, если не доступен - используем продакшн
             api_url = Config.API_BASE_URL
-            local_api_url = 'http://localhost:3001/api'
-            
-            # Всегда пробуем localhost сначала
-            if not api_url.startswith('http://localhost'):
-                try:
-                    async with session.post(
-                        f'{local_api_url}/check-withdraw-amount',
-                        json=data,
-                        timeout=aiohttp.ClientTimeout(total=5)
-                    ) as response:
-                        if response.status == 200:
-                            return await response.json()
-                except Exception as e:
-                    logger.debug(f"Local API unavailable, using fallback: {e}")
-                    api_url = Config.API_FALLBACK_URL
-            else:
+            if api_url.startswith('http://localhost'):
                 try:
                     async with session.post(
                         f'{api_url}/check-withdraw-amount',
@@ -305,8 +205,8 @@ class APIClient:
                         timeout=aiohttp.ClientTimeout(total=5)
                     ) as response:
                         return await response.json()
-                except Exception as e:
-                    logger.warning(f"API request failed, using fallback: {e}")
+                except:
+                    # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
             
             async with session.post(

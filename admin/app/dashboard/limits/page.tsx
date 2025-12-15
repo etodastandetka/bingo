@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -32,6 +33,8 @@ export default function LimitsPage() {
 
   useEffect(() => {
     fetchStats()
+    // Мы намеренно не добавляем fetchStats в зависимости, чтобы не пересоздавать эффект
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
   useEffect(() => {

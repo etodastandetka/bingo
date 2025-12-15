@@ -22,6 +22,8 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers()
+    // Мы намеренно не добавляем fetchUsers в зависимости, чтобы не пересоздавать эффект
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
 
   const fetchUsers = async () => {

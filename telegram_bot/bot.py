@@ -22,7 +22,7 @@ async def main():
     bot = Bot(token=Config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     
-    # Регистрация роутеров (точно как в рабочем 1xbet боте)
+    # Регистрация роутеров
     dp.include_router(start.router)
     dp.include_router(deposit.router)
     dp.include_router(withdraw.router)
@@ -32,7 +32,7 @@ async def main():
     
     logger.info("Бот запущен!")
     
-    # Запуск polling (точно как в рабочем 1xbet боте)
+    # Запуск polling
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
