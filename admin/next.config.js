@@ -3,7 +3,7 @@ const path = require('path')
 
 const nextConfig = {
   reactStrictMode: true,
-  output: 'standalone', // КРИТИЧНО: для создания standalone build для PM2
+  // output: 'standalone' - убрано, используем обычный билд для совместимости с next start
   
   // Оптимизация производительности
   compress: true, // Включить gzip сжатие
