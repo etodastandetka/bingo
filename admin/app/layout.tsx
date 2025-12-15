@@ -79,6 +79,38 @@ export default function RootLayout({
                 
                 var reloadAttempted = false;
                 
+                function clearAllCaches() {
+                  return new Promise(function(resolve) {
+                    try {
+                      // Очищаем все кеши
+                      if ('caches' in window) {
+                        caches.keys().then(function(names) {
+                          return Promise.all(names.map(function(name) {
+                            return caches.delete(name);
+                          }));
+                        }).then(function() {
+                          // Очищаем localStorage от старых данных Next.js
+                          try {
+                            var keys = Object.keys(localStorage);
+                            keys.forEach(function(key) {
+                              if (key.indexOf('next-') === 0 || key.indexOf('chunk') !== -1 || key.indexOf('_next') !== -1) {
+                                localStorage.removeItem(key);
+                              }
+                            });
+                          } catch (e) {}
+                          resolve();
+                        }).catch(function() {
+                          resolve();
+                        });
+                      } else {
+                        resolve();
+                      }
+                    } catch (error) {
+                      resolve();
+                    }
+                  });
+                }
+                
                 function reloadPage() {
                   if (reloadAttempted) return;
                   
@@ -89,29 +121,16 @@ export default function RootLayout({
                   var SESSION_TIMEOUT = 60000; // 1 минута - если прошло больше, считаем новую сессию
                   
                   // Если прошло больше минуты с последней попытки, сбрасываем счетчик (новая сессия)
-                  if (timeSinceLastReload > SESSION_TIMEOUT && reloadCount > 0) {
+                  var isNewSession = timeSinceLastReload > SESSION_TIMEOUT || timeSinceLastReload === 0;
+                  
+                  if (isNewSession && reloadCount > 0) {
                     clearReloadCount();
                     console.warn('[ChunkErrorHandler] Session timeout, resetting reload count');
-                    
-                    reloadAttempted = true;
-                    incrementReloadCount();
-                    console.warn('[ChunkErrorHandler] Chunk load error detected (attempt 1/' + MAX_RELOAD_ATTEMPTS + '), reloading page in 100ms...');
-                    
-                    setTimeout(function() {
-                      if ('caches' in window) {
-                        caches.keys().then(function(names) {
-                          names.forEach(function(name) {
-                            caches.delete(name);
-                          });
-                        }).catch(function() {});
-                      }
-                      window.location.reload();
-                    }, 100);
-                    return;
                   }
                   
                   // Проверяем, не превышен ли лимит попыток
-                  if (reloadCount >= MAX_RELOAD_ATTEMPTS) {
+                  var currentCount = isNewSession ? 0 : reloadCount;
+                  if (currentCount >= MAX_RELOAD_ATTEMPTS) {
                     console.error('[ChunkErrorHandler] Max reload attempts reached. Please refresh the page manually.');
                     if (document.body) {
                       var errorDiv = document.createElement('div');
@@ -122,24 +141,21 @@ export default function RootLayout({
                     return;
                   }
                   
-                  // Первая попытка всегда выполняется немедленно (reloadCount === 0 или прошло больше минуты)
-                  var isFirstAttempt = reloadCount === 0 || (timeSinceLastReload > SESSION_TIMEOUT);
+                  // Первая попытка всегда выполняется немедленно (reloadCount === 0 или новая сессия)
+                  var isFirstAttempt = currentCount === 0;
                   
                   if (isFirstAttempt) {
                     reloadAttempted = true;
                     incrementReloadCount();
-                    console.warn('[ChunkErrorHandler] Chunk load error detected (attempt 1/' + MAX_RELOAD_ATTEMPTS + '), reloading page in 100ms...');
+                    console.warn('[ChunkErrorHandler] Chunk load error detected (attempt 1/' + MAX_RELOAD_ATTEMPTS + '), clearing cache and reloading...');
                     
-                    setTimeout(function() {
-                      if ('caches' in window) {
-                        caches.keys().then(function(names) {
-                          names.forEach(function(name) {
-                            caches.delete(name);
-                          });
-                        }).catch(function() {});
-                      }
-                      window.location.reload();
-                    }, 100);
+                    // Очищаем кеш и перезагружаем немедленно
+                    clearAllCaches().then(function() {
+                      // Используем location.href для принудительной перезагрузки без кеша
+                      var url = window.location.href.split('#')[0];
+                      var separator = url.indexOf('?') === -1 ? '?' : '&';
+                      window.location.href = url + separator + 'nocache=' + Date.now();
+                    });
                     return;
                   }
                   
@@ -157,19 +173,14 @@ export default function RootLayout({
                   reloadAttempted = true;
                   incrementReloadCount();
                   
-                  console.warn('[ChunkErrorHandler] Chunk load error detected (attempt ' + (reloadCount + 1) + '/' + MAX_RELOAD_ATTEMPTS + '), reloading page in 500ms...');
+                  console.warn('[ChunkErrorHandler] Chunk load error detected (attempt ' + (currentCount + 1) + '/' + MAX_RELOAD_ATTEMPTS + '), clearing cache and reloading...');
                   
-                  if ('caches' in window) {
-                    caches.keys().then(function(names) {
-                      names.forEach(function(name) {
-                        caches.delete(name);
-                      });
-                    }).catch(function() {});
-                  }
-                  
-                  setTimeout(function() {
-                    window.location.reload();
-                  }, 500);
+                  // Очищаем кеш и перезагружаем
+                  clearAllCaches().then(function() {
+                    var url = window.location.href.split('#')[0];
+                    var separator = url.indexOf('?') === -1 ? '?' : '&';
+                    window.location.href = url + separator + 'nocache=' + Date.now();
+                  });
                 }
                 
                 // Перехватываем ошибки загрузки скриптов

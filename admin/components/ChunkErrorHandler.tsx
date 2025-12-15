@@ -63,6 +63,40 @@ export default function ChunkErrorHandler() {
 
     let reloadAttempted = false
 
+    const clearAllCaches = async () => {
+      try {
+        // Очищаем все кеши
+        if ('caches' in window) {
+          const cacheNames = await caches.keys()
+          await Promise.all(cacheNames.map(name => caches.delete(name)))
+        }
+        
+        // Очищаем localStorage и sessionStorage от старых данных Next.js
+        try {
+          const keys = Object.keys(localStorage)
+          keys.forEach(key => {
+            if (key.startsWith('next-') || key.includes('chunk') || key.includes('_next')) {
+              localStorage.removeItem(key)
+            }
+          })
+        } catch {}
+        
+        // Очищаем IndexedDB если возможно
+        if ('indexedDB' in window) {
+          try {
+            const databases = await indexedDB.databases()
+            databases.forEach(db => {
+              if (db.name && (db.name.includes('next') || db.name.includes('cache'))) {
+                indexedDB.deleteDatabase(db.name)
+              }
+            })
+          } catch {}
+        }
+      } catch (error) {
+        console.warn('[ChunkErrorHandler] Error clearing caches:', error)
+      }
+    }
+
     const reloadPage = () => {
       if (reloadAttempted) return
       
@@ -72,27 +106,16 @@ export default function ChunkErrorHandler() {
       const SESSION_TIMEOUT = 60000 // 1 минута - если прошло больше, считаем новую сессию
 
       // Если прошло больше минуты с последней попытки, сбрасываем счетчик (новая сессия)
-      if (timeSinceLastReload > SESSION_TIMEOUT && reloadCount > 0) {
+      const isNewSession = timeSinceLastReload > SESSION_TIMEOUT || timeSinceLastReload === 0
+      
+      if (isNewSession && reloadCount > 0) {
         clearReloadCount()
         console.warn('[ChunkErrorHandler] Session timeout, resetting reload count')
-        
-        reloadAttempted = true
-        incrementReloadCount()
-        console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt 1/${MAX_RELOAD_ATTEMPTS}), reloading page in 100ms...`)
-        
-        setTimeout(() => {
-          if ('caches' in window) {
-            caches.keys().then(names => {
-              names.forEach(name => caches.delete(name))
-            }).catch(() => {})
-          }
-          window.location.reload()
-        }, 100)
-        return
       }
 
       // Проверяем, не превышен ли лимит попыток
-      if (reloadCount >= MAX_RELOAD_ATTEMPTS) {
+      const currentCount = isNewSession ? 0 : reloadCount
+      if (currentCount >= MAX_RELOAD_ATTEMPTS) {
         console.error('[ChunkErrorHandler] Max reload attempts reached. Please refresh the page manually or contact support.')
         if (document.body) {
           const errorDiv = document.createElement('div')
@@ -103,22 +126,22 @@ export default function ChunkErrorHandler() {
         return
       }
 
-      // Первая попытка всегда выполняется немедленно (reloadCount === 0 или прошло больше минуты)
-      const isFirstAttempt = reloadCount === 0 || (timeSinceLastReload > SESSION_TIMEOUT)
+      // Первая попытка всегда выполняется немедленно (reloadCount === 0 или новая сессия)
+      const isFirstAttempt = currentCount === 0
       
       if (isFirstAttempt) {
         reloadAttempted = true
         incrementReloadCount()
-        console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt 1/${MAX_RELOAD_ATTEMPTS}), reloading page in 100ms...`)
+        console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt 1/${MAX_RELOAD_ATTEMPTS}), clearing cache and reloading...`)
         
-        setTimeout(() => {
-          if ('caches' in window) {
-            caches.keys().then(names => {
-              names.forEach(name => caches.delete(name))
-            }).catch(() => {})
-          }
-          window.location.reload()
-        }, 100)
+        // Очищаем кеш и перезагружаем немедленно
+        clearAllCaches().then(() => {
+          // Используем location.href для принудительной перезагрузки без кеша
+          window.location.href = window.location.href.split('#')[0] + '?nocache=' + Date.now()
+        }).catch(() => {
+          // Если очистка кеша не удалась, все равно перезагружаем
+          window.location.href = window.location.href.split('#')[0] + '?nocache=' + Date.now()
+        })
         return
       }
 
@@ -136,16 +159,14 @@ export default function ChunkErrorHandler() {
       reloadAttempted = true
       incrementReloadCount()
       
-      console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt ${reloadCount + 1}/${MAX_RELOAD_ATTEMPTS}), reloading page in 500ms...`)
+      console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt ${currentCount + 1}/${MAX_RELOAD_ATTEMPTS}), clearing cache and reloading...`)
       
-      setTimeout(() => {
-        if ('caches' in window) {
-          caches.keys().then(names => {
-            names.forEach(name => caches.delete(name))
-          }).catch(() => {})
-        }
-        window.location.reload()
-      }, 500)
+      // Очищаем кеш и перезагружаем
+      clearAllCaches().then(() => {
+        window.location.href = window.location.href.split('#')[0] + '?nocache=' + Date.now()
+      }).catch(() => {
+        window.location.href = window.location.href.split('#')[0] + '?nocache=' + Date.now()
+      })
     }
 
     // Обработка ошибок загрузки чанков Next.js
