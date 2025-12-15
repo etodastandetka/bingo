@@ -73,16 +73,22 @@ export default function ChunkErrorHandler() {
         return
       }
 
-      // Проверяем cooldown
-      if (timeSinceLastReload < RELOAD_COOLDOWN && reloadCount > 0) {
+      // Cooldown применяется только для последующих попыток (не для первой)
+      if (reloadCount > 0 && timeSinceLastReload < RELOAD_COOLDOWN) {
         console.warn(`[ChunkErrorHandler] Reload cooldown active. Waiting ${Math.ceil((RELOAD_COOLDOWN - timeSinceLastReload) / 1000)}s...`)
+        // Планируем перезагрузку после cooldown
+        setTimeout(() => {
+          reloadAttempted = false // Сбрасываем флаг для повторной попытки
+          reloadPage()
+        }, RELOAD_COOLDOWN - timeSinceLastReload)
         return
       }
 
       reloadAttempted = true
       incrementReloadCount()
       
-      console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt ${reloadCount + 1}/${MAX_RELOAD_ATTEMPTS}), reloading page in 500ms...`)
+      const delay = reloadCount === 0 ? 100 : 500 // Первая попытка быстрее
+      console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt ${reloadCount + 1}/${MAX_RELOAD_ATTEMPTS}), reloading page in ${delay}ms...`)
       
       setTimeout(() => {
         // Очищаем кеш перед перезагрузкой
@@ -94,7 +100,7 @@ export default function ChunkErrorHandler() {
           })
         }
         window.location.reload()
-      }, 500)
+      }, delay)
     }
 
     // Обработка ошибок загрузки чанков Next.js
