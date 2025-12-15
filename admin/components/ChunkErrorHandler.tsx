@@ -59,11 +59,32 @@ export default function ChunkErrorHandler() {
       const reloadCount = getReloadCount()
       const lastReloadTime = getLastReloadTime()
       const timeSinceLastReload = Date.now() - lastReloadTime
+      const SESSION_TIMEOUT = 60000 // 1 минута - если прошло больше, считаем новую сессию
+
+      // Если прошло больше минуты с последней попытки, сбрасываем счетчик (новая сессия)
+      if (timeSinceLastReload > SESSION_TIMEOUT && reloadCount > 0) {
+        clearReloadCount()
+        const resetCount = 0
+        console.warn('[ChunkErrorHandler] Session timeout, resetting reload count')
+        
+        reloadAttempted = true
+        incrementReloadCount()
+        console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt 1/${MAX_RELOAD_ATTEMPTS}), reloading page in 100ms...`)
+        
+        setTimeout(() => {
+          if ('caches' in window) {
+            caches.keys().then(names => {
+              names.forEach(name => caches.delete(name))
+            }).catch(() => {})
+          }
+          window.location.reload()
+        }, 100)
+        return
+      }
 
       // Проверяем, не превышен ли лимит попыток
       if (reloadCount >= MAX_RELOAD_ATTEMPTS) {
         console.error('[ChunkErrorHandler] Max reload attempts reached. Please refresh the page manually or contact support.')
-        // Показываем сообщение пользователю
         if (document.body) {
           const errorDiv = document.createElement('div')
           errorDiv.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: #ef4444; color: white; padding: 16px; text-align: center; z-index: 99999; font-family: sans-serif;'
@@ -73,34 +94,47 @@ export default function ChunkErrorHandler() {
         return
       }
 
-      // Cooldown применяется только для последующих попыток (не для первой)
-      if (reloadCount > 0 && timeSinceLastReload < RELOAD_COOLDOWN) {
-        console.warn(`[ChunkErrorHandler] Reload cooldown active. Waiting ${Math.ceil((RELOAD_COOLDOWN - timeSinceLastReload) / 1000)}s...`)
-        // Планируем перезагрузку после cooldown
+      // Первая попытка всегда выполняется немедленно
+      if (reloadCount === 0) {
+        reloadAttempted = true
+        incrementReloadCount()
+        console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt 1/${MAX_RELOAD_ATTEMPTS}), reloading page in 100ms...`)
+        
         setTimeout(() => {
-          reloadAttempted = false // Сбрасываем флаг для повторной попытки
+          if ('caches' in window) {
+            caches.keys().then(names => {
+              names.forEach(name => caches.delete(name))
+            }).catch(() => {})
+          }
+          window.location.reload()
+        }, 100)
+        return
+      }
+
+      // Для последующих попыток проверяем cooldown
+      if (timeSinceLastReload < RELOAD_COOLDOWN) {
+        const waitTime = RELOAD_COOLDOWN - timeSinceLastReload
+        console.warn(`[ChunkErrorHandler] Reload cooldown active. Waiting ${Math.ceil(waitTime / 1000)}s...`)
+        setTimeout(() => {
+          reloadAttempted = false
           reloadPage()
-        }, RELOAD_COOLDOWN - timeSinceLastReload)
+        }, waitTime)
         return
       }
 
       reloadAttempted = true
       incrementReloadCount()
       
-      const delay = reloadCount === 0 ? 100 : 500 // Первая попытка быстрее
-      console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt ${reloadCount + 1}/${MAX_RELOAD_ATTEMPTS}), reloading page in ${delay}ms...`)
+      console.warn(`[ChunkErrorHandler] Chunk load error detected (attempt ${reloadCount + 1}/${MAX_RELOAD_ATTEMPTS}), reloading page in 500ms...`)
       
       setTimeout(() => {
-        // Очищаем кеш перед перезагрузкой
         if ('caches' in window) {
           caches.keys().then(names => {
             names.forEach(name => caches.delete(name))
-          }).catch(() => {
-            // Игнорируем ошибки очистки кеша
-          })
+          }).catch(() => {})
         }
         window.location.reload()
-      }, delay)
+      }, 500)
     }
 
     // Обработка ошибок загрузки чанков Next.js

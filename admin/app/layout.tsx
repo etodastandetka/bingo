@@ -76,10 +76,33 @@ export default function RootLayout({
                   var lastReloadTime = getLastReloadTime();
                   var timeSinceLastReload = Date.now() - lastReloadTime;
                   
+                  var SESSION_TIMEOUT = 60000; // 1 минута - если прошло больше, считаем новую сессию
+                  
+                  // Если прошло больше минуты с последней попытки, сбрасываем счетчик (новая сессия)
+                  if (timeSinceLastReload > SESSION_TIMEOUT && reloadCount > 0) {
+                    clearReloadCount();
+                    console.warn('[ChunkErrorHandler] Session timeout, resetting reload count');
+                    
+                    reloadAttempted = true;
+                    incrementReloadCount();
+                    console.warn('[ChunkErrorHandler] Chunk load error detected (attempt 1/' + MAX_RELOAD_ATTEMPTS + '), reloading page in 100ms...');
+                    
+                    setTimeout(function() {
+                      if ('caches' in window) {
+                        caches.keys().then(function(names) {
+                          names.forEach(function(name) {
+                            caches.delete(name);
+                          });
+                        }).catch(function() {});
+                      }
+                      window.location.reload();
+                    }, 100);
+                    return;
+                  }
+                  
                   // Проверяем, не превышен ли лимит попыток
                   if (reloadCount >= MAX_RELOAD_ATTEMPTS) {
                     console.error('[ChunkErrorHandler] Max reload attempts reached. Please refresh the page manually.');
-                    // Показываем сообщение пользователю
                     if (document.body) {
                       var errorDiv = document.createElement('div');
                       errorDiv.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: #ef4444; color: white; padding: 16px; text-align: center; z-index: 99999; font-family: sans-serif;';
@@ -89,37 +112,52 @@ export default function RootLayout({
                     return;
                   }
                   
-                  // Cooldown применяется только для последующих попыток (не для первой)
-                  if (reloadCount > 0 && timeSinceLastReload < RELOAD_COOLDOWN) {
-                    console.warn('[ChunkErrorHandler] Reload cooldown active. Waiting...');
-                    // Планируем перезагрузку после cooldown
+                  // Первая попытка всегда выполняется немедленно
+                  if (reloadCount === 0) {
+                    reloadAttempted = true;
+                    incrementReloadCount();
+                    console.warn('[ChunkErrorHandler] Chunk load error detected (attempt 1/' + MAX_RELOAD_ATTEMPTS + '), reloading page in 100ms...');
+                    
                     setTimeout(function() {
-                      reloadAttempted = false; // Сбрасываем флаг для повторной попытки
+                      if ('caches' in window) {
+                        caches.keys().then(function(names) {
+                          names.forEach(function(name) {
+                            caches.delete(name);
+                          });
+                        }).catch(function() {});
+                      }
+                      window.location.reload();
+                    }, 100);
+                    return;
+                  }
+                  
+                  // Для последующих попыток проверяем cooldown
+                  if (timeSinceLastReload < RELOAD_COOLDOWN) {
+                    var waitTime = RELOAD_COOLDOWN - timeSinceLastReload;
+                    console.warn('[ChunkErrorHandler] Reload cooldown active. Waiting ' + Math.ceil(waitTime / 1000) + 's...');
+                    setTimeout(function() {
+                      reloadAttempted = false;
                       reloadPage();
-                    }, RELOAD_COOLDOWN - timeSinceLastReload);
+                    }, waitTime);
                     return;
                   }
                   
                   reloadAttempted = true;
                   incrementReloadCount();
                   
-                  var delay = reloadCount === 0 ? 100 : 500; // Первая попытка быстрее
-                  console.warn('[ChunkErrorHandler] Chunk load error detected (attempt ' + (reloadCount + 1) + '/' + MAX_RELOAD_ATTEMPTS + '), reloading page in ' + delay + 'ms...');
+                  console.warn('[ChunkErrorHandler] Chunk load error detected (attempt ' + (reloadCount + 1) + '/' + MAX_RELOAD_ATTEMPTS + '), reloading page in 500ms...');
                   
-                  // Очищаем кеш
                   if ('caches' in window) {
                     caches.keys().then(function(names) {
                       names.forEach(function(name) {
                         caches.delete(name);
                       });
-                    }).catch(function() {
-                      // Игнорируем ошибки очистки кеша
-                    });
+                    }).catch(function() {});
                   }
                   
                   setTimeout(function() {
                     window.location.reload();
-                  }, delay);
+                  }, 500);
                 }
                 
                 // Перехватываем ошибки загрузки скриптов
