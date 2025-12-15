@@ -408,11 +408,16 @@ export default function UserDetailPage() {
     )
   }
 
-  const displayName = user?.firstName || user?.username || `ID: ${user?.userId || params.userId}`
-  const displayUsername = user?.username ? `@${user.username}` : null
+  // В этом месте user гарантированно не null (если был null, мы бы вернулись выше)
+  if (!user) {
+    return null // Это не должно произойти, но для TypeScript
+  }
+
+  const displayName = user.firstName || user.username || `ID: ${user.userId}`
+  const displayUsername = user.username ? `@${user.username}` : null
   
   // Статистика по пополнениям и выводам
-  const transactions = user?.transactions || []
+  const transactions = user.transactions || []
   const deposits = transactions.filter(t => t.transType === 'deposit')
   const withdrawals = transactions.filter(t => t.transType === 'withdraw')
   const totalDeposits = deposits.reduce((sum, t) => {
