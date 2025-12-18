@@ -23,11 +23,26 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { bookmaker, userId, code } = body
 
-    if (!bookmaker || !userId || !code) {
+    // ВАЖНО: Проверяем код ПЕРВЫМ, чтобы не выполнять проверку если код не введен
+    // Это предотвращает автоматическую проверку при загрузке страницы
+    
+    // Проверяем наличие кода (включая пустые строки и специальные значения)
+    if (!code || code === '' || code.trim() === '' || 
+        code === 'Проверка наличия вывода...' || 
+        code === 'Checking for withdrawal...' ||
+        code.toLowerCase().includes('проверка') ||
+        code.toLowerCase().includes('checking')) {
+      return NextResponse.json(
+        createApiResponse(null, 'Код вывода не введен. Пожалуйста, введите код вывода с сайта букмекера перед проверкой.'),
+        { status: 400 }
+      )
+    }
+
+    // Улучшенная валидация остальных полей
+    if (!bookmaker || !userId) {
       const missingFields: string[] = []
-      if (!bookmaker) missingFields.push('bookmaker (букмекер)')
-      if (!userId) missingFields.push('userId (ID пользователя)')
-      if (!code) missingFields.push('code (код вывода)')
+      if (!bookmaker) missingFields.push('букмекер')
+      if (!userId) missingFields.push('ID пользователя')
       
       return NextResponse.json(
         createApiResponse(null, `Отсутствуют обязательные поля: ${missingFields.join(', ')}`),
