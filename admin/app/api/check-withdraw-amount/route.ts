@@ -24,8 +24,13 @@ export async function POST(request: NextRequest) {
     const { bookmaker, userId, code } = body
 
     if (!bookmaker || !userId || !code) {
+      const missingFields: string[] = []
+      if (!bookmaker) missingFields.push('bookmaker (букмекер)')
+      if (!userId) missingFields.push('userId (ID пользователя)')
+      if (!code) missingFields.push('code (код вывода)')
+      
       return NextResponse.json(
-        createApiResponse(null, 'Bookmaker, userId and code are required'),
+        createApiResponse(null, `Отсутствуют обязательные поля: ${missingFields.join(', ')}`),
         { status: 400 }
       )
     }
@@ -75,20 +80,33 @@ export async function POST(request: NextRequest) {
         createApiResponse({
           amount: result.amount,
           transactionId: result.transactionId,
-          message: result.message,
-        }, result.message),
+          message: result.message || 'Сумма вывода успешно получена',
+        }, result.message || 'Сумма вывода успешно получена'),
         { status: 200 }
       )
     }
 
+    // Улучшаем сообщение об ошибке для пользователя
+    let errorMessage = result.message || 'Не удалось проверить сумму вывода'
+    
+    // Если сообщение уже на русском и содержит полезную информацию, оставляем как есть
+    // Иначе добавляем контекст
+    if (!errorMessage.includes('нет активной заявки') && 
+        !errorMessage.includes('Неверный код') &&
+        !errorMessage.includes('создайте новую заявку')) {
+      // Добавляем более понятное сообщение
+      errorMessage = `${errorMessage}. Убедитесь, что вы создали заявку на вывод в казино ${bookmaker}.`
+    }
+
     return NextResponse.json(
-      createApiResponse(null, result.message),
+      createApiResponse(null, errorMessage),
       { status: 400 }
     )
   } catch (error: any) {
     console.error('Check withdraw amount API error:', error)
+    const errorMessage = error.message || 'Произошла ошибка при проверке суммы вывода. Пожалуйста, попробуйте позже.'
     return NextResponse.json(
-      createApiResponse(null, error.message || 'Failed to check withdrawal amount'),
+      createApiResponse(null, errorMessage),
       { status: 500 }
     )
   }

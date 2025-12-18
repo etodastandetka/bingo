@@ -209,9 +209,19 @@ export async function checkWithdrawAmountMostbet(
     let withdrawal = withdrawals.find((w: any) => w.status === 'NEW')
 
     if (!withdrawal) {
-      return {
-        success: false,
-        message: 'No pending withdrawal found',
+      // Более детальное сообщение об ошибке
+      const hasWithdrawals = withdrawals.length > 0
+      if (hasWithdrawals) {
+        const statuses = withdrawals.map((w: any) => w.status).join(', ')
+        return {
+          success: false,
+          message: `У этого игрока нет активной заявки на вывод в казино Mostbet. Текущие статусы заявок: ${statuses}. Пожалуйста, создайте новую заявку на вывод в казино.`,
+        }
+      } else {
+        return {
+          success: false,
+          message: 'У этого игрока нет активной заявки на вывод в казино Mostbet. Пожалуйста, создайте новую заявку на вывод в казино.',
+        }
       }
     }
 
@@ -282,9 +292,21 @@ export async function checkWithdrawAmountMostbet(
       }
     }
 
+    // Улучшаем сообщения об ошибках
+    let errorMessage = confirmData.message || confirmData.error || 'Не удалось подтвердить вывод'
+    
+    // Переводим типичные ошибки на более понятный язык
+    if (errorMessage.toLowerCase().includes('code') || errorMessage.toLowerCase().includes('код')) {
+      errorMessage = 'Неверный код подтверждения. Пожалуйста, проверьте код и попробуйте снова.'
+    } else if (errorMessage.toLowerCase().includes('not found') || errorMessage.toLowerCase().includes('не найден')) {
+      errorMessage = 'Заявка на вывод не найдена. Убедитесь, что вы создали заявку на вывод в казино Mostbet.'
+    } else if (errorMessage.toLowerCase().includes('active') || errorMessage.toLowerCase().includes('актив')) {
+      errorMessage = 'У этого игрока нет активной заявки на вывод в казино Mostbet. Пожалуйста, создайте новую заявку на вывод в казино.'
+    }
+    
     return {
       success: false,
-      message: confirmData.message || confirmData.error || `Failed to confirm withdrawal (Status: ${confirmResponse.status})`,
+      message: errorMessage,
     }
   } catch (error: any) {
     console.error(`[Mostbet Check Withdraw] Error for playerId: ${playerId}:`, error)
