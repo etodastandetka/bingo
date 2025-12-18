@@ -85,6 +85,47 @@ async function updateCasinoPasswords() {
     }
 
     console.log('\n✅ Все пароли успешно обновлены!')
+
+    // Добавляем конфигурации для казино, которых нет в БД (betwinner, 888starz)
+    console.log('\n🔄 Проверка недостающих конфигураций...\n')
+    
+    const additionalCasinos: Record<string, any> = {
+      'betwinner': {
+        hash: 'b2b5dcc4fd7c2dd559bd3c465ee9202f157e0697ed016dbd7db0121ebfec7ff2',
+        cashierpass: '2768772981',
+        login: 'kurbanaevba1',
+        cashdeskid: '1392478',
+      },
+      '888starz': {
+        hash: '6bb5fbcbc5784359ccbf490167d9b3a82ea6dc3eac22e0d7cc083c2e71b10da0',
+        cashierpass: '8688726678',
+        login: 'kurbanaevba',
+        cashdeskid: '1376440',
+      },
+    }
+
+    for (const [casino, defaultConfig] of Object.entries(additionalCasinos)) {
+      const configKey = `${casino}_api_config`
+      
+      const existing = await prisma.botConfiguration.findFirst({
+        where: { key: configKey }
+      })
+
+      if (!existing) {
+        await prisma.botConfiguration.create({
+          data: {
+            key: configKey,
+            value: JSON.stringify(defaultConfig)
+          }
+        })
+
+        console.log(`✅ ${casino}: конфигурация добавлена в БД`)
+      } else {
+        console.log(`ℹ️  ${casino}: конфигурация уже существует в БД`)
+      }
+    }
+
+    console.log('\n✅ Все конфигурации проверены и обновлены!')
   } catch (error) {
     console.error('❌ Ошибка при обновлении паролей:', error)
     process.exit(1)
