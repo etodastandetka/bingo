@@ -410,9 +410,29 @@ export async function deposit1winAPI(
       }
     }
 
+    // Обработка специфических ошибок 1win API
+    const errorCode = data.errorCode
+    let errorMessage = data.errorMessage || data.message || `Failed to deposit balance (Status: ${response.status})`
+    
+    if (errorCode === 'CASH06') {
+      errorMessage = 'Слишком много запросов к API 1win. Пожалуйста, подождите несколько секунд и попробуйте снова.'
+    } else if (errorCode === 'CASH07') {
+      errorMessage = 'Превышен лимит баланса. Сумма пополнения слишком большая.'
+    } else if (errorCode === 'CASH01') {
+      errorMessage = 'Неверный ID пользователя или пользователь не найден в системе 1win.'
+    } else if (errorCode === 'CASH02') {
+      errorMessage = 'Неверная сумма пополнения. Проверьте сумму и попробуйте снова.'
+    } else if (errorCode === 'CASH03') {
+      errorMessage = 'Операция временно недоступна. Попробуйте позже.'
+    } else if (errorCode === 'CASH04') {
+      errorMessage = 'Недостаточно средств для пополнения.'
+    } else if (errorCode === 'CASH05') {
+      errorMessage = 'Операция отклонена. Свяжитесь с поддержкой 1win.'
+    }
+
     return {
       success: false,
-      message: data.errorMessage || data.message || `Failed to deposit balance (Status: ${response.status})`,
+      message: errorMessage,
       data,
     }
   } catch (error: any) {
