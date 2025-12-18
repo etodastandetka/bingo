@@ -13,6 +13,7 @@
     "db:studio": "prisma studio",
     "create-admin": "tsx scripts/create-admin.ts",
     "update-casino-passwords": "tsx scripts/update-casino-passwords.ts",
+    "check-casino-config": "tsx scripts/check-casino-config.ts",
     "test:operator-chat": "tsx scripts/test-operator-chat.ts",
     "test:operator-chat-direct": "tsx scripts/test-chat-direct.ts",
     "init:quick-replies": "tsx scripts/init-quick-replies.ts",
