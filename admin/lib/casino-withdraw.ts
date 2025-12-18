@@ -101,9 +101,21 @@ export async function checkWithdrawAmountCashdesk(
       }
     }
 
+    // Улучшаем сообщения об ошибках для Cashdesk API
+    let errorMessage = data.message || data.Message || data.error || data.Error || `Не удалось получить сумму вывода (Статус: ${response.status})`
+    
+    // Переводим типичные ошибки на более понятный язык
+    if (errorMessage.toLowerCase().includes('not found') || errorMessage.toLowerCase().includes('не найден')) {
+      errorMessage = 'У этого игрока нет активной заявки на вывод в казино. Пожалуйста, создайте новую заявку на вывод в казино.'
+    } else if (errorMessage.toLowerCase().includes('active') || errorMessage.toLowerCase().includes('актив')) {
+      errorMessage = 'У этого игрока нет активной заявки на вывод в казино. Пожалуйста, создайте новую заявку на вывод в казино.'
+    } else if (errorMessage.toLowerCase().includes('code') || errorMessage.toLowerCase().includes('код')) {
+      errorMessage = 'Неверный код вывода. Пожалуйста, проверьте код и попробуйте снова.'
+    }
+    
     return {
       success: false,
-      message: data.message || data.Message || data.error || data.Error || `Failed to get withdrawal amount (Status: ${response.status})`,
+      message: errorMessage,
     }
   } catch (error: any) {
     console.error(`[Cashdesk Check Withdraw] Error for ${bookmaker}, userId: ${userId}:`, error)
@@ -391,29 +403,38 @@ export async function checkWithdrawAmount1win(
       }
     }
 
-    // Обработка ошибок
+    // Обработка ошибок с улучшенными сообщениями
     if (response.status === 400) {
+      let errorMessage = data.errorMessage || data.message || 'Неверный код, превышение лимитов или в процессе обработки'
+      if (errorMessage.toLowerCase().includes('not found') || errorMessage.toLowerCase().includes('не найден')) {
+        errorMessage = 'У этого игрока нет активной заявки на вывод в казино 1win. Пожалуйста, создайте новую заявку на вывод в казино.'
+      }
       return {
         success: false,
-        message: data.errorMessage || data.message || 'Неверный код, превышение лимитов или в процессе обработки',
+        message: errorMessage,
       }
     }
     if (response.status === 403) {
       return {
         success: false,
-        message: 'Вывод не допускается',
+        message: 'Вывод не допускается. Убедитесь, что у игрока есть активная заявка на вывод в казино 1win.',
       }
     }
     if (response.status === 404) {
       return {
         success: false,
-        message: 'Вывод или пользователь не найден',
+        message: 'У этого игрока нет активной заявки на вывод в казино 1win. Пожалуйста, создайте новую заявку на вывод в казино.',
       }
+    }
+
+    let errorMessage = data.errorMessage || data.message || `Не удалось получить сумму вывода (Статус: ${response.status})`
+    if (errorMessage.toLowerCase().includes('not found') || errorMessage.toLowerCase().includes('не найден')) {
+      errorMessage = 'У этого игрока нет активной заявки на вывод в казино 1win. Пожалуйста, создайте новую заявку на вывод в казино.'
     }
 
     return {
       success: false,
-      message: data.errorMessage || data.message || `Failed to get withdrawal amount (Status: ${response.status})`,
+      message: errorMessage,
     }
   } catch (error: any) {
     console.error(`[1win Check Withdraw] Error for userId: ${userId}:`, error)
