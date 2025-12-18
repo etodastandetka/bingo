@@ -173,13 +173,6 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
     )
     
     amount_prompt = get_text(lang, 'deposit', 'enter_amount', min=str(Config.DEPOSIT_MIN), max=str(Config.DEPOSIT_MAX))
-    if player_info:
-        player_name = player_info.get('name') or player_info.get('Name') or ''
-        player_id_resp = player_info.get('userId') or player_info.get('UserId') or account_id
-        extra = f"\n\nНайден игрок:\nID: {player_id_resp}"
-        if player_name:
-            extra += f"\nИмя: {player_name}"
-        amount_prompt += extra
 
     await message.answer(
         amount_prompt,
@@ -264,18 +257,17 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             # Для текста оставляем localhost
             text_url = payment_url
         
-        # Отправляем ссылку в тексте и обычную кнопку с URL
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        # Используем WebApp кнопку для мини-приложения
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='💳 Перейти к оплате', url=button_url)]
+            [InlineKeyboardButton(text='💳 Перейти к оплате', web_app=WebAppInfo(url=button_url))]
         ])
         
-        # Формируем текст с ссылкой (используем localhost для текста)
+        # Формируем текст без ссылки
         payment_text = get_text(lang, 'deposit', 'go_to_payment', 
                                amount=amount_with_cents, 
                                casino=data.get("casino_name"), 
                                account_id=account_id)
-        payment_text += f"\n\n🔗 {text_url}"
         
         await message.answer(
             payment_text,
