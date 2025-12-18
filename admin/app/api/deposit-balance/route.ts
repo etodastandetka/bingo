@@ -98,6 +98,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Проверка на дубликаты: если заявка уже обработана (completed), не выполняем повторное пополнение
+    if (requestData.status === 'completed' || requestData.status === 'approved') {
+      console.log(`[Deposit Balance] Request ${requestId} already processed, status: ${requestData.status}`)
+      return NextResponse.json(
+        createApiResponse(null, `Заявка уже обработана (статус: ${requestData.status}). Повторное пополнение невозможно.`),
+        { status: 400 }
+      )
+    }
+
     // ВАЖНО: Используем accountId из заявки (ID казино), а не из body запроса!
     // accountId из body может быть неправильным (например, Telegram ID)
     // accountId - это ID игрока в казино (например, ID счета 1xbet, Melbet и т.д.)

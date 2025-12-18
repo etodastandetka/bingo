@@ -318,6 +318,57 @@ export async function POST(request: NextRequest) {
         lastName: cleanLastName,
       })
 
+      // Проверка на дубликаты: ищем существующую заявку с теми же параметрами
+      // Проверяем только для deposit, так как для withdraw могут быть разные суммы
+      if (validType === 'deposit' && finalAccountId) {
+        const existingRequest = await prisma.request.findFirst({
+          where: {
+            userId: userIdBigInt,
+            accountId: finalAccountId.toString(),
+            amount: amountDecimal,
+            requestType: 'deposit',
+            status: 'pending',
+            bookmaker: cleanString(bookmaker),
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        })
+
+        if (existingRequest) {
+          console.log('⚠️ Payment API - Duplicate request detected, returning existing:', {
+            existingId: existingRequest.id,
+            userId: userIdBigInt.toString(),
+            accountId: finalAccountId.toString(),
+            amount: amountDecimal.toString(),
+          })
+          
+          // Возвращаем существующую заявку вместо создания новой
+          const existingData = {
+            id: existingRequest.id,
+            userId: existingRequest.userId.toString(),
+            type: existingRequest.requestType,
+            status: existingRequest.status,
+            amount: existingRequest.amount?.toString(),
+            bookmaker: existingRequest.bookmaker,
+            accountId: existingRequest.accountId,
+            has_photo: !!existingRequest.photoFileUrl,
+            createdAt: existingRequest.createdAt
+          }
+
+          const duplicateResponse = NextResponse.json(
+            createApiResponse(existingData, undefined, 'Request already exists'),
+            {
+              status: 200,
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+              }
+            }
+          )
+          return duplicateResponse
+        }
+      }
+
       const newRequest = await prisma.request.create({
         data: {
           userId: userIdBigInt,
