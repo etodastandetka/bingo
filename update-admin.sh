@@ -44,6 +44,10 @@ npm install
 echo -e "${YELLOW}🔨 Генерация Prisma Client...${NC}"
 npm run db:generate
 
+echo -e "${YELLOW}🧹 Очистка кеша Next.js...${NC}"
+rm -rf .next
+rm -rf node_modules/.cache
+
 echo -e "${YELLOW}🏗️ Сборка проекта...${NC}"
 npm run build
 
