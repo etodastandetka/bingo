@@ -29,6 +29,8 @@ const nextConfig = {
     JWT_SECRET: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
     BOT_TOKEN: process.env.BOT_TOKEN || '8413027203:AAHhXadiHxW8WUSGp8tzxPqOF7iLHf8lI_s',
     OPERATOR_BOT_TOKEN: process.env.OPERATOR_BOT_TOKEN || '8279477654:AAHZHyx5Ez_qeOYx610ayISgHhtz9Uy7F_0',
+    BOT_TOKEN_MOSTBET: process.env.BOT_TOKEN_MOSTBET,
+    BOT_TOKEN_1XBET: process.env.BOT_TOKEN_1XBET,
   },
   
   webpack: (config, { isServer }) => {

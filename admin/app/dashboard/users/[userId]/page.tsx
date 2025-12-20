@@ -354,7 +354,7 @@ export default function UserDetailPage() {
     const target = e.target as HTMLImageElement
     try {
       if (target.src && !target.src.includes('/images/mbank.png')) {
-        target.src = '/images/mbank.png'
+      target.src = '/images/mbank.png'
         target.onerror = null // Предотвращаем бесконечный цикл
       }
     } catch (err) {
@@ -386,12 +386,12 @@ export default function UserDetailPage() {
             {error || 'Пользователь не найден'}
           </p>
           <div className="flex gap-3 justify-center mt-6">
-            <button
-              onClick={() => router.back()}
+        <button
+          onClick={() => router.back()}
               className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
-            >
-              Назад
-            </button>
+        >
+          Назад
+        </button>
             <button
               onClick={() => {
                 setLoading(true)

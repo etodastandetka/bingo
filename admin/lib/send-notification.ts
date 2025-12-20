@@ -1,14 +1,40 @@
 import { prisma } from './prisma'
 
 /**
+ * Определяет токен бота по bookmaker
+ * mostbet -> BOT_TOKEN_MOSTBET
+ * 1xbet -> BOT_TOKEN_1XBET
+ * остальные -> BOT_TOKEN (основной бот)
+ */
+export function getBotTokenByBookmaker(bookmaker: string | null | undefined): string | null {
+  if (!bookmaker) {
+    return process.env.BOT_TOKEN || null
+  }
+
+  const normalized = bookmaker.toLowerCase()
+
+  if (normalized.includes('mostbet')) {
+    return process.env.BOT_TOKEN_MOSTBET || process.env.BOT_TOKEN || null
+  }
+
+  if (normalized.includes('1xbet') || normalized.includes('xbet')) {
+    return process.env.BOT_TOKEN_1XBET || process.env.BOT_TOKEN || null
+  }
+
+  // Для остальных казино используем основной бот
+  return process.env.BOT_TOKEN || null
+}
+
+/**
  * Отправка уведомления пользователю через Telegram бота
  */
 export async function sendNotificationToUser(
   userId: bigint,
-  message: string
+  message: string,
+  bookmaker?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const botToken = process.env.BOT_TOKEN
+    const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
 
     if (!botToken) {
       console.error('BOT_TOKEN not configured')
@@ -38,13 +64,24 @@ export async function sendNotificationToUser(
 
     // Сохраняем сообщение в БД
     try {
+      // Определяем botType на основе bookmaker
+      let botType = 'main'
+      if (bookmaker) {
+        const normalized = bookmaker.toLowerCase()
+        if (normalized.includes('mostbet')) {
+          botType = 'mostbet'
+        } else if (normalized.includes('1xbet') || normalized.includes('xbet')) {
+          botType = '1xbet'
+        }
+      }
+
       await prisma.chatMessage.create({
         data: {
           userId,
           messageText: message,
           messageType: 'text',
           direction: 'out',
-          botType: 'main',
+          botType,
           telegramMessageId: BigInt(telegramData.result.message_id),
         },
       })

@@ -230,8 +230,8 @@ export async function checkWithdrawAmountMostbet(
           message: `У этого игрока нет активной заявки на вывод в казино Mostbet. Текущие статусы заявок: ${statuses}. Пожалуйста, создайте новую заявку на вывод в казино.`,
         }
       } else {
-        return {
-          success: false,
+      return {
+        success: false,
           message: 'У этого игрока нет активной заявки на вывод в казино Mostbet. Пожалуйста, создайте новую заявку на вывод в казино.',
         }
       }
@@ -315,7 +315,7 @@ export async function checkWithdrawAmountMostbet(
     } else if (errorMessage.toLowerCase().includes('active') || errorMessage.toLowerCase().includes('актив')) {
       errorMessage = 'У этого игрока нет активной заявки на вывод в казино Mostbet. Пожалуйста, создайте новую заявку на вывод в казино.'
     }
-    
+
     return {
       success: false,
       message: errorMessage,

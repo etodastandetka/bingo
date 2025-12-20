@@ -194,6 +194,9 @@ export async function PATCH(
 
         let notificationMessage = ''
 
+        // Проверяем, была ли заявка на проверке (операторская)
+        const isOperatorRequest = currentRequest.statusDetail === 'pending_check' || updatedRequest.statusDetail === 'pending_check'
+
         if (['completed', 'approved', 'auto_completed', 'autodeposit_success'].includes(body.status)) {
           // Успешное пополнение или вывод
           const amount = updatedRequest.amount ? parseFloat(updatedRequest.amount.toString()) : 0
@@ -205,32 +208,41 @@ export async function PATCH(
           } else {
             notificationMessage = formatWithdrawMessage(amount, casino, accountId, adminUsername, lang)
           }
-          // Сообщение в оператор-боте
-          sendOperatorMessage(
-            updatedRequest.userId,
-            [
-              `✅ Оператор подтвердил вашу заявку #${updatedRequest.id}.`,
-              `💰 Сумма: ${updatedRequest.amount?.toString() || '0'}`,
-              `🟢 Статус: Успешно`,
-              `🗓 Создано: ${formatDateTime(updatedRequest.createdAt)}`,
-              `⏱ Подтверждено: ${formatDateTime(new Date())}`,
-            ].join('\n')
-          )
+
+          // Если это операторская заявка (была на проверке) - отправляем только в оператор-бот
+          if (isOperatorRequest) {
+            sendOperatorMessage(
+              updatedRequest.userId,
+              [
+                `✅ Оператор подтвердил вашу заявку #${updatedRequest.id}.`,
+                `💰 Сумма: ${updatedRequest.amount?.toString() || '0'}`,
+                `🟢 Статус: Успешно`,
+                `🗓 Создано: ${formatDateTime(updatedRequest.createdAt)}`,
+                `⏱ Подтверждено: ${formatDateTime(new Date())}`,
+              ].join('\n')
+            )
+          }
+          // Для обычных заявок (не операторских) notificationMessage отправится в основной бот ниже
         } else if (['rejected', 'declined'].includes(body.status)) {
           // Отклонение заявки
           notificationMessage = formatRejectMessage(currentRequest.requestType, adminUsername, lang)
-          sendOperatorMessage(
-            updatedRequest.userId,
-            [
-              `❌ Оператор отклонил вашу заявку #${updatedRequest.id}.`,
-              `💰 Сумма: ${updatedRequest.amount?.toString() || '0'}`,
-              `🔴 Статус: Отклонено`,
-              `🗓 Создано: ${formatDateTime(updatedRequest.createdAt)}`,
-              `⏱ Отклонено: ${formatDateTime(new Date())}`,
-            ].join('\n')
-          )
+          
+          // Если это операторская заявка (была на проверке) - отправляем только в оператор-бот
+          if (isOperatorRequest) {
+            sendOperatorMessage(
+              updatedRequest.userId,
+              [
+                `❌ Оператор отклонил вашу заявку #${updatedRequest.id}.`,
+                `💰 Сумма: ${updatedRequest.amount?.toString() || '0'}`,
+                `🔴 Статус: Отклонено`,
+                `🗓 Создано: ${formatDateTime(updatedRequest.createdAt)}`,
+                `⏱ Отклонено: ${formatDateTime(new Date())}`,
+              ].join('\n')
+            )
+          }
+          // Для обычных заявок (не операторских) notificationMessage отправится в основной бот ниже
         } else if (body.status === 'pending' && updatedRequest.statusDetail === 'pending_check') {
-          // Статус "на проверке" (если выставляется через PATCH)
+          // Статус "на проверке" (если выставляется через PATCH) - только в оператор-бот
           sendOperatorMessage(
             updatedRequest.userId,
             [
@@ -243,9 +255,11 @@ export async function PATCH(
           )
         }
 
-        if (notificationMessage) {
+        // Отправляем уведомление в основной бот только если это не операторская заявка
+        // и есть сообщение для отправки
+        if (notificationMessage && !isOperatorRequest) {
           // Отправляем уведомление асинхронно (не блокируем ответ)
-          sendNotificationToUser(currentRequest.userId, notificationMessage).catch((error) => {
+          sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker).catch((error) => {
             console.error('Failed to send notification:', error)
           })
         }

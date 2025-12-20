@@ -52,13 +52,13 @@ export async function POST(request: NextRequest) {
 
     if (result.success) {
       return NextResponse.json(
-        createApiResponse({ exists: true }, undefined, undefined),
+        createApiResponse({ exists: true, player: result.data }, undefined, 'Player found'),
         { status: 200 }
       )
     }
 
     return NextResponse.json(
-      createApiResponse({ exists: false, message: result.message }, undefined, undefined),
+      createApiResponse({ exists: false, message: result.message }, undefined, 'Player not found'),
       { status: 404 }
     )
   } catch (error: any) {
