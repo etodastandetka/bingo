@@ -134,8 +134,8 @@ def generate_qr_image(qr_hash, unique_id=None):
     except:
         font = ImageFont.load_default()
     
-    # Основной текст (как на изображении)
-    text = "ПОПОЛНЕНИЕ ДЛЯ КАЗИНО"
+    # Основной текст (как на изображении) - "ПОПОЛНЕНИЕ КАЗИНО"
+    text = "ПОПОЛНЕНИЕ КАЗИНО"
     
     # Получаем размеры текста
     try:
@@ -205,8 +205,71 @@ def generate_qr_image(qr_hash, unique_id=None):
     
     # Добавляем красную рамку вокруг QR кода
     border_width = 4
-    bordered_img = Image.new('RGB', (width + border_width * 2, height + border_width * 2), (231, 76, 60))
+    
+    # Добавляем место внизу для текста "ОТСКАНИРУЙТЕ QR" и "В любом банке"
+    bottom_padding = 80  # Место для двух строк текста
+    bordered_img = Image.new('RGB', (width + border_width * 2, height + border_width * 2 + bottom_padding), (255, 255, 255))
+    
+    # Рисуем красную рамку
+    draw_border = ImageDraw.Draw(bordered_img)
+    # Верхняя и нижняя рамки
+    draw_border.rectangle([0, 0, width + border_width * 2, border_width], fill=(231, 76, 60))
+    draw_border.rectangle([0, height + border_width, width + border_width * 2, height + border_width * 2], fill=(231, 76, 60))
+    # Левая и правая рамки
+    draw_border.rectangle([0, 0, border_width, height + border_width * 2], fill=(231, 76, 60))
+    draw_border.rectangle([width + border_width, 0, width + border_width * 2, height + border_width * 2], fill=(231, 76, 60))
+    
+    # Вставляем QR код с водяным знаком
     bordered_img.paste(img.convert('RGB'), (border_width, border_width))
+    
+    # Добавляем текст внизу: "ОТСКАНИРУЙТЕ QR" (черный, uppercase) и "В любом банке" (синий, lowercase)
+    try:
+        # Шрифт для "ОТСКАНИРУЙТЕ QR" (черный, uppercase, немного больше)
+        scan_font_size = int(width * 0.05)
+        try:
+            scan_font = ImageFont.truetype("arial.ttf", scan_font_size)
+        except:
+            try:
+                scan_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", scan_font_size)
+            except:
+                scan_font = ImageFont.load_default()
+        
+        # Шрифт для "В любом банке" (синий, lowercase, немного меньше)
+        bank_font_size = int(width * 0.04)
+        try:
+            bank_font = ImageFont.truetype("arial.ttf", bank_font_size)
+        except:
+            try:
+                bank_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", bank_font_size)
+            except:
+                bank_font = ImageFont.load_default()
+    except:
+        scan_font = ImageFont.load_default()
+        bank_font = ImageFont.load_default()
+    
+    # Текст "ОТСКАНИРУЙТЕ QR" (черный, uppercase)
+    scan_text = "ОТСКАНИРУЙТЕ QR"
+    try:
+        scan_bbox = draw_border.textbbox((0, 0), scan_text, font=scan_font)
+        scan_text_width = scan_bbox[2] - scan_bbox[0]
+    except:
+        scan_text_width = len(scan_text) * scan_font_size * 0.6
+    
+    scan_x = (width + border_width * 2 - scan_text_width) // 2
+    scan_y = height + border_width * 2 + 15
+    draw_border.text((scan_x, scan_y), scan_text, font=scan_font, fill=(0, 0, 0, 255))  # Черный
+    
+    # Текст "В любом банке" (синий, lowercase)
+    bank_text = "В любом банке"
+    try:
+        bank_bbox = draw_border.textbbox((0, 0), bank_text, font=bank_font)
+        bank_text_width = bank_bbox[2] - bank_bbox[0]
+    except:
+        bank_text_width = len(bank_text) * bank_font_size * 0.6
+    
+    bank_x = (width + border_width * 2 - bank_text_width) // 2
+    bank_y = scan_y + scan_font_size + 10
+    draw_border.text((bank_x, bank_y), bank_text, font=bank_font, fill=(0, 100, 200, 255))  # Синий
     
     # Конвертируем обратно в RGB для лучшей совместимости
     final_img = bordered_img.convert('RGB')
