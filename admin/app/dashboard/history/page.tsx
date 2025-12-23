@@ -224,8 +224,21 @@ export default function HistoryPage() {
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     // Если изображение не загрузилось, заменяем на дефолтное
     const target = e.target as HTMLImageElement
-    if (target.src !== '/images/mbank.png') {
-      target.src = '/images/mbank.png'
+    const defaultImage = '/images/mbank.png'
+    
+    // Предотвращаем бесконечный цикл ошибок
+    if (target.src.includes(defaultImage) || target.dataset.errorHandled === 'true') {
+      // Если уже пытались загрузить дефолтное изображение, скрываем иконку или показываем placeholder
+      target.style.display = 'none'
+      return
+    }
+    
+    // Помечаем, что ошибка обработана
+    target.dataset.errorHandled = 'true'
+    
+    // Пытаемся загрузить дефолтное изображение
+    if (!target.src.includes(defaultImage)) {
+      target.src = defaultImage
     }
   }
 
@@ -327,13 +340,14 @@ export default function HistoryPage() {
                   {/* Левая часть: Аватар и информация о пользователе */}
                   <div className="flex items-start space-x-3 flex-1">
                     {/* Иконка банка - всегда показываем иконку банка */}
-                    <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border border-gray-600 bg-gray-900">
+                    <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border border-gray-600 bg-gray-900 flex items-center justify-center">
                       <img
                         src={getBankImage(tx.bank)}
                         alt={tx.bank || 'Bank'}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                         onError={handleImageError}
                         loading="lazy"
+                        style={{ maxWidth: '100%', maxHeight: '100%' }}
                       />
                     </div>
 
