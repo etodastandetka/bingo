@@ -590,15 +590,17 @@ export default function RequestDetailPage() {
 
   const handleSearchPaymentsWithAmount = async (amountStr?: string) => {
     const amountToSearch = amountStr || searchAmount
-    if (!amountToSearch.trim()) {
+    if (!amountToSearch || !amountToSearch.trim()) {
+      pushToast('Введите сумму для поиска', 'error')
       return
     }
 
     // Парсим сумму с поддержкой формата с запятыми (1,000.67)
     // Убираем все запятые (разделители тысяч), оставляем точку для десятичных
-    const cleanedAmount = amountToSearch.replace(/,/g, '')
+    const cleanedAmount = amountToSearch.toString().replace(/,/g, '').trim()
     const amount = parseFloat(cleanedAmount)
     if (isNaN(amount) || amount <= 0) {
+      pushToast('Введите корректную сумму', 'error')
       return
     }
 
