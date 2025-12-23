@@ -144,7 +144,19 @@ export default function RequestDetailPage() {
               setSelectedBookmaker(data.data.bookmaker)
             }
             
-            // Поле поиска остается пустым - админ сам вводит сумму для поиска
+            // Автоматически заполняем поле поиска суммой из заявки (без автозапуска поиска)
+            if (data.data.requestType === 'deposit' && data.data.amount) {
+              const amount = parseFloat(data.data.amount)
+              if (!isNaN(amount) && amount > 0) {
+                // Форматируем сумму для отображения (1,000.67)
+                const formattedAmount = amount.toLocaleString('en-US', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+                setSearchAmount(formattedAmount)
+                // НЕ запускаем автоматический поиск - пользователь должен нажать "Найти"
+              }
+            }
             
             // Загружаем фото профиля пользователя (с кэшем)
             if (data.data.userId) {
