@@ -79,7 +79,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { requestId, bookmaker, amount } = body
 
+    console.log(`[Deposit Balance API] POST request received:`, {
+      requestId,
+      bookmaker,
+      amount,
+      bodyKeys: Object.keys(body),
+    })
+
     if (!requestId || !bookmaker || !amount) {
+      console.error(`[Deposit Balance API] Missing required fields:`, {
+        hasRequestId: !!requestId,
+        hasBookmaker: !!bookmaker,
+        hasAmount: !!amount,
+      })
       return NextResponse.json(
         createApiResponse(null, 'Missing required fields: requestId, bookmaker, amount'),
         { status: 400 }
@@ -89,6 +101,15 @@ export async function POST(request: NextRequest) {
     // Получаем заявку
     const requestData = await prisma.request.findUnique({
       where: { id: parseInt(requestId) },
+    })
+    
+    console.log(`[Deposit Balance API] Request data from DB:`, {
+      found: !!requestData,
+      id: requestData?.id,
+      accountId: requestData?.accountId,
+      bookmaker: requestData?.bookmaker,
+      amount: requestData?.amount?.toString(),
+      status: requestData?.status,
     })
 
     if (!requestData) {
