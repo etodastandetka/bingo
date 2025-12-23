@@ -158,9 +158,15 @@ export async function checkWithdrawAmountMostbet(
   try {
     console.log(`[Mostbet Check Withdraw] Player ID: ${playerId}, Code: ${code}`)
     
-    // Получаем timestamp
+    // Получаем timestamp в формате YYYY-MM-DD HH:MM:SS в UTC+0 (как требует документация)
     const now = new Date()
-    const timestamp = now.toISOString().slice(0, 19).replace('T', ' ')
+    const year = now.getUTCFullYear()
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(now.getUTCDate()).padStart(2, '0')
+    const hours = String(now.getUTCHours()).padStart(2, '0')
+    const minutes = String(now.getUTCMinutes()).padStart(2, '0')
+    const seconds = String(now.getUTCSeconds()).padStart(2, '0')
+    const timestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 
     // Шаг 1: Получаем список выводов
     const cashpointIdStr = String(cashpointId)
@@ -241,15 +247,26 @@ export async function checkWithdrawAmountMostbet(
     const amount = withdrawal.amount || 0
 
     // Шаг 2: Подтверждаем вывод кодом
+    // Генерируем новый timestamp для запроса подтверждения (каждый запрос должен иметь свой timestamp)
+    const confirmNow = new Date()
+    const confirmYear = confirmNow.getUTCFullYear()
+    const confirmMonth = String(confirmNow.getUTCMonth() + 1).padStart(2, '0')
+    const confirmDay = String(confirmNow.getUTCDate()).padStart(2, '0')
+    const confirmHours = String(confirmNow.getUTCHours()).padStart(2, '0')
+    const confirmMinutes = String(confirmNow.getUTCMinutes()).padStart(2, '0')
+    const confirmSeconds = String(confirmNow.getUTCSeconds()).padStart(2, '0')
+    const confirmTimestamp = `${confirmYear}-${confirmMonth}-${confirmDay} ${confirmHours}:${confirmMinutes}:${confirmSeconds}`
+    
     const confirmPath = `/mbc/gateway/v1/api/cashpoint/${cashpointIdStr}/player/cashout/confirmation`
     const confirmUrl = `${baseUrl}${confirmPath}`
+    // JSON.stringify по умолчанию не добавляет пробелы, что требуется по документации
     const confirmBody = JSON.stringify({
       code: code,
       transactionId: transactionId,
     })
 
     // Генерируем подпись для подтверждения
-    const confirmSignString = `${apiKeyFormatted}${confirmPath}${confirmBody}${timestamp}`
+    const confirmSignString = `${apiKeyFormatted}${confirmPath}${confirmBody}${confirmTimestamp}`
     let confirmSignature: string
     try {
       confirmSignature = crypto
@@ -265,7 +282,7 @@ export async function checkWithdrawAmountMostbet(
 
     const confirmHeaders = {
       'X-Api-Key': apiKeyFormatted,
-      'X-Timestamp': timestamp,
+      'X-Timestamp': confirmTimestamp,
       'X-Signature': confirmSignature,
       'X-Project': config.x_project || 'MBC',
       'Content-Type': 'application/json',
@@ -294,8 +311,12 @@ export async function checkWithdrawAmountMostbet(
 
     console.log(`[Mostbet Check Withdraw] Confirm response:`, confirmData)
 
-    if (confirmResponse.ok && confirmData.status === 'CONFIRMED') {
+    // По документации при успешном подтверждении возвращается статус NEW или COMPLETED
+    // Проверяем успешный ответ и наличие transactionId
+    if (confirmResponse.ok && confirmData.transactionId) {
       const finalAmount = confirmData.amount || amount || 0
+      // Статус может быть NEW, COMPLETED, PROCESSING и т.д.
+      // Любой статус при успешном ответе означает, что транзакция подтверждена
       return {
         success: true,
         amount: parseFloat(String(finalAmount)),
