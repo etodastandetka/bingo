@@ -598,7 +598,11 @@ export default function RequestDetailPage() {
       const params = new URLSearchParams()
       params.append('amount', amount.toString())
       params.append('exactAmount', exactAmount.toString())
-      params.append('processedOnly', processedOnly.toString())
+      // Отправляем processedOnly только если чекбокс явно установлен (true или false)
+      // Если не установлен, не отправляем параметр - показываем все пополнения
+      if (processedOnly !== undefined) {
+        params.append('processedOnly', processedOnly.toString())
+      }
       if (request?.id) {
         params.append('requestId', request.id.toString())
       }
