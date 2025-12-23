@@ -45,7 +45,7 @@ export default function RequestDetailPage() {
   const [searchAmount, setSearchAmount] = useState('')
   // По умолчанию включена "Точная сумма" - ищем по целой части (любой копейки)
   const [exactAmount, setExactAmount] = useState(true)
-  const [processedOnly, setProcessedOnly] = useState(false)
+  const [processedOnly, setProcessedOnly] = useState<boolean | undefined>(undefined)
   const [showMenu, setShowMenu] = useState(false)
   const [showSearchModal, setShowSearchModal] = useState(false)
   const [searchId, setSearchId] = useState('')
