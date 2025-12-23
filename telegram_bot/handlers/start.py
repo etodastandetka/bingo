@@ -41,10 +41,15 @@ async def check_channel_subscription(bot: Bot, user_id: int, channel: str) -> bo
 async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     lang = await get_lang_from_state(state)
     
-    # Удаляем сообщение с QR-кодом если есть (при перезапуске процесса пополнения)
+    # Останавливаем таймер и удаляем сообщение с QR-кодом если есть (при перезапуске процесса пополнения)
     data = await state.get_data()
     qr_message_id = data.get('qr_message_id')
     if qr_message_id:
+        # Останавливаем таймер
+        from handlers.deposit import active_timers
+        timer_key = f"{message.chat.id}_{qr_message_id}"
+        active_timers.pop(timer_key, None)
+        
         try:
             await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
         except Exception:

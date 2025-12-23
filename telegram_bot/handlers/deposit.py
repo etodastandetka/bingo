@@ -9,6 +9,8 @@ from translations import get_text
 import re
 import os
 import base64
+import asyncio
+import time
 from pathlib import Path
 
 router = Router()
@@ -204,10 +206,14 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
     
     # Проверяем отмену
     if message.text == get_text(lang, 'deposit', 'cancel'):
-        # Удаляем сообщение с QR-кодом если есть
+        # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
         data = await state.get_data()
         qr_message_id = data.get('qr_message_id')
         if qr_message_id:
+            # Останавливаем таймер
+            timer_key = f"{message.chat.id}_{qr_message_id}"
+            active_timers.pop(timer_key, None)
+            
             try:
                 await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
             except Exception:
@@ -327,13 +333,26 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
             
-            # Формируем текст с информацией (без таймера)
+            # Сохраняем время создания QR кода для таймера (5 минут = 300 секунд)
+            qr_created_at = int(time.time())
+            timer_duration = 300  # 5 минут в секундах
+            await state.update_data(qr_created_at=qr_created_at, timer_duration=timer_duration)
+            
+            # Форматируем начальный таймер
+            def format_timer(remaining_seconds):
+                """Форматирует секунды в MM:SS"""
+                minutes = remaining_seconds // 60
+                seconds = remaining_seconds % 60
+                return f"{minutes}:{seconds:02d}"
+            
+            remaining_seconds = timer_duration
             payment_text = get_text(lang, 'deposit', 'qr_payment_info',
                                    amount=amount_with_cents,
                                    casino=data.get("casino_name"),
-                                   account_id=account_id)
+                                   account_id=account_id,
+                                   timer=format_timer(remaining_seconds))
             
-            # Отправляем фото QR кода с кнопками банков и отменой (все в inline keyboard)
+            # Отправляем фото QR кода с кнопками банков
             # Используем BufferedInputFile для работы с bytes напрямую
             photo = BufferedInputFile(qr_image_bytes, filename='qr_code.png')
             qr_message = await message.answer_photo(
@@ -342,8 +361,11 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                 reply_markup=keyboard
             )
             
-            # Сохраняем ID сообщения с QR-кодом для возможности удаления
+            # Сохраняем ID сообщения с QR-кодом для возможности удаления и обновления
             await state.update_data(qr_message_id=qr_message.message_id)
+            
+            # Запускаем фоновую задачу для обновления таймера
+            asyncio.create_task(update_qr_timer(bot, message.chat.id, qr_message.message_id, qr_created_at, timer_duration, lang, amount_with_cents, data.get("casino_name"), account_id, keyboard))
             
             # Создаем несозданную заявку при показе QR-кода
             try:
@@ -411,10 +433,14 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
     """Фото чека получено, создаем заявку"""
     lang = await get_lang_from_state(state)
     
-    # Удаляем сообщение с QR-кодом если есть
+    # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
     data = await state.get_data()
     qr_message_id = data.get('qr_message_id')
     if qr_message_id:
+        # Останавливаем таймер
+        timer_key = f"{message.chat.id}_{qr_message_id}"
+        active_timers.pop(timer_key, None)
+        
         try:
             await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
         except Exception:
@@ -496,10 +522,14 @@ async def deposit_invalid_receipt(message: Message, state: FSMContext, bot: Bot)
     
     # Проверяем отмену
     if message.text == get_text(lang, 'deposit', 'cancel'):
-        # Удаляем сообщение с QR-кодом если есть
+        # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
         data = await state.get_data()
         qr_message_id = data.get('qr_message_id')
         if qr_message_id:
+            # Останавливаем таймер
+            timer_key = f"{message.chat.id}_{qr_message_id}"
+            active_timers.pop(timer_key, None)
+            
             try:
                 await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
             except Exception:
