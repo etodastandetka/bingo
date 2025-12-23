@@ -47,11 +47,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Фильтр по обработанным: если checked, показываем только обработанные
-    // Если unchecked, показываем все
-    if (processedOnly) {
-      where.isProcessed = true
-    }
+    // Фильтр по обработанным: если checked (processedOnly=true), показываем только обработанные (isProcessed=true)
+    // Если unchecked (processedOnly=false), показываем только необработанные (isProcessed=false)
+    where.isProcessed = processedOnly
 
     // Исключаем текущую заявку, если указана
     if (requestId) {

@@ -43,8 +43,8 @@ export default function RequestDetailPage() {
   const [request, setRequest] = useState<RequestDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchAmount, setSearchAmount] = useState('')
-  // По умолчанию ищем по целой части (любой копейки); при необходимости админ может включить точную сумму
-  const [exactAmount, setExactAmount] = useState(false)
+  // По умолчанию включена "Точная сумма" - ищем по целой части (любой копейки)
+  const [exactAmount, setExactAmount] = useState(true)
   const [processedOnly, setProcessedOnly] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showSearchModal, setShowSearchModal] = useState(false)
@@ -144,22 +144,7 @@ export default function RequestDetailPage() {
               setSelectedBookmaker(data.data.bookmaker)
             }
             
-            // Автоматически заполняем поле поиска и запускаем поиск, если это депозит и сумма указана
-            if (data.data.requestType === 'deposit' && data.data.amount) {
-              const amount = parseFloat(data.data.amount)
-              if (!isNaN(amount) && amount > 0) {
-                // Форматируем сумму для отображения (1,000.67)
-                const formattedAmount = amount.toLocaleString('en-US', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })
-                setSearchAmount(formattedAmount)
-                // Автоматически запускаем поиск с точной суммой
-                setTimeout(() => {
-                  handleSearchPaymentsWithAmount(formattedAmount)
-                }, 500) // Небольшая задержка для установки состояния
-              }
-            }
+            // Поле поиска остается пустым - админ сам вводит сумму для поиска
             
             // Загружаем фото профиля пользователя (с кэшем)
             if (data.data.userId) {
