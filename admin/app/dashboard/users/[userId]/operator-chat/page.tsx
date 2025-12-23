@@ -1356,6 +1356,65 @@ export default function OperatorChatPage() {
           </div>
         </div>
       )}
+
+      {/* Модальное окно подтверждения отправки на проверку */}
+      {reviewModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl p-6">
+            <h3 className="text-xl font-semibold text-white mb-3">
+              Подтвердите действие
+            </h3>
+            <p className="text-sm text-gray-300 mb-4 leading-relaxed">
+              Вы уверены, что хотите отправить заявку на проверку?
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setReviewModalOpen(false)}
+                disabled={reviewModalLoading}
+                className="px-4 py-2 rounded-lg border border-gray-600 text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleSendToReview}
+                disabled={reviewModalLoading}
+                className="px-5 py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed transition-colors"
+              >
+                {reviewModalLoading ? 'Отправка...' : 'Отправить на проверку'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Уведомление снизу после подтверждения/отклонения */}
+      {toastNotification && (
+        <div className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 rounded-xl shadow-2xl border ${
+          toastNotification.type === 'success'
+            ? 'bg-green-600 border-green-500 text-white'
+            : 'bg-red-600 border-red-500 text-white'
+        } animate-slide-up`}>
+          <div className="flex items-center space-x-3">
+            <span className="text-lg font-semibold">{toastNotification.message}</span>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        @keyframes slide-up {
+          from {
+            opacity: 0;
+            transform: translate(-50%, 20px);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, 0);
+          }
+        }
+        .animate-slide-up {
+          animation: slide-up 0.3s ease-out;
+        }
+      `}</style>
     </div>
   )
 }
