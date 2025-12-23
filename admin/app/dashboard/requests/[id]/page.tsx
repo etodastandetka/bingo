@@ -144,7 +144,7 @@ export default function RequestDetailPage() {
               setSelectedBookmaker(data.data.bookmaker)
             }
             
-            // Автоматически заполняем поле поиска суммой из заявки (без автозапуска поиска)
+            // Автоматически заполняем поле поиска суммой из заявки и запускаем поиск
             if (data.data.requestType === 'deposit' && data.data.amount) {
               const amount = parseFloat(data.data.amount)
               if (!isNaN(amount) && amount > 0) {
@@ -154,7 +154,10 @@ export default function RequestDetailPage() {
                   maximumFractionDigits: 2,
                 })
                 setSearchAmount(formattedAmount)
-                // НЕ запускаем автоматический поиск - пользователь должен нажать "Найти"
+                // Автоматически запускаем поиск пополнений
+                setTimeout(() => {
+                  handleSearchPaymentsWithAmount(formattedAmount)
+                }, 500)
               }
             }
             
