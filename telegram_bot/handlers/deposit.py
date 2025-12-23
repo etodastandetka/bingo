@@ -349,13 +349,7 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             # Сохраняем время создания для таймера
             await state.update_data(qr_created_at=int(time.time()))
             
-            # Создаем кнопку отмены
-            keyboard_reply = ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))]],
-                resize_keyboard=True
-            )
-            
-            # Отправляем фото QR кода с кнопками банков (inline) и кнопкой отмены (reply)
+            # Отправляем фото QR кода с кнопками банков и отменой (все в inline keyboard)
             # Используем BufferedInputFile для работы с bytes напрямую
             photo = BufferedInputFile(qr_image_bytes, filename='qr_code.png')
             qr_message = await message.answer_photo(
@@ -363,9 +357,6 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                 caption=payment_text,
                 reply_markup=keyboard
             )
-            
-            # Отправляем отдельное сообщение с кнопкой отмены (reply keyboard)
-            # Это нужно потому что inline keyboard и reply keyboard не могут быть вместе в одном сообщении
             
             # Сохраняем ID сообщения с QR-кодом для возможности удаления
             await state.update_data(qr_message_id=qr_message.message_id)
