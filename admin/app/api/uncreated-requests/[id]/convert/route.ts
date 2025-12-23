@@ -22,7 +22,7 @@ export async function POST(
       return NextResponse.json(createApiResponse(null, 'Uncreated request not found'), { status: 404 })
     }
 
-    // Создаем обычную заявку со статусом "на проверку"
+    // Создаем обычную заявку со статусом "pending" и statusDetail "pending_check" чтобы она отображалась в дашборде
     const createdRequest = await prisma.request.create({
       data: {
         userId: uncreated.userId,
@@ -33,7 +33,7 @@ export async function POST(
         accountId: uncreated.accountId,
         amount: uncreated.amount,
         requestType: uncreated.requestType,
-        status: 'pending_check',
+        status: 'pending',
         statusDetail: 'pending_check',
         bank: uncreated.bank,
       },
