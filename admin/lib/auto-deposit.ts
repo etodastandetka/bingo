@@ -24,11 +24,22 @@ export async function matchAndProcessPayment(
     where: { key: 'autodeposit_enabled' },
   })
   
+  console.log(`[Auto-Deposit] Checking autodeposit setting:`, {
+    found: !!autodepositSetting,
+    value: autodepositSetting?.value,
+    valueType: typeof autodepositSetting?.value,
+    valueString: autodepositSetting?.value ? String(autodepositSetting.value) : null
+  })
+  
   const isAutodepositEnabled = autodepositSetting && (
-    (typeof autodepositSetting.value === 'string' && autodepositSetting.value.toLowerCase() === 'true') ||
+    (typeof autodepositSetting.value === 'string' && (autodepositSetting.value.toLowerCase() === 'true' || autodepositSetting.value === '1')) ||
     (typeof autodepositSetting.value === 'boolean' && autodepositSetting.value) ||
-    (typeof autodepositSetting.value === 'object' && autodepositSetting.value !== null && String(autodepositSetting.value).toLowerCase() === 'true')
+    (typeof autodepositSetting.value === 'number' && autodepositSetting.value === 1) ||
+    (autodepositSetting.value !== null && String(autodepositSetting.value).toLowerCase() === 'true') ||
+    (autodepositSetting.value !== null && String(autodepositSetting.value) === '1')
   )
+  
+  console.log(`[Auto-Deposit] Autodeposit enabled: ${isAutodepositEnabled}`)
   
   if (!isAutodepositEnabled) {
     console.log(`⚠️ Auto-deposit is disabled, skipping payment ${paymentId}`)
