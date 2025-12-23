@@ -1079,8 +1079,8 @@ export default function RequestDetailPage() {
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={processedOnly}
-                  onChange={(e) => setProcessedOnly(e.target.checked)}
+                  checked={processedOnly === true}
+                  onChange={(e) => setProcessedOnly(e.target.checked ? true : undefined)}
                   className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
                 />
                 <span className="text-sm text-gray-300">Обработанные</span>
