@@ -15,6 +15,59 @@ from pathlib import Path
 
 router = Router()
 
+# Словарь для отслеживания активных таймеров (чтобы можно было их остановить)
+active_timers = {}
+
+async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: int, duration: int, lang: str, amount: float, casino: str, account_id: str, keyboard):
+    """Фоновая задача для обновления таймера в сообщении с QR кодом"""
+    timer_key = f"{chat_id}_{message_id}"
+    active_timers[timer_key] = True
+    
+    try:
+        while active_timers.get(timer_key, False):
+            current_time = int(time.time())
+            elapsed = current_time - created_at
+            remaining = max(0, duration - elapsed)
+            
+            if remaining <= 0:
+                # Таймер истек
+                break
+            
+            # Форматируем оставшееся время
+            minutes = remaining // 60
+            seconds = remaining % 60
+            timer_text = f"{minutes}:{seconds:02d}"
+            
+            # Обновляем текст сообщения
+            payment_text = get_text(lang, 'deposit', 'qr_payment_info',
+                                   amount=amount,
+                                   casino=casino,
+                                   account_id=account_id,
+                                   timer=timer_text)
+            
+            try:
+                await bot.edit_message_caption(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    caption=payment_text,
+                    reply_markup=keyboard
+                )
+            except Exception as e:
+                # Если сообщение было удалено или не может быть отредактировано, останавливаем таймер
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Could not update timer: {e}")
+                break
+            
+            # Ждем 10 секунд до следующего обновления
+            await asyncio.sleep(10)
+            
+    except asyncio.CancelledError:
+        pass
+    finally:
+        # Удаляем таймер из активных
+        active_timers.pop(timer_key, None)
+
 async def get_lang_from_state(state: FSMContext) -> str:
     """Получить язык из состояния"""
     data = await state.get_data()
