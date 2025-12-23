@@ -88,6 +88,7 @@ model Request {
   processedBy      String?           @map("processed_by") @db.VarChar(255)
   processedByUsername String?        @map("processed_by_username") @db.VarChar(255)
   withdrawalCode   String?           @map("withdrawal_code") @db.VarChar(255)
+  casinoError      String?           @map("casino_error")
   photoFileId      String?           @map("photo_file_id") @db.VarChar(255)
   photoFileUrl     String?           @map("photo_file_url")
   bank             String?           @db.VarChar(100)

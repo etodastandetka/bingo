@@ -133,11 +133,28 @@ export async function POST(request: NextRequest) {
 
     if (!depositResult.success) {
       console.error(`[Deposit Balance] Failed for ${bookmaker}, accountId: ${accountId}`, depositResult)
+      
+      // Сохраняем ошибку казино в базе данных
+      await prisma.request.update({
+        where: { id: parseInt(requestId) },
+        data: {
+          casinoError: depositResult.message || 'Failed to deposit balance',
+        },
+      })
+      
       return NextResponse.json(
         createApiResponse(null, depositResult.message || 'Failed to deposit balance'),
         { status: 500 }
       )
     }
+    
+    // Очищаем ошибку при успешном пополнении
+    await prisma.request.update({
+      where: { id: parseInt(requestId) },
+      data: {
+        casinoError: null,
+      },
+    })
     
     console.log(`[Deposit Balance] Success for ${bookmaker}, accountId: ${accountId}`, depositResult)
 

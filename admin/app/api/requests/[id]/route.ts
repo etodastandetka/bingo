@@ -114,6 +114,7 @@ export async function GET(
         createdAt: requestData.createdAt.toISOString(),
         updatedAt: requestData.updatedAt.toISOString(),
         processedAt: requestData.processedAt ? requestData.processedAt.toISOString() : null,
+        casinoError: requestData.casinoError,
         incomingPayments: requestData.incomingPayments.map(p => ({
           ...p,
           amount: p.amount.toString(),
