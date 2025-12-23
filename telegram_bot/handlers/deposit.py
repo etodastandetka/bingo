@@ -325,29 +325,13 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                 row = bank_buttons[i:i+2]
                 keyboard_rows.append(row)
             
-            # Добавляем кнопку отмены в конец (одна кнопка на всю ширину)
-            cancel_button = InlineKeyboardButton(
-                text=get_text(lang, 'deposit', 'cancel'),
-                callback_data='cancel_deposit'
-            )
-            keyboard_rows.append([cancel_button])
-            
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
             
-            # Добавляем таймер (5 минут)
-            import time
-            timer_minutes = 5
-            timer_text = f"{timer_minutes}:00"
-            
-            # Формируем текст с информацией и таймером
+            # Формируем текст с информацией (без таймера)
             payment_text = get_text(lang, 'deposit', 'qr_payment_info',
                                    amount=amount_with_cents,
                                    casino=data.get("casino_name"),
-                                   account_id=account_id,
-                                   timer=timer_text)
-            
-            # Сохраняем время создания для таймера
-            await state.update_data(qr_created_at=int(time.time()))
+                                   account_id=account_id)
             
             # Отправляем фото QR кода с кнопками банков и отменой (все в inline keyboard)
             # Используем BufferedInputFile для работы с bytes напрямую
