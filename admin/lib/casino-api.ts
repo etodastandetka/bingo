@@ -129,9 +129,11 @@ async function getCashdeskBalance(
     if (response.ok) {
       const data = await response.json()
       if (data && typeof data.Balance !== 'undefined') {
+        const balance = parseFloat(data.Balance) || 0
+        const limit = parseFloat(data.Limit) || balance // Если лимит не указан, используем баланс
         return {
-          balance: parseFloat(data.Balance) || 0,
-          limit: parseFloat(data.Limit) || 0,
+          balance,
+          limit,
         }
       }
     }
