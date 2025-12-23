@@ -111,18 +111,7 @@ export async function POST(request: NextRequest) {
     // accountId - это ID игрока в казино (например, ID счета 1xbet, Melbet и т.д.)
     const accountId = requestData.accountId ? String(requestData.accountId).trim() : null
     
-    console.log(`[Deposit Balance] Full request data from DB:`, {
-      id: requestData.id,
-      accountId: requestData.accountId,
-      accountIdType: typeof requestData.accountId,
-      bookmaker: requestData.bookmaker,
-      amount: requestData.amount,
-      status: requestData.status,
-      requestType: requestData.requestType,
-    })
-    
     if (!accountId || accountId === '') {
-      console.error(`[Deposit Balance] Request ${requestId} does not have accountId. Cannot deposit.`)
       return NextResponse.json(
         createApiResponse(null, 'Request does not have accountId (casino player ID). Cannot deposit.'),
         { status: 400 }
@@ -133,7 +122,6 @@ export async function POST(request: NextRequest) {
     const bookmakerToUse = requestData.bookmaker || bookmaker
     
     if (!bookmakerToUse) {
-      console.error(`[Deposit Balance] Request ${requestId} does not have bookmaker. Cannot deposit.`)
       return NextResponse.json(
         createApiResponse(null, 'Request does not have bookmaker. Cannot deposit.'),
         { status: 400 }
@@ -144,14 +132,11 @@ export async function POST(request: NextRequest) {
     const amountToUse = requestData.amount ? parseFloat(requestData.amount.toString()) : parseFloat(amount)
     
     if (!amountToUse || isNaN(amountToUse) || amountToUse <= 0) {
-      console.error(`[Deposit Balance] Invalid amount: ${amountToUse} (from DB: ${requestData.amount}, from body: ${amount})`)
       return NextResponse.json(
         createApiResponse(null, 'Invalid amount. Cannot deposit.'),
         { status: 400 }
       )
     }
-    
-    console.log(`[Deposit Balance] Using values - Bookmaker: ${bookmakerToUse}, Casino Account ID: ${accountId}, Amount: ${amountToUse}, Request ID: ${requestId}`)
     
     // Пополняем баланс через API казино
     const depositResult = await depositToCasino(bookmakerToUse, accountId, amountToUse)
