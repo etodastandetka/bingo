@@ -445,18 +445,40 @@ export default function RequestDetailPage() {
           ? selectedBookmaker 
           : request.bookmaker
         
-        if ((newStatus === 'completed' || newStatus === 'approved') && request.requestType === 'deposit' && bookmakerToUse && request.accountId && request.amount) {
+        if ((newStatus === 'completed' || newStatus === 'approved') && request.requestType === 'deposit') {
+          console.log('[Frontend] Attempting to deposit balance:', {
+            newStatus,
+            requestType: request.requestType,
+            bookmakerToUse,
+            accountId: request.accountId,
+            amount: request.amount,
+            hasBookmaker: !!bookmakerToUse,
+            hasAccountId: !!request.accountId,
+            hasAmount: !!request.amount,
+          })
+          
+          if (!bookmakerToUse || !request.accountId || !request.amount) {
+            pushToast('Отсутствуют необходимые данные для пополнения (bookmaker, accountId или amount)', 'error')
+            return
+          }
+          
           try {
+            const depositPayload = {
+              requestId: request.id,
+              bookmaker: bookmakerToUse,
+              accountId: request.accountId,
+              amount: request.amount,
+            }
+            
+            console.log('[Frontend] Calling deposit-balance API with payload:', depositPayload)
+            
             const depositResponse = await fetch('/api/deposit-balance', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                requestId: request.id,
-                bookmaker: bookmakerToUse,
-                accountId: request.accountId,
-                amount: request.amount,
-              }),
+              body: JSON.stringify(depositPayload),
             })
+            
+            console.log('[Frontend] Deposit response status:', depositResponse.status)
 
             const depositData = await depositResponse.json()
 
