@@ -134,8 +134,8 @@ def generate_qr_image(qr_hash, unique_id=None):
     except:
         font = ImageFont.load_default()
     
-    # Основной текст (как на изображении) - "ПОПОЛНЕНИЕ КАЗИНО"
-    text = "ПОПОЛНЕНИЕ КАЗИНО"
+    # Основной текст (как на изображении) - "ПОПОЛНЕНИЕ ОНЛАЙН"
+    text = "ПОПОЛНЕНИЕ ОНЛАЙН"
     
     # Получаем размеры текста
     try:
@@ -168,59 +168,21 @@ def generate_qr_image(qr_hash, unique_id=None):
     # Вставляем повернутый текст в водяной знак
     watermark.paste(text_img, (text_x, text_y), text_img)
     
-    # Добавляем уникальный ID в углы (для отслеживания источника скриншота)
-    if unique_id:
-        try:
-            small_font_size = int(width * 0.04)
-            try:
-                small_font = ImageFont.truetype("arial.ttf", small_font_size)
-            except:
-                try:
-                    small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", small_font_size)
-                except:
-                    small_font = ImageFont.load_default()
-        except:
-            small_font = ImageFont.load_default()
-        
-        # Добавляем ID в каждый угол (более заметные)
-        id_text = f"ID:{unique_id[:8]}"  # Берем первые 8 символов
-        # Размещаем ID в углах более компактно
-        corners = [
-            (15, 15),  # Верхний левый
-            (width - 60, 15),  # Верхний правый
-            (15, height - 25),  # Нижний левый
-            (width - 60, height - 25)  # Нижний правый
-        ]
-        for corner_x, corner_y in corners:
-            # Белая обводка
-            for adj in range(-1, 2):
-                for adj2 in range(-1, 2):
-                    if adj != 0 or adj2 != 0:
-                        draw.text((corner_x + adj, corner_y + adj2), id_text, font=small_font, fill=(255, 255, 255, 100))
-            # Основной текст (более заметный)
-            draw.text((corner_x, corner_y), id_text, font=small_font, fill=(231, 76, 60, 150))
+    # Убираем уникальный ID в углах (на изображении его нет)
     
     # Объединяем QR код с водяным знаком
     img = Image.alpha_composite(img, watermark)
     
-    # Добавляем красную рамку вокруг QR кода
-    border_width = 4
-    
     # Добавляем место внизу для текста "ОТСКАНИРУЙТЕ QR" и "В любом банке"
+    # Без красной рамки, как на изображении
     bottom_padding = 80  # Место для двух строк текста
-    bordered_img = Image.new('RGB', (width + border_width * 2, height + border_width * 2 + bottom_padding), (255, 255, 255))
-    
-    # Рисуем красную рамку
-    draw_border = ImageDraw.Draw(bordered_img)
-    # Верхняя и нижняя рамки
-    draw_border.rectangle([0, 0, width + border_width * 2, border_width], fill=(231, 76, 60))
-    draw_border.rectangle([0, height + border_width, width + border_width * 2, height + border_width * 2], fill=(231, 76, 60))
-    # Левая и правая рамки
-    draw_border.rectangle([0, 0, border_width, height + border_width * 2], fill=(231, 76, 60))
-    draw_border.rectangle([width + border_width, 0, width + border_width * 2, height + border_width * 2], fill=(231, 76, 60))
+    bordered_img = Image.new('RGB', (width, height + bottom_padding), (255, 255, 255))
     
     # Вставляем QR код с водяным знаком
-    bordered_img.paste(img.convert('RGB'), (border_width, border_width))
+    bordered_img.paste(img.convert('RGB'), (0, 0))
+    
+    # Создаем объект для рисования текста
+    draw_border = ImageDraw.Draw(bordered_img)
     
     # Добавляем текст внизу: "ОТСКАНИРУЙТЕ QR" (черный, uppercase) и "В любом банке" (синий, lowercase)
     try:
@@ -255,8 +217,8 @@ def generate_qr_image(qr_hash, unique_id=None):
     except:
         scan_text_width = len(scan_text) * scan_font_size * 0.6
     
-    scan_x = (width + border_width * 2 - scan_text_width) // 2
-    scan_y = height + border_width * 2 + 15
+    scan_x = (width - scan_text_width) // 2
+    scan_y = height + 15
     draw_border.text((scan_x, scan_y), scan_text, font=scan_font, fill=(0, 0, 0, 255))  # Черный
     
     # Текст "В любом банке" (синий, lowercase)
@@ -267,9 +229,10 @@ def generate_qr_image(qr_hash, unique_id=None):
     except:
         bank_text_width = len(bank_text) * bank_font_size * 0.6
     
-    bank_x = (width + border_width * 2 - bank_text_width) // 2
+    bank_x = (width - bank_text_width) // 2
     bank_y = scan_y + scan_font_size + 10
-    draw_border.text((bank_x, bank_y), bank_text, font=bank_font, fill=(0, 100, 200, 255))  # Синий
+    # Синий цвет как на изображении (более яркий синий)
+    draw_border.text((bank_x, bank_y), bank_text, font=bank_font, fill=(0, 123, 255, 255))  # Синий
     
     # Конвертируем обратно в RGB для лучшей совместимости
     final_img = bordered_img.convert('RGB')
