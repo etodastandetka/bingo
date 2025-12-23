@@ -316,7 +316,11 @@ def generate_qr():
             qr_hash = qr_data.get('qr_hash')
             # Получаем unique_id из параметров запроса
             unique_id = request.json.get('unique_id')
-            qr_image = generate_qr_image(qr_hash, unique_id)
+            # Получаем ссылку на O!Money по умолчанию
+            all_bank_urls = qr_data.get('all_bank_urls', {})
+            omoney_url = all_bank_urls.get('omoney') or all_bank_urls.get('O!Money') or f'https://api.dengi.o.kg/ru/qr/#{qr_hash}'
+            # Кодируем ссылку O!Money в QR код вместо qr_hash
+            qr_image = generate_qr_image(omoney_url, unique_id)
             
             return jsonify({
                 'success': True,
