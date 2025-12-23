@@ -80,14 +80,14 @@ class Config:
         {'id': 'bakai', 'name': 'BAKAI'},
     ]
     
-    # Банки для вывода
+    # Банки для вывода (ID должны совпадать с настройками в админке)
     WITHDRAW_BANKS = [
-        {'id': 'mbank', 'name': 'Mbank'},
-        {'id': 'omoney', 'name': 'О деньги'},
         {'id': 'kompanion', 'name': 'Компаньон'},
-        {'id': 'balance', 'name': 'Balance.Kg'},
+        {'id': 'odengi', 'name': 'O!Money'},
         {'id': 'bakai', 'name': 'Bakai'},
-        {'id': 'optima', 'name': 'Оптима'},
+        {'id': 'balance', 'name': 'Balance.kg'},
+        {'id': 'megapay', 'name': 'MegaPay'},
+        {'id': 'mbank', 'name': 'MBank'},
     ]
     
     # Лимиты
