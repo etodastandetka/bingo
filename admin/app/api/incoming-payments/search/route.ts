@@ -36,15 +36,15 @@ export async function GET(request: NextRequest) {
     const where: any = {}
 
     if (exactAmount) {
-      // Точное совпадение суммы
-      where.amount = amountValue
-    } else {
-      // Поиск по целой части суммы (например, все пополнения на 1000.XX)
+      // Когда "Точная сумма" включена - ищем по целой части (например, все пополнения на 100.XX)
       const wholePart = Math.floor(amountValue)
       where.amount = {
         gte: wholePart,
         lt: wholePart + 1,
       }
+    } else {
+      // Когда "Точная сумма" выключена - ищем точное совпадение суммы
+      where.amount = amountValue
     }
 
     // Фильтр по обработанным: если checked (processedOnly=true), показываем только обработанные (isProcessed=true)
