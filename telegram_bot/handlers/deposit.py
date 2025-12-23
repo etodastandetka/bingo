@@ -447,6 +447,7 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
         account_id = data.get('account_id')
         amount = data.get('amount')
         bank_id = data.get('bank_id')
+        uncreated_request_id = data.get('uncreated_request_id')
         
         if not all([casino_id, account_id, amount, bank_id]):
             await message.answer(get_text(lang, 'deposit', 'error'))
@@ -455,7 +456,7 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
             await cmd_start(message, state, bot)
             return
         
-        # Создаем заявку через API
+        # Создаем заявку через API (конвертирует несозданную заявку если есть uncreated_request_id)
         result = await APIClient.create_request(
             telegram_user_id=str(message.from_user.id),
             request_type='deposit',
@@ -466,7 +467,8 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
             telegram_username=message.from_user.username,
             telegram_first_name=message.from_user.first_name,
             telegram_last_name=message.from_user.last_name,
-            receipt_photo=photo_base64_with_prefix
+            receipt_photo=photo_base64_with_prefix,
+            uncreated_request_id=uncreated_request_id
         )
         
         if result.get('success') and result.get('data'):
