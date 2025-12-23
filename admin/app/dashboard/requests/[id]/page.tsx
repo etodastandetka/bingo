@@ -144,19 +144,13 @@ export default function RequestDetailPage() {
               setSelectedBookmaker(data.data.bookmaker)
             }
             
-            // Автоматически заполняем поле поиска суммой из заявки и запускаем поиск
+            // Автоматически запускаем поиск пополнений по сумме из заявки (поле поиска остается пустым)
             if (data.data.requestType === 'deposit' && data.data.amount) {
               const amount = parseFloat(data.data.amount)
               if (!isNaN(amount) && amount > 0) {
-                // Форматируем сумму для отображения (1,000.67)
-                const formattedAmount = amount.toLocaleString('en-US', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })
-                setSearchAmount(formattedAmount)
-                // Автоматически запускаем поиск пополнений
+                // Автоматически запускаем поиск пополнений, но НЕ заполняем поле поиска
                 setTimeout(() => {
-                  handleSearchPaymentsWithAmount(formattedAmount)
+                  handleSearchPaymentsWithAmount(amount.toString())
                 }, 500)
               }
             }
