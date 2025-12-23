@@ -152,20 +152,36 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
         checking_msg = await message.answer("🔍 Проверяю ID игрока...")
         try:
             check_result = await APIClient.check_player(casino_id, account_id)
+            
+            check_success = check_result.get('success')
+            check_data = check_result.get('data') or {}
+            player_exists = check_data.get('exists')
+            player_info = check_data.get('player') or {}
+            
+            # Если проверка явно показала что игрок не существует - отклоняем
+            if check_success and player_exists is False:
+                try:
+                    await checking_msg.delete()
+                except:
+                    pass
+                await message.answer(get_text(lang, 'deposit', 'player_not_found'))
+                return
+                
+            # Если проверка успешна и игрок существует - используем данные
+            if check_success and (player_exists is True or player_info):
+                player_info = check_data.get('player') or {}
+            # Если проверка не удалась (ошибка API, таймаут и т.д.) - пропускаем проверку
+            # и продолжаем процесс пополнения
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error checking player: {e}, continuing with deposit")
+            # Продолжаем процесс пополнения даже если проверка не удалась
         finally:
             try:
                 await checking_msg.delete()
             except:
                 pass
-
-        check_success = check_result.get('success')
-        check_data = check_result.get('data') or {}
-        player_exists = check_data.get('exists')
-        player_info = check_data.get('player') or {}
-
-        if (not check_success) or (player_exists is False) or (not player_info and player_exists is not True):
-            await message.answer(get_text(lang, 'deposit', 'player_not_found'))
-            return
 
     await state.update_data(account_id=account_id, player_info=player_info)
     
