@@ -110,23 +110,49 @@ export async function POST(request: NextRequest) {
     // ВАЖНО: Используем accountId из заявки (ID казино), а не из body запроса!
     // accountId из body может быть неправильным (например, Telegram ID)
     // accountId - это ID игрока в казино (например, ID счета 1xbet, Melbet и т.д.)
-    const accountId = requestData.accountId
+    const accountId = requestData.accountId ? String(requestData.accountId).trim() : null
     
-    if (!accountId || accountId.trim() === '') {
+    console.log(`[Deposit Balance] Full request data from DB:`, {
+      id: requestData.id,
+      accountId: requestData.accountId,
+      accountIdType: typeof requestData.accountId,
+      bookmaker: requestData.bookmaker,
+      amount: requestData.amount,
+      status: requestData.status,
+      requestType: requestData.requestType,
+    })
+    
+    if (!accountId || accountId === '') {
+      console.error(`[Deposit Balance] Request ${requestId} does not have accountId. Cannot deposit.`)
       return NextResponse.json(
         createApiResponse(null, 'Request does not have accountId (casino player ID). Cannot deposit.'),
         { status: 400 }
       )
     }
 
-    // Используем bookmaker из заявки, если он не передан в body (или если переданный отличается)
+    // Используем bookmaker из заявки (приоритет), иначе из body
     const bookmakerToUse = requestData.bookmaker || bookmaker
     
-    // Используем amount из заявки, если он не передан в body
+    if (!bookmakerToUse) {
+      console.error(`[Deposit Balance] Request ${requestId} does not have bookmaker. Cannot deposit.`)
+      return NextResponse.json(
+        createApiResponse(null, 'Request does not have bookmaker. Cannot deposit.'),
+        { status: 400 }
+      )
+    }
+    
+    // Используем amount из заявки (приоритет), иначе из body
     const amountToUse = requestData.amount ? parseFloat(requestData.amount.toString()) : parseFloat(amount)
     
-    console.log(`[Deposit Balance] Bookmaker: ${bookmakerToUse}, Casino Account ID: ${accountId}, Amount: ${amountToUse}, Request ID: ${requestId}`)
-    console.log(`[Deposit Balance] Request data - bookmaker: ${requestData.bookmaker}, accountId: ${requestData.accountId}, amount: ${requestData.amount?.toString()}`)
+    if (!amountToUse || isNaN(amountToUse) || amountToUse <= 0) {
+      console.error(`[Deposit Balance] Invalid amount: ${amountToUse} (from DB: ${requestData.amount}, from body: ${amount})`)
+      return NextResponse.json(
+        createApiResponse(null, 'Invalid amount. Cannot deposit.'),
+        { status: 400 }
+      )
+    }
+    
+    console.log(`[Deposit Balance] Using values - Bookmaker: ${bookmakerToUse}, Casino Account ID: ${accountId}, Amount: ${amountToUse}, Request ID: ${requestId}`)
     
     // Пополняем баланс через API казино
     const depositResult = await depositToCasino(bookmakerToUse, accountId, amountToUse)
