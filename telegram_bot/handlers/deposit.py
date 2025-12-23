@@ -59,8 +59,8 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
                 logger.debug(f"Could not update timer: {e}")
                 break
             
-            # Ждем 10 секунд до следующего обновления
-            await asyncio.sleep(10)
+            # Ждем 1 секунду до следующего обновления
+            await asyncio.sleep(1)
             
     except asyncio.CancelledError:
         pass
