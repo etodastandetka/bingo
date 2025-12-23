@@ -457,10 +457,10 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
         casino_id = data.get('casino_id')
         account_id = data.get('account_id')
         amount = data.get('amount')
-        bank_id = data.get('bank_id')
+        bank_id = data.get('bank_id', 'omoney')  # По умолчанию omoney
         uncreated_request_id = data.get('uncreated_request_id')
         
-        if not all([casino_id, account_id, amount, bank_id]):
+        if not all([casino_id, account_id, amount]):
             await message.answer(get_text(lang, 'deposit', 'error'))
             await state.clear()
             from handlers.start import cmd_start
