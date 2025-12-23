@@ -12,7 +12,10 @@ export async function GET(request: NextRequest) {
     const amount = searchParams.get('amount')
     const exactAmount = searchParams.get('exactAmount') === 'true'
     const processedOnlyParam = searchParams.get('processedOnly')
-    const processedOnly = processedOnlyParam === 'true' ? true : processedOnlyParam === 'false' ? false : undefined
+    // Если параметр не передан или пустой - undefined (показываем все)
+    // Если 'true' - true (только обработанные)
+    // Если 'false' - false (только необработанные, но сейчас не используется)
+    const processedOnly = processedOnlyParam === null || processedOnlyParam === '' ? undefined : processedOnlyParam === 'true'
     const requestId = searchParams.get('requestId')
 
     if (!amount) {
