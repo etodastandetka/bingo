@@ -325,6 +325,13 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                 row = bank_buttons[i:i+2]
                 keyboard_rows.append(row)
             
+            # Добавляем кнопку отмены в конец (одна кнопка на всю ширину)
+            cancel_button = InlineKeyboardButton(
+                text=get_text(lang, 'deposit', 'cancel'),
+                callback_data='cancel_deposit'
+            )
+            keyboard_rows.append([cancel_button])
+            
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
             
             # Добавляем таймер (5 минут)
