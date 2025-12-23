@@ -244,8 +244,8 @@ async def withdraw_qr_photo_received(message: Message, state: FSMContext):
     data = await state.get_data()
     casino_id = data.get('casino_id', '')
     casino_name = data.get('casino_name', '')
-    # Фото находятся в корневой папке проекта
-    photo_path = Path(__file__).parent.parent.parent / f"{casino_id}.jpg"
+    # Фото находятся в папке telegram_bot/images
+    photo_path = Path(__file__).parent.parent / "images" / f"{casino_id}.jpg"
     if photo_path.exists():
         photo = FSInputFile(str(photo_path))
         await message.answer_photo(

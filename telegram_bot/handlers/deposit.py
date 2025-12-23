@@ -160,8 +160,8 @@ async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
     )
     
     # Отправляем фото казино с текстом
-    # Фото находятся в корневой папке проекта
-    photo_path = Path(__file__).parent.parent.parent / f"{casino_id}.jpg"
+    # Фото находятся в папке telegram_bot/images
+    photo_path = Path(__file__).parent.parent / "images" / f"{casino_id}.jpg"
     if photo_path.exists():
         photo = FSInputFile(str(photo_path))
         await callback.message.answer_photo(
