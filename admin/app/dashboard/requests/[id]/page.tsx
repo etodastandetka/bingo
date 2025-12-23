@@ -721,6 +721,41 @@ export default function RequestDetailPage() {
 
     setConfirming(true)
     try {
+      // Если подтверждаем депозит, сначала пополняем баланс через API казино
+      const bookmakerToUse = (selectedBookmaker !== null && selectedBookmaker !== '') 
+        ? selectedBookmaker 
+        : request.bookmaker
+        
+      if (request.requestType === 'deposit' && bookmakerToUse && request.accountId && request.amount) {
+        try {
+          const depositPayload = {
+            requestId: request.id,
+            bookmaker: bookmakerToUse,
+            accountId: request.accountId,
+            amount: request.amount,
+          }
+          
+          const depositResponse = await fetch('/api/deposit-balance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(depositPayload),
+          })
+
+          const depositData = await depositResponse.json()
+
+          if (!depositData.success) {
+            pushToast(`Ошибка пополнения баланса: ${depositData.error || depositData.message || 'Неизвестная ошибка'}`, 'error')
+            setConfirming(false)
+            return
+          }
+        } catch (depositError) {
+          console.error('Failed to deposit balance:', depositError)
+          pushToast('Ошибка при пополнении баланса игрока. Заявка не подтверждена.', 'error')
+          setConfirming(false)
+          return
+        }
+      }
+      
       // Обновляем сумму заявки и связываем пополнение с заявкой
       const response = await fetch(`/api/requests/${request.id}`, {
         method: 'PATCH',

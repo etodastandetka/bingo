@@ -79,19 +79,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { requestId, bookmaker, amount } = body
 
-    console.log(`[Deposit Balance API] POST request received:`, {
-      requestId,
-      bookmaker,
-      amount,
-      bodyKeys: Object.keys(body),
-    })
-
     if (!requestId || !bookmaker || !amount) {
-      console.error(`[Deposit Balance API] Missing required fields:`, {
-        hasRequestId: !!requestId,
-        hasBookmaker: !!bookmaker,
-        hasAmount: !!amount,
-      })
       return NextResponse.json(
         createApiResponse(null, 'Missing required fields: requestId, bookmaker, amount'),
         { status: 400 }
@@ -101,15 +89,6 @@ export async function POST(request: NextRequest) {
     // Получаем заявку
     const requestData = await prisma.request.findUnique({
       where: { id: parseInt(requestId) },
-    })
-    
-    console.log(`[Deposit Balance API] Request data from DB:`, {
-      found: !!requestData,
-      id: requestData?.id,
-      accountId: requestData?.accountId,
-      bookmaker: requestData?.bookmaker,
-      amount: requestData?.amount?.toString(),
-      status: requestData?.status,
     })
 
     if (!requestData) {
@@ -121,7 +100,6 @@ export async function POST(request: NextRequest) {
 
     // Проверка на дубликаты: если заявка уже обработана (completed), не выполняем повторное пополнение
     if (requestData.status === 'completed' || requestData.status === 'approved') {
-      console.log(`[Deposit Balance] Request ${requestId} already processed, status: ${requestData.status}`)
       return NextResponse.json(
         createApiResponse(null, `Заявка уже обработана (статус: ${requestData.status}). Повторное пополнение невозможно.`),
         { status: 400 }
@@ -179,8 +157,6 @@ export async function POST(request: NextRequest) {
     const depositResult = await depositToCasino(bookmakerToUse, accountId, amountToUse)
 
     if (!depositResult.success) {
-      console.error(`[Deposit Balance] Failed for ${bookmaker}, accountId: ${accountId}`, depositResult)
-      
       // Сохраняем ошибку казино в базе данных
       await prisma.request.update({
         where: { id: parseInt(requestId) },
@@ -202,8 +178,6 @@ export async function POST(request: NextRequest) {
         casinoError: null,
       },
     })
-    
-    console.log(`[Deposit Balance] Success for ${bookmaker}, accountId: ${accountId}`, depositResult)
 
     // Обновляем статус заявки на completed
     const updatedRequest = await prisma.request.update({
