@@ -239,8 +239,22 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
 
     await state.update_data(account_id=account_id, player_info=player_info)
     
+    # Клавиатура с быстрыми кнопками сумм
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))]],
+        keyboard=[
+            [
+                KeyboardButton(text='100'),
+                KeyboardButton(text='500'),
+                KeyboardButton(text='1000')
+            ],
+            [
+                KeyboardButton(text='5000'),
+                KeyboardButton(text='10000')
+            ],
+            [
+                KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))
+            ]
+        ],
         resize_keyboard=True
     )
     
