@@ -73,9 +73,11 @@ class Config:
     # Банки для пополнения
     DEPOSIT_BANKS = [
         {'id': 'mbank', 'name': 'Mbank'},
+        {'id': 'demir', 'name': 'DemirBank'},
+        {'id': 'balance', 'name': 'Balance.kg'},
         {'id': 'omoney', 'name': 'О деньги'},
-        {'id': 'bakai', 'name': 'BAKAI'},
         {'id': 'megapay', 'name': 'MEGApay'},
+        {'id': 'bakai', 'name': 'BAKAI'},
     ]
     
     # Банки для вывода
