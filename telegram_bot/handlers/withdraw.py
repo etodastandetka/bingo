@@ -113,23 +113,22 @@ async def withdraw_casino_selected(callback: CallbackQuery, state: FSMContext):
     settings = await APIClient.get_payment_settings()
     enabled_banks = settings.get('withdrawals', {}).get('banks', [])
     
-    # Создаем обычную клавиатуру для банков
-    keyboard = ReplyKeyboardMarkup(keyboard=[], resize_keyboard=True)
+    # Создаем инлайн клавиатуру для банков
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     
-    # Создаем кнопки банков по 2 в ряд (только включенные)
+    # Создаем инлайн кнопки банков по 2 в ряд (только включенные)
     row = []
     for bank in Config.WITHDRAW_BANKS:
         if bank['id'] in enabled_banks:
-            row.append(KeyboardButton(text=bank['name']))
+            row.append(InlineKeyboardButton(
+                text=bank['name'],
+                callback_data=f'withdraw_bank_{bank["id"]}'
+            ))
             if len(row) == 2:
-                keyboard.keyboard.append(row)
+                keyboard.inline_keyboard.append(row)
                 row = []
     if row:
-        keyboard.keyboard.append(row)
-    
-    keyboard.keyboard.append([
-        KeyboardButton(text=get_text(lang, 'withdraw', 'cancel'))
-    ])
+        keyboard.inline_keyboard.append(row)
     
     await callback.message.answer(
         get_text(lang, 'withdraw', 'select_bank', casino=casino_name),
@@ -138,25 +137,18 @@ async def withdraw_casino_selected(callback: CallbackQuery, state: FSMContext):
     await state.set_state(WithdrawStates.waiting_for_bank)
     await callback.answer()
 
-@router.message(WithdrawStates.waiting_for_bank)
-async def withdraw_bank_selected(message: Message, state: FSMContext, bot: Bot):
+@router.callback_query(F.data.startswith('withdraw_bank_'), WithdrawStates.waiting_for_bank)
+async def withdraw_bank_selected(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Банк выбран, запрашиваем номер телефона"""
     lang = await get_lang_from_state(state)
+    bank_id = callback.data.replace('withdraw_bank_', '')
     
-    if message.text == get_text(lang, 'withdraw', 'cancel'):
-        await state.clear()
-        # Показываем главное меню
-        from handlers.start import cmd_start
-        await cmd_start(message, state, bot)
-        return
-    
-    # Ищем банк по названию
-    bank = next((b for b in Config.WITHDRAW_BANKS if b['name'] == message.text), None)
+    # Ищем банк по ID
+    bank = next((b for b in Config.WITHDRAW_BANKS if b['id'] == bank_id), None)
     if not bank:
-        await message.answer('❌ Пожалуйста, выберите банк из списка')
+        await callback.answer('❌ Банк не найден', show_alert=True)
         return
     
-    bank_id = bank['id']
     bank_name = bank['name']
     
     await state.update_data(bank_id=bank_id, bank_name=bank_name)
@@ -164,16 +156,23 @@ async def withdraw_bank_selected(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     casino_name = data.get('casino_name', '')
     
+    # Удаляем сообщение с кнопками выбора банка
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass  # Игнорируем ошибки удаления
+    
     keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=get_text(lang, 'withdraw', 'cancel'))]],
         resize_keyboard=True
     )
     
-    await message.answer(
+    await callback.message.answer(
         get_text(lang, 'withdraw', 'enter_phone', casino=casino_name, bank=bank_name),
         reply_markup=keyboard,
     )
     await state.set_state(WithdrawStates.waiting_for_phone)
+    await callback.answer()
 
 @router.message(WithdrawStates.waiting_for_phone)
 async def withdraw_phone_received(message: Message, state: FSMContext, bot: Bot):
