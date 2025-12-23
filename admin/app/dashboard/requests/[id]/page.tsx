@@ -1105,7 +1105,13 @@ export default function RequestDetailPage() {
                 })
 
                 const handleSelectPayment = () => {
-                  if (isProcessed) return
+                  if (isProcessed) {
+                    // Для обработанных пополнений переходим к деталям связанной заявки
+                    if (payment.requestId) {
+                      router.push(`/dashboard/requests/${payment.requestId}`)
+                    }
+                    return
+                  }
                   const nextSelected = isSelected ? null : payment.id
                   setSelectedPaymentId(nextSelected)
                   setSelectedPaymentPreview(nextSelected ? formattedAmount : null)
@@ -1117,7 +1123,7 @@ export default function RequestDetailPage() {
                     onClick={handleSelectPayment}
                     className={`relative flex items-center rounded-xl p-3 cursor-pointer transition-all ${
                       isProcessed
-                        ? 'bg-gray-800 opacity-70 cursor-not-allowed border border-gray-700'
+                        ? 'bg-gray-800 opacity-70 cursor-pointer border border-gray-700 hover:border-blue-500'
                         : isSelected
                         ? 'bg-blue-500 bg-opacity-20 border-2 border-blue-500'
                         : 'bg-gray-900 border border-gray-700 hover:border-green-500'
