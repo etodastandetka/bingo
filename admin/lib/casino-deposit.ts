@@ -20,7 +20,7 @@ export function generateConfirm(userId: string, hash: string, isMelbet: boolean 
   return crypto.createHash('md5').update(confirmString).digest('hex')
 }
 
-// Генерация подписи для пополнения 1xbet
+// Генерация подписи для пополнения 1xbet и других Cashdesk казино
 export function generateSignForDeposit1xbet(
   userId: string,
   amount: number,
@@ -28,7 +28,10 @@ export function generateSignForDeposit1xbet(
   cashierpass: string,
   cashdeskid: string | number
 ): string {
-  // a) SHA256(hash={hash}&lng=ru&userid={user_id})
+  // Согласно документации API:
+  // a) SHA256(hash={hash}&lng={lng}&UserId={userId})
+  // В документации указано UserId с большой буквы, но в примере используется userid
+  // Используем userid (маленькие буквы) как в примере документации
   const step1String = `hash=${hash}&lng=ru&userid=${userId}`
   const step1Hash = crypto.createHash('sha256').update(step1String).digest('hex')
 
@@ -36,7 +39,7 @@ export function generateSignForDeposit1xbet(
   const step2String = `summa=${amount}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
   const step2Hash = crypto.createHash('md5').update(step2String).digest('hex')
 
-  // c) SHA256(step1 + step2)
+  // c) SHA256(step1 + step2) - объединяем результаты шагов 1 и 2
   const combined = step1Hash + step2Hash
   return crypto.createHash('sha256').update(combined).digest('hex')
 }
@@ -70,8 +73,10 @@ export function generateSignForPayout1xbet(
   cashierpass: string,
   cashdeskid: string | number
 ): string {
-  // a) SHA256(hash={hash}&lng=ru&userid={user_id})
-  const step1String = `hash=${hash}&lng=ru&userid=${userId}`
+  // a) SHA256(hash={hash}&lng={lng}&UserId={userId})
+  // В документации указано UserId с большой буквы, но в примере используется userid
+  // Используем UserId с большой буквы согласно документации пункта 3.1
+  const step1String = `hash=${hash}&lng=ru&UserId=${userId}`
   const step1Hash = crypto.createHash('sha256').update(step1String).digest('hex')
 
   // b) MD5(code={code}&cashierpass={cashierpass}&cashdeskid={cashdeskid})
