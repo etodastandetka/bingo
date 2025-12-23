@@ -135,10 +135,15 @@ async function getCashdeskBalance(
           balance,
           limit,
         }
+      } else {
+        console.error(`[${casino}] Invalid response data:`, data)
       }
+    } else {
+      const errorText = await response.text().catch(() => '')
+      console.error(`[${casino}] API error (${response.status}):`, errorText)
     }
   } catch (error) {
-    console.error(`Error getting ${casino} balance:`, error)
+    console.error(`[${casino}] Error getting balance:`, error)
   }
 
   return { balance: 0, limit: 0 }
@@ -242,13 +247,36 @@ export async function getPlatformLimits(): Promise<
   // Вспомогательная функция для безопасного получения баланса
   const getBalanceSafe = async (
     fn: () => Promise<BalanceResult>,
+    platformName: string,
     defaultLimit: number = 0
   ): Promise<number> => {
     try {
       const result = await fn()
+      console.log(`[Platform Limits] ${platformName}: balance=${result.balance}, limit=${result.limit}`)
       return result.limit
     } catch (error) {
-      console.error('Error getting balance:', error)
+      console.error(`[Platform Limits] Error getting ${platformName} balance:`, error)
+      return defaultLimit
+    }
+  }
+
+export async function getPlatformLimits(): Promise<
+  Array<{ key: string; name: string; limit: number }>
+> {
+  const limits: Array<{ key: string; name: string; limit: number }> = []
+
+  // Вспомогательная функция для безопасного получения баланса
+  const getBalanceSafe = async (
+    fn: () => Promise<BalanceResult>,
+    platformName: string,
+    defaultLimit: number = 0
+  ): Promise<number> => {
+    try {
+      const result = await fn()
+      console.log(`[Platform Limits] ${platformName}: balance=${result.balance}, limit=${result.limit}`)
+      return result.limit
+    } catch (error) {
+      console.error(`[Platform Limits] Error getting ${platformName} balance:`, error)
       return defaultLimit
     }
   }
@@ -257,7 +285,7 @@ export async function getPlatformLimits(): Promise<
   try {
     const xbetCfg = CASHDESK_CONFIG['1xbet']
     if (xbetCfg.cashdeskid > 0) {
-      const limit = await getBalanceSafe(() => getCashdeskBalance('1xbet', xbetCfg))
+      const limit = await getBalanceSafe(() => getCashdeskBalance('1xbet', xbetCfg), '1xbet')
       limits.push({ key: '1xbet', name: '1xbet', limit })
     } else {
       limits.push({ key: '1xbet', name: '1xbet', limit: 0 })
@@ -270,7 +298,7 @@ export async function getPlatformLimits(): Promise<
   try {
     const melbetCfg = CASHDESK_CONFIG.melbet
     if (melbetCfg.cashdeskid > 0) {
-      const limit = await getBalanceSafe(() => getCashdeskBalance('melbet', melbetCfg))
+      const limit = await getBalanceSafe(() => getCashdeskBalance('melbet', melbetCfg), 'Melbet')
       limits.push({ key: 'melbet', name: 'Melbet', limit })
     } else {
       limits.push({ key: 'melbet', name: 'Melbet', limit: 0 })
@@ -283,7 +311,7 @@ export async function getPlatformLimits(): Promise<
   try {
     const onewinCfg = ONEWIN_CONFIG
     if (onewinCfg.api_key) {
-      const limit = await getBalanceSafe(() => get1winBalance(onewinCfg))
+      const limit = await getBalanceSafe(() => get1winBalance(onewinCfg), '1WIN')
       limits.push({ key: '1win', name: '1WIN', limit })
     } else {
       limits.push({ key: '1win', name: '1WIN', limit: 0 })
@@ -296,7 +324,7 @@ export async function getPlatformLimits(): Promise<
   try {
     const mostbetCfg = MOSTBET_CONFIG
     if (mostbetCfg.cashpoint_id > 0) {
-      const limit = await getBalanceSafe(() => getMostbetBalance(mostbetCfg))
+      const limit = await getBalanceSafe(() => getMostbetBalance(mostbetCfg), 'Mostbet')
       limits.push({ key: 'mostbet', name: 'Mostbet', limit })
     } else {
       limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
@@ -309,7 +337,7 @@ export async function getPlatformLimits(): Promise<
   try {
     const winwinCfg = CASHDESK_CONFIG.winwin
     if (winwinCfg.cashdeskid > 0) {
-      const limit = await getBalanceSafe(() => getCashdeskBalance('winwin', winwinCfg))
+      const limit = await getBalanceSafe(() => getCashdeskBalance('winwin', winwinCfg), 'Winwin')
       limits.push({ key: 'winwin', name: 'Winwin', limit })
     } else {
       limits.push({ key: 'winwin', name: 'Winwin', limit: 0 })
@@ -322,7 +350,7 @@ export async function getPlatformLimits(): Promise<
   try {
     const starzCfg = CASHDESK_CONFIG['888starz']
     if (starzCfg.cashdeskid > 0) {
-      const limit = await getBalanceSafe(() => getCashdeskBalance('888starz', starzCfg))
+      const limit = await getBalanceSafe(() => getCashdeskBalance('888starz', starzCfg), '888starz')
       limits.push({ key: '888starz', name: '888starz', limit })
     } else {
       limits.push({ key: '888starz', name: '888starz', limit: 0 })
@@ -335,7 +363,7 @@ export async function getPlatformLimits(): Promise<
   try {
     const xcasinoCfg = CASHDESK_CONFIG['1xcasino']
     if (xcasinoCfg.cashdeskid > 0) {
-      const limit = await getBalanceSafe(() => getCashdeskBalance('1xcasino', xcasinoCfg))
+      const limit = await getBalanceSafe(() => getCashdeskBalance('1xcasino', xcasinoCfg), '1xCasino')
       limits.push({ key: '1xcasino', name: '1xCasino', limit })
     } else {
       limits.push({ key: '1xcasino', name: '1xCasino', limit: 0 })
@@ -348,7 +376,7 @@ export async function getPlatformLimits(): Promise<
   try {
     const betwinnerCfg = CASHDESK_CONFIG['betwinner']
     if (betwinnerCfg.cashdeskid > 0) {
-      const limit = await getBalanceSafe(() => getCashdeskBalance('betwinner', betwinnerCfg))
+      const limit = await getBalanceSafe(() => getCashdeskBalance('betwinner', betwinnerCfg), 'BetWinner')
       limits.push({ key: 'betwinner', name: 'BetWinner', limit })
     } else {
       limits.push({ key: 'betwinner', name: 'BetWinner', limit: 0 })
@@ -361,7 +389,7 @@ export async function getPlatformLimits(): Promise<
   try {
     const wowbetCfg = CASHDESK_CONFIG['wowbet']
     if (wowbetCfg.cashdeskid > 0) {
-      const limit = await getBalanceSafe(() => getCashdeskBalance('wowbet', wowbetCfg))
+      const limit = await getBalanceSafe(() => getCashdeskBalance('wowbet', wowbetCfg), 'WowBet')
       limits.push({ key: 'wowbet', name: 'WowBet', limit })
     } else {
       limits.push({ key: 'wowbet', name: 'WowBet', limit: 0 })
@@ -370,6 +398,7 @@ export async function getPlatformLimits(): Promise<
     limits.push({ key: 'wowbet', name: 'WowBet', limit: 0 })
   }
 
+  console.log(`[Platform Limits] Total platforms: ${limits.length}, limits:`, limits.map(p => `${p.name}=${p.limit}`).join(', '))
   return limits
 }
 
