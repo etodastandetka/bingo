@@ -1,5 +1,5 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.types import Message, CallbackQuery, FSInputFile, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from states import DepositStates
@@ -10,7 +10,6 @@ import re
 import os
 import base64
 from pathlib import Path
-from io import BytesIO
 
 router = Router()
 
@@ -264,14 +263,12 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             except:
                 pass
             
-            # Конвертируем base64 в BytesIO для отправки фото
+            # Конвертируем base64 в bytes для отправки фото
             # Убираем префикс data:image если есть
             if qr_image_base64.startswith('data:image'):
                 qr_image_base64 = qr_image_base64.split(',', 1)[1]
             
             qr_image_bytes = base64.b64decode(qr_image_base64)
-            qr_image_io = BytesIO(qr_image_bytes)
-            qr_image_io.name = 'qr_code.png'
             
             # Создаем кнопки банков
             from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -305,7 +302,8 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                                    account_id=account_id)
             
             # Отправляем фото QR кода с кнопками банков
-            photo = FSInputFile(qr_image_io)
+            # Используем BufferedInputFile для работы с bytes напрямую
+            photo = BufferedInputFile(qr_image_bytes, filename='qr_code.png')
             await message.answer_photo(
                 photo=photo,
                 caption=payment_text,
