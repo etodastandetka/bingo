@@ -1080,7 +1080,11 @@ export default function RequestDetailPage() {
                 <input
                   type="checkbox"
                   checked={processedOnly === true}
-                  onChange={(e) => setProcessedOnly(e.target.checked ? true : undefined)}
+                  onChange={(e) => {
+                    // Когда чекбокс включен - показываем только обработанные (true)
+                    // Когда выключен - показываем все (undefined, не отправляем параметр)
+                    setProcessedOnly(e.target.checked ? true : undefined)
+                  }}
                   className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
                 />
                 <span className="text-sm text-gray-300">Обработанные</span>
