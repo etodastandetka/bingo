@@ -71,6 +71,11 @@ export default function OperatorChatPage() {
     createdAt: string
   }>>([])
   const [loadingRequests, setLoadingRequests] = useState(false)
+  const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [reviewModalRequestId, setReviewModalRequestId] = useState<number | null>(null)
+  const [reviewModalIsUncreated, setReviewModalIsUncreated] = useState(false)
+  const [reviewModalLoading, setReviewModalLoading] = useState(false)
+  const [toastNotification, setToastNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
@@ -581,53 +586,68 @@ export default function OperatorChatPage() {
     fetchAllRequests()
   }
 
-  const handleSendToReview = async (uncreatedId: number) => {
+  const handleSendToReviewClick = (uncreatedId: number) => {
+    setReviewModalRequestId(uncreatedId)
+    setReviewModalIsUncreated(true)
+    setReviewModalOpen(true)
+  }
+
+  const handleSendToReview = async () => {
+    if (!reviewModalRequestId) return
+    
+    setReviewModalLoading(true)
     try {
-      const response = await fetch(`/api/uncreated-requests/${uncreatedId}/convert`, {
+      const endpoint = reviewModalIsUncreated
+        ? `/api/uncreated-requests/${reviewModalRequestId}/convert`
+        : `/api/requests/${reviewModalRequestId}/review`
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
       const data = await response.json()
+      
       if (!data.success) {
-        alert(data.error || 'Не удалось отправить на проверку')
+        setToastNotification({ message: data.error || 'Не удалось отправить на проверку', type: 'error' })
+        setReviewModalOpen(false)
+        setTimeout(() => setToastNotification(null), 3000)
         return
       }
-      setUncreatedRequests(prev => prev.filter(u => u.id !== uncreatedId))
-      if (data.data?.request) {
-        setAllRequests(prev => [data.data.request, ...prev])
+      
+      if (reviewModalIsUncreated) {
+        setUncreatedRequests(prev => prev.filter(u => u.id !== reviewModalRequestId))
+        if (data.data?.request) {
+          setAllRequests(prev => [data.data.request, ...prev])
+        }
+      } else {
+        if (data.data?.request) {
+          setAllRequests((prev) =>
+            prev.map((r) => (r.id === reviewModalRequestId ? { ...r, ...data.data.request } : r))
+          )
+        }
       }
-      alert('Отправлено на проверку')
+      
+      setReviewModalOpen(false)
+      setToastNotification({ message: 'Отправлено на проверку', type: 'success' })
+      setTimeout(() => setToastNotification(null), 3000)
     } catch (error) {
       console.error('Send to review error:', error)
-      alert('Ошибка при отправке на проверку')
+      setToastNotification({ message: 'Ошибка при отправке на проверку', type: 'error' })
+      setReviewModalOpen(false)
+      setTimeout(() => setToastNotification(null), 3000)
+    } finally {
+      setReviewModalLoading(false)
     }
   }
 
-  const handleSendRequestToReview = async (requestId: number, e?: React.MouseEvent) => {
+  const handleSendRequestToReview = (requestId: number, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault()
       e.stopPropagation()
     }
-    try {
-      const response = await fetch(`/api/requests/${requestId}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-      const data = await response.json()
-      if (!data.success) {
-        alert(data.error || 'Не удалось отправить на проверку')
-        return
-      }
-      if (data.data?.request) {
-        setAllRequests((prev) =>
-          prev.map((r) => (r.id === requestId ? { ...r, ...data.data.request } : r))
-        )
-      }
-      alert('Отправлено на проверку')
-    } catch (error) {
-      console.error('Send request to review error:', error)
-      alert('Ошибка при отправке на проверку')
-    }
+    setReviewModalRequestId(requestId)
+    setReviewModalIsUncreated(false)
+    setReviewModalOpen(true)
   }
 
   const getTransactionType = (tx: { transType: string; status: string; status_detail: string | null }) => {
