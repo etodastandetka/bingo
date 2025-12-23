@@ -44,7 +44,7 @@ export function generateSignForDeposit1xbet(
   return crypto.createHash('sha256').update(combined).digest('hex')
 }
 
-// Генерация подписи для пополнения Melbet (userid в lower-case)
+// Генерация подписи для пополнения Melbet (UserId в lower-case)
 export function generateSignForDepositMelbet(
   userId: string,
   amount: number,
@@ -52,8 +52,9 @@ export function generateSignForDepositMelbet(
   cashierpass: string,
   cashdeskid: string | number
 ): string {
-  // a) SHA256(hash={hash}&lng=ru&userid={user_id.lower()})
-  const step1String = `hash=${hash}&lng=ru&userid=${userId.toLowerCase()}`
+  // a) SHA256(hash={hash}&lng={lng}&UserId={userId.lower()})
+  // Для Melbet используется userId в нижнем регистре, но параметр UserId с большой буквы
+  const step1String = `hash=${hash}&lng=ru&UserId=${userId.toLowerCase()}`
   const step1Hash = crypto.createHash('sha256').update(step1String).digest('hex')
 
   // b) MD5(summa={amount}&cashierpass={cashierpass}&cashdeskid={cashdeskid})
@@ -154,15 +155,15 @@ export async function depositCashdeskAPI(
     
     // Дополнительное логирование для отладки подписи
     if (isMelbet) {
-      const step1String = `hash=${hash}&lng=ru&userid=${userId.toLowerCase()}`
+      const step1String = `hash=${hash}&lng=ru&UserId=${userId.toLowerCase()}`
       const step2String = `summa=${amount}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
       console.log(`[Cashdesk Deposit] Melbet signature steps:`)
       console.log(`  Step1 string: ${step1String}`)
       console.log(`  Step2 string: ${step2String}`)
     } else {
-      const step1String = `hash=${hash}&lng=ru&userid=${userId}`
+      const step1String = `hash=${hash}&lng=ru&UserId=${userId}`
       const step2String = `summa=${amount}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
-      console.log(`[Cashdesk Deposit] 1xbet signature steps:`)
+      console.log(`[Cashdesk Deposit] ${bookmaker} signature steps:`)
       console.log(`  Step1 string: ${step1String}`)
       console.log(`  Step2 string: ${step2String}`)
     }
