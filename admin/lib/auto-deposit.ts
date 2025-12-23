@@ -131,6 +131,13 @@ export async function matchAndProcessPayment(
     )
 
     if (!depositResult.success) {
+      // Сохраняем ошибку казино в базе данных перед выбросом исключения
+      await prisma.request.update({
+        where: { id: request.id },
+        data: {
+          casinoError: depositResult.message || 'Deposit failed',
+        },
+      })
       throw new Error(depositResult.message || 'Deposit failed')
     }
 
