@@ -239,102 +239,135 @@ export async function getPlatformLimits(): Promise<
 > {
   const limits: Array<{ key: string; name: string; limit: number }> = []
 
+  // Вспомогательная функция для безопасного получения баланса
+  const getBalanceSafe = async (
+    fn: () => Promise<BalanceResult>,
+    defaultLimit: number = 0
+  ): Promise<number> => {
+    try {
+      const result = await fn()
+      return result.limit
+    } catch (error) {
+      console.error('Error getting balance:', error)
+      return defaultLimit
+    }
+  }
+
+  // 1xbet
   try {
-    // 1xbet
     const xbetCfg = CASHDESK_CONFIG['1xbet']
     if (xbetCfg.cashdeskid > 0) {
-      const xbetBal = await getCashdeskBalance('1xbet', xbetCfg)
-      limits.push({ key: '1xbet', name: '1xbet', limit: xbetBal.limit })
+      const limit = await getBalanceSafe(() => getCashdeskBalance('1xbet', xbetCfg))
+      limits.push({ key: '1xbet', name: '1xbet', limit })
     } else {
       limits.push({ key: '1xbet', name: '1xbet', limit: 0 })
     }
+  } catch (error) {
+    limits.push({ key: '1xbet', name: '1xbet', limit: 0 })
+  }
 
-    // Melbet
+  // Melbet
+  try {
     const melbetCfg = CASHDESK_CONFIG.melbet
     if (melbetCfg.cashdeskid > 0) {
-      const melbetBal = await getCashdeskBalance('melbet', melbetCfg)
-      limits.push({ key: 'melbet', name: 'Melbet', limit: melbetBal.limit })
+      const limit = await getBalanceSafe(() => getCashdeskBalance('melbet', melbetCfg))
+      limits.push({ key: 'melbet', name: 'Melbet', limit })
     } else {
       limits.push({ key: 'melbet', name: 'Melbet', limit: 0 })
     }
+  } catch (error) {
+    limits.push({ key: 'melbet', name: 'Melbet', limit: 0 })
+  }
 
-    // 1WIN
+  // 1WIN
+  try {
     const onewinCfg = ONEWIN_CONFIG
     if (onewinCfg.api_key) {
-      const onewinBal = await get1winBalance(onewinCfg)
-      limits.push({ key: '1win', name: '1WIN', limit: onewinBal.limit })
+      const limit = await getBalanceSafe(() => get1winBalance(onewinCfg))
+      limits.push({ key: '1win', name: '1WIN', limit })
     } else {
       limits.push({ key: '1win', name: '1WIN', limit: 0 })
     }
+  } catch (error) {
+    limits.push({ key: '1win', name: '1WIN', limit: 0 })
+  }
 
-    // Mostbet
+  // Mostbet
+  try {
     const mostbetCfg = MOSTBET_CONFIG
     if (mostbetCfg.cashpoint_id > 0) {
-      const mostbetBal = await getMostbetBalance(mostbetCfg)
-      limits.push({ key: 'mostbet', name: 'Mostbet', limit: mostbetBal.limit })
+      const limit = await getBalanceSafe(() => getMostbetBalance(mostbetCfg))
+      limits.push({ key: 'mostbet', name: 'Mostbet', limit })
     } else {
       limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
     }
+  } catch (error) {
+    limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
+  }
 
-    // Winwin
+  // Winwin
+  try {
     const winwinCfg = CASHDESK_CONFIG.winwin
     if (winwinCfg.cashdeskid > 0) {
-      const winwinBal = await getCashdeskBalance('winwin', winwinCfg)
-      limits.push({ key: 'winwin', name: 'Winwin', limit: winwinBal.limit })
+      const limit = await getBalanceSafe(() => getCashdeskBalance('winwin', winwinCfg))
+      limits.push({ key: 'winwin', name: 'Winwin', limit })
     } else {
       limits.push({ key: 'winwin', name: 'Winwin', limit: 0 })
     }
+  } catch (error) {
+    limits.push({ key: 'winwin', name: 'Winwin', limit: 0 })
+  }
 
-    // 888starz
+  // 888starz
+  try {
     const starzCfg = CASHDESK_CONFIG['888starz']
     if (starzCfg.cashdeskid > 0) {
-      const starzBal = await getCashdeskBalance('888starz', starzCfg)
-      limits.push({ key: '888starz', name: '888starz', limit: starzBal.limit })
+      const limit = await getBalanceSafe(() => getCashdeskBalance('888starz', starzCfg))
+      limits.push({ key: '888starz', name: '888starz', limit })
     } else {
       limits.push({ key: '888starz', name: '888starz', limit: 0 })
     }
+  } catch (error) {
+    limits.push({ key: '888starz', name: '888starz', limit: 0 })
+  }
 
-    // 1xCasino
+  // 1xCasino
+  try {
     const xcasinoCfg = CASHDESK_CONFIG['1xcasino']
     if (xcasinoCfg.cashdeskid > 0) {
-      const xcasinoBal = await getCashdeskBalance('1xcasino', xcasinoCfg)
-      limits.push({ key: '1xcasino', name: '1xCasino', limit: xcasinoBal.limit })
+      const limit = await getBalanceSafe(() => getCashdeskBalance('1xcasino', xcasinoCfg))
+      limits.push({ key: '1xcasino', name: '1xCasino', limit })
     } else {
       limits.push({ key: '1xcasino', name: '1xCasino', limit: 0 })
     }
+  } catch (error) {
+    limits.push({ key: '1xcasino', name: '1xCasino', limit: 0 })
+  }
 
-    // BetWinner
+  // BetWinner
+  try {
     const betwinnerCfg = CASHDESK_CONFIG['betwinner']
     if (betwinnerCfg.cashdeskid > 0) {
-      const betwinnerBal = await getCashdeskBalance('betwinner', betwinnerCfg)
-      limits.push({ key: 'betwinner', name: 'BetWinner', limit: betwinnerBal.limit })
+      const limit = await getBalanceSafe(() => getCashdeskBalance('betwinner', betwinnerCfg))
+      limits.push({ key: 'betwinner', name: 'BetWinner', limit })
     } else {
       limits.push({ key: 'betwinner', name: 'BetWinner', limit: 0 })
     }
-    
-    // WowBet
+  } catch (error) {
+    limits.push({ key: 'betwinner', name: 'BetWinner', limit: 0 })
+  }
+  
+  // WowBet
+  try {
     const wowbetCfg = CASHDESK_CONFIG['wowbet']
     if (wowbetCfg.cashdeskid > 0) {
-      const wowbetBal = await getCashdeskBalance('wowbet', wowbetCfg)
-      limits.push({ key: 'wowbet', name: 'WowBet', limit: wowbetBal.limit })
+      const limit = await getBalanceSafe(() => getCashdeskBalance('wowbet', wowbetCfg))
+      limits.push({ key: 'wowbet', name: 'WowBet', limit })
     } else {
       limits.push({ key: 'wowbet', name: 'WowBet', limit: 0 })
     }
   } catch (error) {
-    console.error('Error getting platform limits:', error)
-    // Возвращаем нули если ошибка
-    return [
-      { key: '1xbet', name: '1xbet', limit: 0 },
-      { key: 'melbet', name: 'Melbet', limit: 0 },
-      { key: '1win', name: '1WIN', limit: 0 },
-      { key: 'mostbet', name: 'Mostbet', limit: 0 },
-      { key: 'winwin', name: 'Winwin', limit: 0 },
-      { key: '888starz', name: '888starz', limit: 0 },
-      { key: '1xcasino', name: '1xCasino', limit: 0 },
-      { key: 'betwinner', name: 'BetWinner', limit: 0 },
-      { key: 'betwinner', name: 'BetWinner', limit: 0 },
-      { key: 'wowbet', name: 'WowBet', limit: 0 },
-    ]
+    limits.push({ key: 'wowbet', name: 'WowBet', limit: 0 })
   }
 
   return limits
