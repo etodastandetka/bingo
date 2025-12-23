@@ -28,10 +28,10 @@ export function generateSignForDeposit1xbet(
   cashierpass: string,
   cashdeskid: string | number
 ): string {
-  // Согласно документации API пункт 3.1:
-  // a) SHA256(hash={hash}&lng={lng}&UserId={userId})
-  // В документации указано UserId с большой буквы (пункт 3.1), используем согласно документации
-  const step1String = `hash=${hash}&lng=ru&UserId=${userId}`
+  // Согласно документации API пункт 3.5 (пример):
+  // a) SHA256(hash={hash}&lng=ru&userid={userId})
+  // В примере используется userid с маленькой буквы (пункт 3.5), это правильная форма
+  const step1String = `hash=${hash}&lng=ru&userid=${userId}`
   const step1Hash = crypto.createHash('sha256').update(step1String).digest('hex')
 
   // b) MD5(summa={amount}&cashierpass={cashierpass}&cashdeskid={cashdeskid})
@@ -43,7 +43,7 @@ export function generateSignForDeposit1xbet(
   return crypto.createHash('sha256').update(combined).digest('hex')
 }
 
-// Генерация подписи для пополнения Melbet (UserId в lower-case)
+// Генерация подписи для пополнения Melbet (userid в lower-case)
 export function generateSignForDepositMelbet(
   userId: string,
   amount: number,
@@ -51,9 +51,9 @@ export function generateSignForDepositMelbet(
   cashierpass: string,
   cashdeskid: string | number
 ): string {
-  // a) SHA256(hash={hash}&lng={lng}&UserId={userId.lower()})
-  // Для Melbet используется userId в нижнем регистре, но параметр UserId с большой буквы
-  const step1String = `hash=${hash}&lng=ru&UserId=${userId.toLowerCase()}`
+  // a) SHA256(hash={hash}&lng=ru&userid={userId.lower()})
+  // Для Melbet используется userId в нижнем регистре, параметр userid с маленькой буквы
+  const step1String = `hash=${hash}&lng=ru&userid=${userId.toLowerCase()}`
   const step1Hash = crypto.createHash('sha256').update(step1String).digest('hex')
 
   // b) MD5(summa={amount}&cashierpass={cashierpass}&cashdeskid={cashdeskid})
@@ -154,13 +154,13 @@ export async function depositCashdeskAPI(
     
     // Дополнительное логирование для отладки подписи
     if (isMelbet) {
-      const step1String = `hash=${hash}&lng=ru&UserId=${userId.toLowerCase()}`
+      const step1String = `hash=${hash}&lng=ru&userid=${userId.toLowerCase()}`
       const step2String = `summa=${amount}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
       console.log(`[Cashdesk Deposit] Melbet signature steps:`)
       console.log(`  Step1 string: ${step1String}`)
       console.log(`  Step2 string: ${step2String}`)
     } else {
-      const step1String = `hash=${hash}&lng=ru&UserId=${userId}`
+      const step1String = `hash=${hash}&lng=ru&userid=${userId}`
       const step2String = `summa=${amount}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
       console.log(`[Cashdesk Deposit] ${bookmaker} signature steps:`)
       console.log(`  Step1 string: ${step1String}`)
@@ -209,6 +209,19 @@ export async function depositCashdeskAPI(
     }
 
     console.log(`[Cashdesk Deposit] Response status: ${response.status}, Data:`, data)
+    
+    // Логируем детали при ошибке 401
+    if (response.status === 401) {
+      console.error(`[Cashdesk Deposit] 401 Unauthorized - Check signature generation`)
+      console.error(`[Cashdesk Deposit] Request details:`, {
+        url,
+        headers: {
+          'Authorization': authHeader.substring(0, 20) + '...',
+          'sign': sign,
+        },
+        body: requestBody,
+      })
+    }
 
     // API может возвращать success (маленькая) или Success (большая буква)
     const isSuccess = response.ok && (data.success === true || data.Success === true)
