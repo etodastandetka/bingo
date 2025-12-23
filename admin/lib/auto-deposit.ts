@@ -19,12 +19,30 @@ export async function matchAndProcessPayment(
   paymentId: number,
   amount: number
 ): Promise<MatchResult> {
-  // Ищем заявки на пополнение со статусом pending за последние 5 минут
-  // Уменьшено до 5 минут для более точного сопоставления
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+  // Проверяем, включено ли автопополнение
+  const autodepositSetting = await prisma.botConfiguration.findFirst({
+    where: { key: 'autodeposit_enabled' },
+  })
+  
+  const isAutodepositEnabled = autodepositSetting && (
+    (typeof autodepositSetting.value === 'string' && autodepositSetting.value.toLowerCase() === 'true') ||
+    (typeof autodepositSetting.value === 'boolean' && autodepositSetting.value) ||
+    (typeof autodepositSetting.value === 'object' && autodepositSetting.value !== null && String(autodepositSetting.value).toLowerCase() === 'true')
+  )
+  
+  if (!isAutodepositEnabled) {
+    console.log(`⚠️ Auto-deposit is disabled, skipping payment ${paymentId}`)
+    return {
+      success: false,
+      message: 'Auto-deposit is disabled',
+    }
+  }
+
+  // Ищем заявки на пополнение со статусом pending за последние 10 минут (увеличено)
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
 
   console.log(
-    `🔍 Matching payment ${paymentId}: looking for requests with amount ${amount} created after ${fiveMinutesAgo.toISOString()}`
+    `🔍 Matching payment ${paymentId}: looking for requests with amount ${amount} created after ${tenMinutesAgo.toISOString()}`
   )
 
   const matchingRequests = await prisma.request.findMany({
@@ -32,7 +50,7 @@ export async function matchAndProcessPayment(
       requestType: 'deposit',
       status: 'pending',
       createdAt: {
-        gte: fiveMinutesAgo,
+        gte: tenMinutesAgo,
       },
       // Исключаем заявки, которые уже имеют связанный обработанный платеж
       incomingPayments: {
@@ -54,7 +72,7 @@ export async function matchAndProcessPayment(
   })
 
   console.log(
-    `📋 Found ${matchingRequests.length} pending deposit requests in the last 5 minutes (without processed payments)`
+    `📋 Found ${matchingRequests.length} pending deposit requests in the last 10 minutes (without processed payments)`
   )
 
   // Фильтруем вручную, т.к. Prisma может иметь проблемы с точным сравнением Decimal
