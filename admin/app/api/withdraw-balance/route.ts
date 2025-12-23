@@ -3,6 +3,7 @@ import { requireAuth, createApiResponse } from '@/lib/api-helpers'
 import { prisma } from '@/lib/prisma'
 import { payoutCashdeskAPI } from '@/lib/casino-deposit'
 import { getCasinoConfig } from '@/lib/casino-config'
+import { checkWithdrawAmountMostbet, checkWithdrawAmount1win } from '@/lib/casino-withdraw'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,10 +30,68 @@ async function withdrawFromCasino(
       return await payoutCashdeskAPI(bookmaker, accountId, code, config)
     }
     
-    // Для других казино (mostbet, 1win) вывод может быть реализован позже
+    // Mostbet использует свой API (проверка суммы и вывод выполняются вместе)
+    if (normalizedBookmaker.includes('mostbet')) {
+      const config = await getCasinoConfig(bookmaker)
+      
+      if (!config) {
+        return {
+          success: false,
+          message: 'Mostbet API configuration not found in database',
+        }
+      }
+
+      const result = await checkWithdrawAmountMostbet(accountId, code, config)
+      
+      if (result.success) {
+        return {
+          success: true,
+          message: result.message || 'Balance withdrawn successfully',
+          data: {
+            amount: result.amount,
+            transactionId: result.transactionId,
+          },
+        }
+      }
+      
+      return {
+        success: false,
+        message: result.message || 'Failed to withdraw balance',
+      }
+    }
+    
+    // 1win использует свой API (проверка суммы и вывод выполняются вместе)
+    if (normalizedBookmaker.includes('1win')) {
+      const config = await getCasinoConfig(bookmaker)
+      
+      if (!config) {
+        return {
+          success: false,
+          message: '1win API configuration not found in database',
+        }
+      }
+
+      const result = await checkWithdrawAmount1win(accountId, code, config)
+      
+      if (result.success) {
+        return {
+          success: true,
+          message: result.message || 'Balance withdrawn successfully',
+          data: {
+            amount: result.amount,
+          },
+        }
+      }
+      
+      return {
+        success: false,
+        message: result.message || 'Failed to withdraw balance',
+      }
+    }
+
     return {
       success: false,
-      message: `Withdrawal not yet implemented for ${bookmaker}`,
+      message: `Unsupported bookmaker: ${bookmaker}`,
     }
   } catch (error: any) {
     console.error(`[Withdraw Balance] Error for ${bookmaker}:`, error)
