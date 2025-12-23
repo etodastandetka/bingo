@@ -53,14 +53,11 @@ export async function GET(request: NextRequest) {
 
     // Фильтр по обработанным: 
     // - Если processedOnly=true, показываем только обработанные (isProcessed=true)
-    // - Если processedOnly=false, показываем только необработанные (isProcessed=false)
-    // - Если не указано (undefined), показываем все
+    // - Если processedOnly=undefined (параметр не передан), показываем все пополнения (не добавляем фильтр)
     if (processedOnly === true) {
       where.isProcessed = true
-    } else if (processedOnly === false) {
-      where.isProcessed = false
     }
-    // Если processedOnly === undefined, не добавляем фильтр - показываем все
+    // Если processedOnly === undefined, не добавляем фильтр - показываем все пополнения
 
     // Исключаем текущую заявку, если указана
     if (requestId) {
