@@ -73,10 +73,9 @@ export function generateSignForPayout1xbet(
   cashierpass: string,
   cashdeskid: string | number
 ): string {
-  // a) SHA256(hash={hash}&lng={lng}&UserId={userId})
-  // В документации указано UserId с большой буквы, но в примере используется userid
-  // Используем UserId с большой буквы согласно документации пункта 3.1
-  const step1String = `hash=${hash}&lng=ru&UserId=${userId}`
+  // a) SHA256(hash={hash}&lng={lng}&userid={userId})
+  // Согласно документации пункт 4.1 и логике пополнения (пункт 3.5) используем userid с маленькой буквы
+  const step1String = `hash=${hash}&lng=ru&userid=${userId}`
   const step1Hash = crypto.createHash('sha256').update(step1String).digest('hex')
 
   // b) MD5(code={code}&cashierpass={cashierpass}&cashdeskid={cashdeskid})
@@ -666,17 +665,38 @@ export async function payoutCashdeskAPI(
       ? generateSignForPayoutMelbet(userId, code, hash, cashierpass, cashdeskid)
       : generateSignForPayout1xbet(userId, code, hash, cashierpass, cashdeskid)
 
+    // Дополнительное логирование для отладки подписи
+    if (isMelbet) {
+      const step1String = `hash=${hash}&lng=ru&userid=${userId.toLowerCase()}`
+      const step2String = `code=${code}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
+      console.log(`[Cashdesk Payout] Melbet signature steps:`)
+      console.log(`  Step1 string: ${step1String}`)
+      console.log(`  Step2 string: ${step2String}`)
+    } else {
+      const step1String = `hash=${hash}&lng=ru&userid=${userId}`
+      const step2String = `code=${code}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`
+      console.log(`[Cashdesk Payout] ${bookmaker} signature steps:`)
+      console.log(`  Step1 string: ${step1String}`)
+      console.log(`  Step2 string: ${step2String}`)
+    }
+
     const url = `${baseUrl}Deposit/${userId}/Payout`
     const authHeader = generateBasicAuth(login, cashierpass)
 
+    // cashdeskId должен быть числом согласно документации
+    const cashdeskIdNum = typeof cashdeskid === 'string' ? parseInt(cashdeskid, 10) : Number(cashdeskid)
+
     const requestBody = {
-      cashdeskId: String(cashdeskid),
+      cashdeskId: cashdeskIdNum,
       lng: 'ru',
       code: code,
       confirm: confirm,
     }
 
-    console.log(`[Cashdesk Payout] URL: ${url}, Request body:`, requestBody)
+    console.log(`[Cashdesk Payout] URL: ${url}`)
+    console.log(`[Cashdesk Payout] Sign: ${sign}`)
+    console.log(`[Cashdesk Payout] Confirm: ${confirm}`)
+    console.log(`[Cashdesk Payout] Request body:`, JSON.stringify(requestBody, null, 2))
 
     const response = await fetch(url, {
       method: 'POST',
@@ -702,6 +722,19 @@ export async function payoutCashdeskAPI(
     }
 
     console.log(`[Cashdesk Payout] Response status: ${response.status}, Data:`, data)
+    
+    // Логируем детали при ошибке 401
+    if (response.status === 401) {
+      console.error(`[Cashdesk Payout] 401 Unauthorized - Check signature generation`)
+      console.error(`[Cashdesk Payout] Request details:`, {
+        url,
+        headers: {
+          'Authorization': authHeader.substring(0, 20) + '...',
+          'sign': sign,
+        },
+        body: requestBody,
+      })
+    }
 
     // API может возвращать success (маленькая) или Success (большая буква)
     const isSuccess = response.ok && (data.success === true || data.Success === true)
