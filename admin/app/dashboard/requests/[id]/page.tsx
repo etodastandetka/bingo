@@ -1117,15 +1117,15 @@ export default function RequestDetailPage() {
                     onClick={handleSelectPayment}
                     className={`relative flex items-center rounded-xl p-3 cursor-pointer transition-all ${
                       isProcessed
-                        ? 'bg-gray-700 opacity-60 cursor-not-allowed border border-gray-600'
+                        ? 'bg-gray-800 opacity-70 cursor-not-allowed border border-gray-700'
                         : isSelected
                         ? 'bg-blue-500 bg-opacity-20 border-2 border-blue-500'
-                        : 'bg-gray-900 border border-gray-700 hover:border-gray-600'
+                        : 'bg-gray-900 border border-gray-700 hover:border-green-500 hover:bg-gray-850'
                     }`}
                   >
                     {/* Левая полоска */}
                     <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${
-                      isProcessed ? 'bg-gray-500' : isSelected ? 'bg-blue-500' : 'bg-gray-600'
+                      isProcessed ? 'bg-gray-600' : isSelected ? 'bg-blue-500' : 'bg-green-500'
                     }`}></div>
                     
                     <div className="flex-1 ml-4 min-w-0">
