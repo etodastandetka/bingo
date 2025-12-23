@@ -48,12 +48,16 @@ export async function GET(request: NextRequest) {
       where.amount = amountValue
     }
 
-    // Фильтр по обработанным: если checked (processedOnly=true), показываем только обработанные (isProcessed=true)
-    // Если unchecked (processedOnly=false), показываем только необработанные (isProcessed=false или null)
-    // Если не указано, показываем все
-    if (processedOnly !== undefined) {
-      where.isProcessed = processedOnly
+    // Фильтр по обработанным: 
+    // - Если processedOnly=true, показываем только обработанные (isProcessed=true)
+    // - Если processedOnly=false, показываем только необработанные (isProcessed=false)
+    // - Если не указано (undefined), показываем все
+    if (processedOnly === true) {
+      where.isProcessed = true
+    } else if (processedOnly === false) {
+      where.isProcessed = false
     }
+    // Если processedOnly === undefined, не добавляем фильтр - показываем все
 
     // Исключаем текущую заявку, если указана
     if (requestId) {
