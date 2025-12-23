@@ -1120,7 +1120,7 @@ export default function RequestDetailPage() {
                         ? 'bg-gray-800 opacity-70 cursor-not-allowed border border-gray-700'
                         : isSelected
                         ? 'bg-blue-500 bg-opacity-20 border-2 border-blue-500'
-                        : 'bg-gray-900 border border-gray-700 hover:border-green-500 hover:bg-gray-850'
+                        : 'bg-gray-900 border border-gray-700 hover:border-green-500'
                     }`}
                   >
                     {/* Левая полоска */}
