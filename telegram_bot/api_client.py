@@ -308,6 +308,80 @@ class APIClient:
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
                 return await response.json()
+    
+    @staticmethod
+    async def get_saved_casino_account_id(telegram_user_id: str, casino_id: str) -> Dict[str, Any]:
+        """Получить сохраненный ID казино для пользователя"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.get(
+                        f'{api_url}/public/user-casino-ids?userId={telegram_user_id}&casinoId={casino_id}',
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
+                        return await response.json()
+                except:
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.get(
+                f'{api_url}/public/user-casino-ids?userId={telegram_user_id}&casinoId={casino_id}'
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
+    async def get_all_saved_casino_account_ids(telegram_user_id: str) -> Dict[str, Any]:
+        """Получить все сохраненные ID казино для пользователя"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.get(
+                        f'{api_url}/public/user-casino-ids?userId={telegram_user_id}',
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
+                        return await response.json()
+                except:
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.get(
+                f'{api_url}/public/user-casino-ids?userId={telegram_user_id}'
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
+    async def save_casino_account_id(telegram_user_id: str, casino_id: str, account_id: str) -> Dict[str, Any]:
+        """Сохранить ID казино для пользователя"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            data = {
+                'userId': str(telegram_user_id),
+                'casinoId': casino_id,
+                'accountId': account_id,
+            }
+            
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/public/user-casino-ids',
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
+                        return await response.json()
+                except:
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.post(
+                f'{api_url}/public/user-casino-ids',
+                json=data
+            ) as response:
+                return await response.json()
 
 
 

@@ -254,15 +254,33 @@ async def withdraw_qr_photo_received(message: Message, state: FSMContext):
     await state.update_data(qr_photo=photo_base64)
     
     lang = await get_lang_from_state(state)
+    
+    # Получаем сохраненный ID казино для этого пользователя
+    data = await state.get_data()
+    casino_id = data.get('casino_id', '')
+    casino_name = data.get('casino_name', '')
+    
+    saved_account_id = None
+    if casino_id:
+        try:
+            saved_id_result = await APIClient.get_saved_casino_account_id(str(message.from_user.id), casino_id)
+            if saved_id_result.get('success') and saved_id_result.get('data', {}).get('accountId'):
+                saved_account_id = saved_id_result.get('data', {}).get('accountId')
+        except Exception:
+            pass  # Игнорируем ошибки получения сохраненного ID
+    
+    # Формируем клавиатуру: если есть сохраненный ID, добавляем его как кнопку
+    keyboard_buttons = []
+    if saved_account_id:
+        keyboard_buttons.append([KeyboardButton(text=f'🆔 {saved_account_id}')])
+    keyboard_buttons.append([KeyboardButton(text=get_text(lang, 'withdraw', 'cancel'))])
+    
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=get_text(lang, 'withdraw', 'cancel'))]],
+        keyboard=keyboard_buttons,
         resize_keyboard=True
     )
     
     # Отправляем фото казино с текстом
-    data = await state.get_data()
-    casino_id = data.get('casino_id', '')
-    casino_name = data.get('casino_name', '')
     # Фото находятся в папке telegram_bot/images
     photo_path = Path(__file__).parent.parent / "images" / f"{casino_id}.jpg"
     if photo_path.exists():
@@ -299,11 +317,24 @@ async def withdraw_account_id_received(message: Message, state: FSMContext, bot:
         await cmd_start(message, state, bot)
         return
     
+    # Получаем account_id из сообщения (может быть с эмодзи или без)
     account_id = message.text.strip()
+    # Убираем эмодзи если есть (например "🆔 123456" -> "123456")
+    if '🆔' in account_id:
+        account_id = account_id.replace('🆔', '').strip()
     
     if not account_id or not account_id.isdigit():
         await message.answer('❌ Пожалуйста, отправьте корректный ID счета (только цифры)')
         return
+    
+    # Сохраняем ID казино для этого пользователя
+    data = await state.get_data()
+    casino_id = data.get('casino_id')
+    if casino_id:
+        try:
+            await APIClient.save_casino_account_id(str(message.from_user.id), casino_id, account_id)
+        except Exception:
+            pass  # Игнорируем ошибки сохранения
     
     # Проверяем блокировку accountId
     try:

@@ -154,8 +154,23 @@ async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
     except Exception:
         pass  # Игнорируем ошибки удаления (если сообщение уже удалено или нет прав)
     
+    # Получаем сохраненный ID казино для этого пользователя
+    saved_account_id = None
+    try:
+        saved_id_result = await APIClient.get_saved_casino_account_id(str(callback.from_user.id), casino_id)
+        if saved_id_result.get('success') and saved_id_result.get('data', {}).get('accountId'):
+            saved_account_id = saved_id_result.get('data', {}).get('accountId')
+    except Exception:
+        pass  # Игнорируем ошибки получения сохраненного ID
+    
+    # Формируем клавиатуру: если есть сохраненный ID, добавляем его как кнопку
+    keyboard_buttons = []
+    if saved_account_id:
+        keyboard_buttons.append([KeyboardButton(text=f'🆔 {saved_account_id}')])
+    keyboard_buttons.append([KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))])
+    
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))]],
+        keyboard=keyboard_buttons,
         resize_keyboard=True
     )
     
@@ -191,15 +206,28 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
         await cmd_start(message, state, bot)
         return
     
+    # Получаем account_id из сообщения (может быть с эмодзи или без)
     account_id = message.text.strip()
+    # Убираем эмодзи если есть (например "🆔 123456" -> "123456")
+    if '🆔' in account_id:
+        account_id = account_id.replace('🆔', '').strip()
     
     if not account_id or not account_id.isdigit():
         await message.answer(get_text(lang, 'deposit', 'invalid_account_id'))
         return
 
-    # Проверяем игрока через API (кроме 1win/mostbet)
+    # Получаем casino_id из state для сохранения
     data = await state.get_data()
     casino_id = data.get('casino_id')
+    
+    # Сохраняем ID казино для этого пользователя
+    if casino_id:
+        try:
+            await APIClient.save_casino_account_id(str(message.from_user.id), casino_id, account_id)
+        except Exception:
+            pass  # Игнорируем ошибки сохранения
+
+    # Проверяем игрока через API (кроме 1win/mostbet)
     player_info = None
 
     if casino_id and casino_id not in ['1win', 'mostbet']:
