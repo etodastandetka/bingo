@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const amount = searchParams.get('amount')
     const exactAmount = searchParams.get('exactAmount') === 'true'
-    const processedOnly = searchParams.get('processedOnly') === 'true'
+    const processedOnlyParam = searchParams.get('processedOnly')
+    const processedOnly = processedOnlyParam === 'true' ? true : processedOnlyParam === 'false' ? false : undefined
     const requestId = searchParams.get('requestId')
 
     if (!amount) {
@@ -48,8 +49,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Фильтр по обработанным: если checked (processedOnly=true), показываем только обработанные (isProcessed=true)
-    // Если unchecked (processedOnly=false), показываем только необработанные (isProcessed=false)
-    where.isProcessed = processedOnly
+    // Если unchecked (processedOnly=false), показываем только необработанные (isProcessed=false или null)
+    // Если не указано, показываем все
+    if (processedOnly !== undefined) {
+      where.isProcessed = processedOnly
+    }
 
     // Исключаем текущую заявку, если указана
     if (requestId) {
