@@ -1265,7 +1265,7 @@ export default function OperatorChatPage() {
                               </span>
                               {req.status === 'not_created' && (
                                 <button
-                                  onClick={() => handleSendToReview(req.id)}
+                                  onClick={() => handleSendToReviewClick(req.id)}
                                   className="px-3 py-1 text-[11px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md"
                                 >
                                   На проверку
