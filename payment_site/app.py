@@ -316,11 +316,7 @@ def generate_qr():
             qr_hash = qr_data.get('qr_hash')
             # Получаем unique_id из параметров запроса
             unique_id = request.json.get('unique_id')
-            # Получаем primary_url для кодирования в QR (если есть, иначе используем qr_hash)
-            primary_url = qr_data.get('primary_url')
-            # Для Optima Bank используем deep link, для остальных - qr_hash
-            qr_data_to_encode = primary_url if bank.lower() == 'optima' and primary_url else qr_hash
-            qr_image = generate_qr_image(qr_data_to_encode, unique_id)
+            qr_image = generate_qr_image(qr_hash, unique_id)
             
             return jsonify({
                 'success': True,
