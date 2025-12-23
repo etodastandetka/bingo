@@ -84,6 +84,31 @@ class APIClient:
                 return await response.json()
     
     @staticmethod
+    async def generate_qr_image(amount: float, bank: str = 'omoney') -> Dict[str, Any]:
+        """Генерировать QR код и получить изображение (base64)"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            # Используем payment_site API который возвращает готовое изображение
+            payment_site_url = Config.PAYMENT_SITE_URL
+            if 'localhost' in payment_site_url.lower():
+                # Для localhost пробуем сначала локальный, потом fallback
+                try:
+                    async with session.post(
+                        f'{payment_site_url}/api/generate-qr',
+                        json={'amount': amount, 'bank': bank},
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        return await response.json()
+                except:
+                    payment_site_url = Config.PAYMENT_FALLBACK_URL
+            
+            async with session.post(
+                f'{payment_site_url}/api/generate-qr',
+                json={'amount': amount, 'bank': bank}
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
     async def get_payment_settings() -> Dict[str, Any]:
         """Получить настройки платежей из админки"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)
