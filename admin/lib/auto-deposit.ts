@@ -77,15 +77,27 @@ export async function matchAndProcessPayment(
 
   // Фильтруем вручную, т.к. Prisma может иметь проблемы с точным сравнением Decimal
   // И дополнительно проверяем, что у заявки нет обработанных платежей
+  console.log(`[Auto-Deposit] Filtering ${matchingRequests.length} requests for exact amount match: ${amount}`)
+  
   const exactMatches = matchingRequests.filter((req) => {
     // Пропускаем заявки, у которых уже есть обработанный платеж
     if (req.incomingPayments && req.incomingPayments.length > 0) {
+      console.log(`[Auto-Deposit] Request ${req.id} skipped: already has processed payment`)
       return false
     }
 
-    if (!req.amount) return false
+    if (!req.amount) {
+      console.log(`[Auto-Deposit] Request ${req.id} skipped: no amount`)
+      return false
+    }
+    
     const reqAmount = parseFloat(req.amount.toString())
-    return Math.abs(reqAmount - amount) < 0.01 // Точность до 1 копейки
+    const diff = Math.abs(reqAmount - amount)
+    const isMatch = diff < 0.01 // Точность до 1 копейки
+    
+    console.log(`[Auto-Deposit] Request ${req.id}: amount=${reqAmount}, diff=${diff}, match=${isMatch}`)
+    
+    return isMatch
   })
 
   console.log(`🎯 Found ${exactMatches.length} exact match(es) for payment ${paymentId}`)
