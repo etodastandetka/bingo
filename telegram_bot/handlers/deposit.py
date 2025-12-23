@@ -204,6 +204,14 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
     
     # Проверяем отмену
     if message.text == get_text(lang, 'deposit', 'cancel'):
+        # Удаляем сообщение с QR-кодом если есть
+        data = await state.get_data()
+        qr_message_id = data.get('qr_message_id')
+        if qr_message_id:
+            try:
+                await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
+            except Exception:
+                pass
         await state.clear()
         # Показываем главное меню
         from handlers.start import cmd_start
@@ -304,11 +312,14 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             # Отправляем фото QR кода с кнопками банков
             # Используем BufferedInputFile для работы с bytes напрямую
             photo = BufferedInputFile(qr_image_bytes, filename='qr_code.png')
-            await message.answer_photo(
+            qr_message = await message.answer_photo(
                 photo=photo,
                 caption=payment_text,
                 reply_markup=keyboard
             )
+            
+            # Сохраняем ID сообщения с QR-кодом для возможности удаления
+            await state.update_data(qr_message_id=qr_message.message_id)
             
             # Переходим в состояние ожидания выбора банка
             await state.set_state(DepositStates.waiting_for_bank_selection)
@@ -386,6 +397,15 @@ async def deposit_bank_selected(callback: CallbackQuery, state: FSMContext):
 async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot):
     """Фото чека получено, создаем заявку"""
     lang = await get_lang_from_state(state)
+    
+    # Удаляем сообщение с QR-кодом если есть
+    data = await state.get_data()
+    qr_message_id = data.get('qr_message_id')
+    if qr_message_id:
+        try:
+            await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
+        except Exception:
+            pass
     
     try:
         # Получаем самое большое фото

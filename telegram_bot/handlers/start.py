@@ -41,6 +41,15 @@ async def check_channel_subscription(bot: Bot, user_id: int, channel: str) -> bo
 async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     lang = await get_lang_from_state(state)
     
+    # Удаляем сообщение с QR-кодом если есть (при перезапуске процесса пополнения)
+    data = await state.get_data()
+    qr_message_id = data.get('qr_message_id')
+    if qr_message_id:
+        try:
+            await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
+        except Exception:
+            pass
+    
     # Проверяем блокировку пользователя
     try:
         blocked_check = await APIClient.check_blocked(str(message.from_user.id))
