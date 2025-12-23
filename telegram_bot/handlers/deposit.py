@@ -251,15 +251,26 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         generating_msg = await message.answer(get_text(lang, 'deposit', 'generating_qr'))
         
         try:
-            # Генерируем QR код и получаем изображение
-            qr_result = await APIClient.generate_qr_image(amount_with_cents, 'omoney')
+            # Генерируем QR hash и получаем ссылки банков
+            qr_result = await APIClient.generate_qr(amount_with_cents, 'omoney')
             
             if not qr_result.get('success'):
                 await generating_msg.delete()
                 await message.answer(get_text(lang, 'deposit', 'qr_error'))
                 return
             
-            qr_image_base64 = qr_result.get('qr_image', '')
+            qr_hash = qr_result.get('qr_hash')
+            all_bank_urls = qr_result.get('all_bank_urls', {})
+            
+            if not qr_hash:
+                await generating_msg.delete()
+                await message.answer(get_text(lang, 'deposit', 'qr_error'))
+                return
+            
+            # Генерируем QR изображение через payment_site API
+            qr_image_result = await APIClient.generate_qr_image(amount_with_cents, 'omoney')
+            qr_image_base64 = qr_image_result.get('qr_image', '')
+            
             if not qr_image_base64:
                 await generating_msg.delete()
                 await message.answer(get_text(lang, 'deposit', 'qr_error'))
@@ -278,22 +289,35 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             
             qr_image_bytes = base64.b64decode(qr_image_base64)
             
-            # Создаем кнопки банков
+            # Создаем кнопки банков со ссылками (URL кнопки)
             from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
             
             # Получаем список банков из настроек или используем дефолтный
             settings = await APIClient.get_payment_settings()
             deposit_settings = settings.get('deposits', {})
-            enabled_banks = deposit_settings.get('banks', ['mbank', 'omoney', 'bakai', 'megapay']) if isinstance(deposit_settings, dict) else ['mbank', 'omoney', 'bakai', 'megapay']
+            enabled_banks = deposit_settings.get('banks', ['mbank', 'omoney', 'bakai', 'megapay', 'demir', 'balance']) if isinstance(deposit_settings, dict) else ['mbank', 'omoney', 'bakai', 'megapay', 'demir', 'balance']
             
-            # Фильтруем банки по включенным и создаем кнопки
+            # Маппинг ID банков на названия в all_bank_urls
+            bank_name_map = {
+                'mbank': 'MBank',
+                'omoney': 'O!Money',
+                'bakai': 'Bakai',
+                'megapay': 'MegaPay',
+                'demir': 'DemirBank',
+                'balance': 'Balance.kg'
+            }
+            
+            # Фильтруем банки по включенным и создаем URL кнопки
             bank_buttons = []
             for bank in Config.DEPOSIT_BANKS:
                 if bank['id'] in enabled_banks:
-                    bank_buttons.append(InlineKeyboardButton(
-                        text=bank['name'],
-                        callback_data=f'deposit_bank_{bank["id"]}'
-                    ))
+                    bank_name_key = bank_name_map.get(bank['id'], bank['name'])
+                    bank_url = all_bank_urls.get(bank_name_key) or all_bank_urls.get(bank['id'])
+                    if bank_url:
+                        bank_buttons.append(InlineKeyboardButton(
+                            text=bank['name'],
+                            url=bank_url
+                        ))
             
             # Разбиваем кнопки по 2 в ряд
             keyboard_rows = []
@@ -303,13 +327,28 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
             
-            # Формируем текст с информацией
+            # Добавляем таймер (5 минут)
+            import time
+            timer_minutes = 5
+            timer_text = f"{timer_minutes}:00"
+            
+            # Формируем текст с информацией и таймером
             payment_text = get_text(lang, 'deposit', 'qr_payment_info',
                                    amount=amount_with_cents,
                                    casino=data.get("casino_name"),
-                                   account_id=account_id)
+                                   account_id=account_id,
+                                   timer=timer_text)
             
-            # Отправляем фото QR кода с кнопками банков
+            # Сохраняем время создания для таймера
+            await state.update_data(qr_created_at=int(time.time()))
+            
+            # Создаем кнопку отмены
+            keyboard_reply = ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))]],
+                resize_keyboard=True
+            )
+            
+            # Отправляем фото QR кода с кнопками банков (inline) и кнопкой отмены (reply)
             # Используем BufferedInputFile для работы с bytes напрямую
             photo = BufferedInputFile(qr_image_bytes, filename='qr_code.png')
             qr_message = await message.answer_photo(
@@ -317,6 +356,9 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                 caption=payment_text,
                 reply_markup=keyboard
             )
+            
+            # Отправляем отдельное сообщение с кнопкой отмены (reply keyboard)
+            # Это нужно потому что inline keyboard и reply keyboard не могут быть вместе в одном сообщении
             
             # Сохраняем ID сообщения с QR-кодом для возможности удаления
             await state.update_data(qr_message_id=qr_message.message_id)
@@ -341,8 +383,9 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                 logger.warning(f"Failed to create uncreated request: {e}")
                 # Продолжаем работу даже если не удалось создать несозданную заявку
             
-            # Переходим в состояние ожидания выбора банка
-            await state.set_state(DepositStates.waiting_for_bank_selection)
+            # Сразу переходим в состояние ожидания чека (без выбора банка)
+            # Текст про отправку чека уже есть в caption сообщения с QR
+            await state.set_state(DepositStates.waiting_for_receipt)
             
         except Exception as qr_error:
             import logging
@@ -380,38 +423,6 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         await cmd_start(message, state, bot)
         return
 
-@router.callback_query(F.data.startswith('deposit_bank_'), DepositStates.waiting_for_bank_selection)
-async def deposit_bank_selected(callback: CallbackQuery, state: FSMContext):
-    """Банк выбран, ожидаем фото чека"""
-    lang = await get_lang_from_state(state)
-    bank_id = callback.data.replace('deposit_bank_', '')
-    
-    # Находим название банка
-    bank_name = next((b['name'] for b in Config.DEPOSIT_BANKS if b['id'] == bank_id), bank_id)
-    
-    # Сохраняем банк в состояние
-    await state.update_data(bank_id=bank_id, bank_name=bank_name)
-    
-    # Удаляем сообщение с кнопками
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
-    
-    # Показываем сообщение о необходимости отправить чек
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))]],
-        resize_keyboard=True
-    )
-    
-    await callback.message.answer(
-        get_text(lang, 'deposit', 'send_receipt', bank=bank_name),
-        reply_markup=keyboard
-    )
-    
-    # Переходим в состояние ожидания чека
-    await state.set_state(DepositStates.waiting_for_receipt)
-    await callback.answer()
 
 @router.message(DepositStates.waiting_for_receipt, F.photo)
 async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot):

@@ -76,12 +76,26 @@ class APIClient:
                 return await response.json()
     
     @staticmethod
-    async def generate_qr(amount: float, bank: str) -> Dict[str, Any]:
-        """Генерировать QR код для оплаты"""
+    async def generate_qr(amount: float, bank: str = 'omoney') -> Dict[str, Any]:
+        """Генерировать QR hash и ссылки на банки"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/public/generate-qr',
+                        json={'amount': amount, 'bank': bank},
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = Config.API_FALLBACK_URL
+            
             async with session.post(
-                f'{Config.API_BASE_URL}/public/generate-qr',
+                f'{api_url}/public/generate-qr',
                 json={'amount': amount, 'bank': bank}
             ) as response:
                 return await response.json()
