@@ -28,11 +28,10 @@ export function generateSignForDeposit1xbet(
   cashierpass: string,
   cashdeskid: string | number
 ): string {
-  // Согласно документации API:
+  // Согласно документации API пункт 3.1:
   // a) SHA256(hash={hash}&lng={lng}&UserId={userId})
-  // В документации указано UserId с большой буквы, но в примере используется userid
-  // Используем userid (маленькие буквы) как в примере документации
-  const step1String = `hash=${hash}&lng=ru&userid=${userId}`
+  // В документации указано UserId с большой буквы (пункт 3.1), используем согласно документации
+  const step1String = `hash=${hash}&lng=ru&UserId=${userId}`
   const step1Hash = crypto.createHash('sha256').update(step1String).digest('hex')
 
   // b) MD5(summa={amount}&cashierpass={cashierpass}&cashdeskid={cashdeskid})
