@@ -697,13 +697,6 @@ export default function RequestDetailPage() {
       return
     }
 
-    const confirmText = selectedPayment
-      ? 'Подтвердить выбранное пополнение? Сумма заявки будет обновлена.'
-      : 'Подтвердить без привязки пополнения?'
-    if (!confirm(confirmText)) {
-      return
-    }
-
     setConfirming(true)
     try {
       // Обновляем сумму заявки и связываем пополнение с заявкой
