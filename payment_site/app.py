@@ -89,32 +89,9 @@ def generate_qr_image(qr_hash, unique_id=None):
     # Получаем размеры изображения
     width, height = img.size
     
-    # Создаем слой для водяного знака поверх QR кода
+    # Создаем слой для водяного знака поверх QR кода (без фонового водяного знака)
     watermark = Image.new('RGBA', (width, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(watermark)
-    
-    # Добавляем повторяющийся водяной знак "BINGO KG" на фоне (поверх QR кода)
-    try:
-        bg_font_size = int(width * 0.07)  # Немного уменьшен
-        try:
-            bg_font = ImageFont.truetype("arial.ttf", bg_font_size)
-        except:
-            try:
-                bg_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", bg_font_size)
-            except:
-                bg_font = ImageFont.load_default()
-    except:
-        bg_font = ImageFont.load_default()
-    
-    # Рисуем повторяющийся текст "BINGO KG" по всей площади (фон - как на изображении)
-    watermark_text = "BINGO KG"
-    spacing = int(width * 0.18)
-    for i in range(-spacing, width + spacing, spacing):
-        for j in range(-spacing, height + spacing, spacing):
-            # Горизонтально (более заметный)
-            draw.text((i, j), watermark_text, font=bg_font, fill=(180, 180, 180, 60))
-            # Диагонально (смещение)
-            draw.text((i + spacing//2, j + spacing//2), watermark_text, font=bg_font, fill=(180, 180, 180, 55))
     
     # Добавляем диагональный текст водяного знака поверх QR кода (как на изображении)
     try:
@@ -155,8 +132,9 @@ def generate_qr_image(qr_hash, unique_id=None):
     x_offset = int(text_width * 0.5)
     y_offset = int(text_height * 0.5)
     
-    # Основной текст (красный, более прозрачный, чтобы не мешал сканированию)
-    text_draw.text((x_offset, y_offset), text, font=font, fill=(255, 0, 0, 120))  # Более прозрачный красный
+    # Основной текст (красный, достаточно видимый, но не мешает сканированию)
+    # Используем более видимый красный с легкой прозрачностью
+    text_draw.text((x_offset, y_offset), text, font=font, fill=(220, 0, 0, 160))  # Более читаемый красный
     
     # Поворачиваем текст на -45 градусов
     text_img = text_img.rotate(-45, expand=True, fillcolor=(255, 255, 255, 0))
