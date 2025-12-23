@@ -272,7 +272,7 @@ async def withdraw_qr_photo_received(message: Message, state: FSMContext):
     # Формируем клавиатуру: если есть сохраненный ID, добавляем его как кнопку
     keyboard_buttons = []
     if saved_account_id:
-        keyboard_buttons.append([KeyboardButton(text=f'🆔 {saved_account_id}')])
+        keyboard_buttons.append([KeyboardButton(text=saved_account_id)])
     keyboard_buttons.append([KeyboardButton(text=get_text(lang, 'withdraw', 'cancel'))])
     
     keyboard = ReplyKeyboardMarkup(
@@ -317,11 +317,7 @@ async def withdraw_account_id_received(message: Message, state: FSMContext, bot:
         await cmd_start(message, state, bot)
         return
     
-    # Получаем account_id из сообщения (может быть с эмодзи или без)
     account_id = message.text.strip()
-    # Убираем эмодзи если есть (например "🆔 123456" -> "123456")
-    if '🆔' in account_id:
-        account_id = account_id.replace('🆔', '').strip()
     
     if not account_id or not account_id.isdigit():
         await message.answer('❌ Пожалуйста, отправьте корректный ID счета (только цифры)')
