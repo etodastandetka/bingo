@@ -475,15 +475,23 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
         await cmd_start(message, state, bot)
 
 @router.message(DepositStates.waiting_for_receipt)
-async def deposit_invalid_receipt(message: Message, state: FSMContext):
+async def deposit_invalid_receipt(message: Message, state: FSMContext, bot: Bot):
     """Некорректное сообщение вместо фото чека"""
     lang = await get_lang_from_state(state)
     
     # Проверяем отмену
     if message.text == get_text(lang, 'deposit', 'cancel'):
+        # Удаляем сообщение с QR-кодом если есть
+        data = await state.get_data()
+        qr_message_id = data.get('qr_message_id')
+        if qr_message_id:
+            try:
+                await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
+            except Exception:
+                pass
         await state.clear()
         from handlers.start import cmd_start
-        await cmd_start(message, state, message.bot)
+        await cmd_start(message, state, bot)
         return
     
     await message.answer(get_text(lang, 'deposit', 'invalid_receipt'))
