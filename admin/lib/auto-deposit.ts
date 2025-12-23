@@ -136,12 +136,14 @@ export async function matchAndProcessPayment(
 
     // Успешное пополнение - обновляем статус заявки
     // processedBy = "автопополнение" означает что заявка закрыта автоматически
+    // Очищаем ошибку казино при успешном пополнении
     await prisma.request.update({
       where: { id: request.id },
       data: {
         status: 'autodeposit_success',
         statusDetail: null,
         processedBy: 'автопополнение' as any,
+        casinoError: null,
         processedAt: new Date(),
         updatedAt: new Date(),
       } as any,
@@ -181,12 +183,13 @@ export async function matchAndProcessPayment(
   } catch (error: any) {
     console.error(`❌ Auto-deposit failed for request ${request.id}:`, error)
 
-    // В случае ошибки API казино, ставим статус profile-5
+    // В случае ошибки API казино, ставим статус profile-5 и сохраняем ошибку
     await prisma.request.update({
       where: { id: request.id },
       data: {
         status: 'profile-5',
         statusDetail: 'api_error',
+        casinoError: error.message || 'Deposit failed',
         processedAt: new Date(),
         updatedAt: new Date(),
       },
