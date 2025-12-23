@@ -260,9 +260,14 @@ export async function PATCH(
         // и есть сообщение для отправки
         if (notificationMessage && !isOperatorRequest) {
           // Отправляем уведомление асинхронно (не блокируем ответ)
-          sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker).catch((error) => {
-            console.error('Failed to send notification:', error)
-          })
+          sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
+            .then(() => {
+              // После отправки уведомления отправляем главное меню
+              return sendMainMenuToUser(currentRequest.userId, updatedRequest.bookmaker)
+            })
+            .catch((error) => {
+              console.error('Failed to send notification or main menu:', error)
+            })
         }
       } catch (error) {
         // Игнорируем ошибки отправки уведомлений, чтобы не блокировать обновление заявки

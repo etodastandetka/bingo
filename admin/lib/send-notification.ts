@@ -178,3 +178,85 @@ export function formatRejectMessage(requestType: string, adminUsername: string, 
          `Если есть какие-то проблемы, пишите ${adminUsername}.`
 }
 
+/**
+ * Отправка главного меню пользователю
+ */
+export async function sendMainMenuToUser(
+  userId: bigint,
+  bookmaker?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Получаем язык пользователя из БД
+    const user = await prisma.botUser.findUnique({
+      where: { userId },
+      select: { language: true, firstName: true },
+    }).catch(() => null)
+    
+    const lang = user?.language || 'ru'
+    const firstName = user?.firstName || (lang === 'ru' ? 'kotik' : 'баатыр')
+    
+    const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
+    
+    if (!botToken) {
+      console.error('BOT_TOKEN not configured')
+      return { success: false, error: 'BOT_TOKEN not configured' }
+    }
+    
+    // Тексты главного меню
+    const greeting = lang === 'ky' ? `Салам, ${firstName}` : `Привет, ${firstName}`
+    const autoDeposit = lang === 'ky' ? '⚡️ Авто-толтуруу: 0%' : '⚡️ Авто-пополнение: 0%'
+    const autoWithdraw = lang === 'ky' ? '⚡️ Авто-чыгаруу: 0%' : '⚡️ Авто-вывод: 0%'
+    const working = lang === 'ky' ? '🕐 Иштеп жатабыз: 24/7' : '🕐 Работаем: 24/7'
+    const support = process.env.ADMIN_USERNAME || '@bingokg_boss'
+    const supportText = lang === 'ky' 
+      ? `👨‍💻Колдоо кызматы: ${support}`
+      : `👨‍💻Служба поддержки: ${support}`
+    
+    const menuText = `${greeting}\n\n${autoDeposit}\n${autoWithdraw}\n${working}\n\n${supportText}`
+    
+    // Кнопки главного меню
+    const menuButtons = lang === 'ky'
+      ? [
+          ['💰 Толтуруу', '💸 Чыгаруу'],
+          ['📖 Көрсөтмө', '🌐 Тил']
+        ]
+      : [
+          ['💰 Пополнить', '💸 Вывести'],
+          ['📖 Инструкция', '🌐 Язык']
+        ]
+    
+    const keyboard = {
+      keyboard: menuButtons.map(row => 
+        row.map(text => ({ text }))
+      ),
+      resize_keyboard: true
+    }
+    
+    const sendMessageUrl = `https://api.telegram.org/bot${botToken}/sendMessage`
+    const telegramResponse = await fetch(sendMessageUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: userId.toString(),
+        text: menuText,
+        reply_markup: keyboard,
+        protect_content: true
+      })
+    })
+    
+    const telegramData = await telegramResponse.json()
+    
+    if (!telegramData.ok) {
+      console.error('Failed to send main menu:', telegramData.description)
+      return { success: false, error: telegramData.description || 'Failed to send main menu' }
+    }
+    
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error sending main menu:', error)
+    return { success: false, error: error.message || 'Unknown error' }
+  }
+}
+

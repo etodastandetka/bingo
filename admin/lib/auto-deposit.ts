@@ -177,6 +177,12 @@ export async function matchAndProcessPayment(
       
       await sendNotificationToUser(request.userId, notificationMessage)
       console.log(`📨 Notification sent to user ${request.userId.toString()}`)
+      
+      // Отправляем главное меню после уведомления
+      const { sendMainMenuToUser } = await import('./send-notification')
+      await sendMainMenuToUser(request.userId, request.bookmaker).catch((error) => {
+        console.warn('Failed to send main menu after autodeposit:', error)
+      })
     } catch (notificationError) {
       // Игнорируем ошибки отправки уведомлений
       console.warn('Failed to send notification after autodeposit:', notificationError)

@@ -545,16 +545,17 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
         
         if result.get('success') and result.get('data'):
             # Заявка создана успешно
+            request_id = result.get('data', {}).get('id')
+            # Сохраняем request_id в state для возможных уведомлений
+            await state.update_data(request_id=request_id)
+            
             await message.answer(
                 get_text(lang, 'deposit', 'request_created',
                         amount=amount,
-                        casino=data.get('casino_name'),
                         account_id=account_id)
             )
-            await state.clear()
-            # Показываем главное меню
-            from handlers.start import cmd_start
-            await cmd_start(message, state, bot)
+            # НЕ возвращаем главное меню и НЕ очищаем state
+            # Главное меню вернется только когда деньги зачислятся или заявка отменится
         else:
             error_msg = result.get('message', get_text(lang, 'deposit', 'error'))
             await message.answer(error_msg)
