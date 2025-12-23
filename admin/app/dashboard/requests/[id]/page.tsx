@@ -1147,7 +1147,11 @@ export default function RequestDetailPage() {
                       <p className="text-base font-semibold text-green-500 whitespace-nowrap">
                         +{formattedAmount}
                       </p>
-                      {!isProcessed && (
+                      {isProcessed ? (
+                        <svg className="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                      ) : (
                         <svg className="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
