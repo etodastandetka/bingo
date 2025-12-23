@@ -527,24 +527,6 @@ async def deposit_invalid_receipt(message: Message, state: FSMContext, bot: Bot)
     
     await message.answer(get_text(lang, 'deposit', 'invalid_receipt'))
 
-@router.callback_query(F.data == 'cancel_deposit')
-async def cancel_deposit_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    """Отмена операции пополнения через inline кнопку"""
-    # Удаляем сообщение с QR-кодом если есть
-    data = await state.get_data()
-    qr_message_id = data.get('qr_message_id')
-    if qr_message_id:
-        try:
-            await bot.delete_message(chat_id=callback.message.chat.id, message_id=qr_message_id)
-        except Exception:
-            pass
-    
-    await state.clear()
-    # Показываем главное меню
-    from handlers.start import cmd_start
-    await cmd_start(callback.message, state, bot)
-    await callback.answer()
-
 @router.message(F.text.in_(['❌ Операция отменена', '❌ Аракет жокко чыгарылды']))
 async def cancel_deposit(message: Message, state: FSMContext, bot: Bot):
     """Отмена операции пополнения"""
