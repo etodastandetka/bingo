@@ -103,13 +103,15 @@ export async function POST(request: NextRequest) {
       'Bakai': `https://bakai24.app/#${qrHash}`,
       'MegaPay': `https://megapay.kg/get#${qrHash}`,
       'MBank': `https://app.mbank.kg/qr/#${qrHash}`,
+      'Optima': `kz.optimabank.optima24://qr/${qrHash}`,
       // Также добавляем варианты с нижним регистром для совместимости
       'demirbank': `https://retail.demirbank.kg/#${qrHash}`,
       'omoney': `https://api.dengi.o.kg/ru/qr/#${qrHash}`,
       'balance': `https://balance.kg/#${qrHash}`,
       'bakai': `https://bakai24.app/#${qrHash}`,
       'megapay': `https://megapay.kg/get#${qrHash}`,
-      'mbank': `https://app.mbank.kg/qr/#${qrHash}`
+      'mbank': `https://app.mbank.kg/qr/#${qrHash}`,
+      'optima': `kz.optimabank.optima24://qr/${qrHash}`
     }
     
     // Получаем настройки депозитов для определения включенных банков
@@ -137,7 +139,8 @@ export async function POST(request: NextRequest) {
       'balance': 'Balance.kg',
       'bakai': 'Bakai',
       'megapay': 'MegaPay',
-      'mbank': 'MBank'
+      'mbank': 'MBank',
+      'optima': 'Optima'
     }
     const primaryBank = primaryBankMap[bank.toLowerCase()] || 'DemirBank'
     const primaryUrl = bankLinks[primaryBank] || bankLinks['DemirBank']
