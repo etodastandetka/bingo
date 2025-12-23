@@ -23,6 +23,7 @@ class APIClient:
         telegram_last_name: Optional[str] = None,
         receipt_photo: Optional[str] = None,
         withdrawal_code: Optional[str] = None,
+        uncreated_request_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Создать заявку на пополнение или вывод"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)
@@ -51,6 +52,8 @@ class APIClient:
                 data['receipt_photo'] = receipt_photo
             if withdrawal_code:
                 data['withdrawal_code'] = withdrawal_code
+            if uncreated_request_id:
+                data['uncreated_request_id'] = uncreated_request_id
             
             # Пробуем сначала локальный API, если не доступен - используем продакшн
             api_url = Config.API_BASE_URL
@@ -80,6 +83,57 @@ class APIClient:
             async with session.post(
                 f'{Config.API_BASE_URL}/public/generate-qr',
                 json={'amount': amount, 'bank': bank}
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
+    async def create_uncreated_request(
+        telegram_user_id: str,
+        bookmaker: str,
+        account_id: str,
+        amount: float,
+        telegram_username: Optional[str] = None,
+        telegram_first_name: Optional[str] = None,
+        telegram_last_name: Optional[str] = None,
+        bank: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Создать несозданную заявку (при показе QR кода)"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            data = {
+                'userId': str(telegram_user_id),
+                'bookmaker': bookmaker,
+                'accountId': account_id,
+                'amount': amount,
+                'requestType': 'deposit',
+            }
+            
+            if bank:
+                data['bank'] = bank
+            if telegram_username:
+                data['username'] = telegram_username
+            if telegram_first_name:
+                data['firstName'] = telegram_first_name
+            if telegram_last_name:
+                data['lastName'] = telegram_last_name
+            
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/public/uncreated-requests',
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.post(
+                f'{api_url}/public/uncreated-requests',
+                json=data
             ) as response:
                 return await response.json()
     

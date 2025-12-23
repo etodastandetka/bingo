@@ -321,6 +321,26 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             # Сохраняем ID сообщения с QR-кодом для возможности удаления
             await state.update_data(qr_message_id=qr_message.message_id)
             
+            # Создаем несозданную заявку при показе QR-кода
+            try:
+                uncreated_result = await APIClient.create_uncreated_request(
+                    telegram_user_id=str(message.from_user.id),
+                    bookmaker=casino_id,
+                    account_id=account_id,
+                    amount=amount_with_cents,
+                    telegram_username=message.from_user.username,
+                    telegram_first_name=message.from_user.first_name,
+                    telegram_last_name=message.from_user.last_name,
+                )
+                if uncreated_result.get('success') and uncreated_result.get('data', {}).get('id'):
+                    uncreated_id = uncreated_result.get('data', {}).get('id')
+                    await state.update_data(uncreated_request_id=str(uncreated_id))
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to create uncreated request: {e}")
+                # Продолжаем работу даже если не удалось создать несозданную заявку
+            
             # Переходим в состояние ожидания выбора банка
             await state.set_state(DepositStates.waiting_for_bank_selection)
             
