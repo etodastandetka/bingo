@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, createApiResponse } from '@/lib/api-helpers'
-import { sendNotificationToUser, formatDepositMessage, formatWithdrawMessage, formatRejectMessage, getAdminUsername } from '@/lib/send-notification'
+import { sendNotificationToUser, formatDepositMessage, formatWithdrawMessage, formatRejectMessage, getAdminUsername, sendMainMenuToUser } from '@/lib/send-notification'
 
 // Отключаем кеширование для актуальных данных
 export const dynamic = 'force-dynamic'
