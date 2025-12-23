@@ -260,27 +260,6 @@ export async function getPlatformLimits(): Promise<
     }
   }
 
-export async function getPlatformLimits(): Promise<
-  Array<{ key: string; name: string; limit: number }>
-> {
-  const limits: Array<{ key: string; name: string; limit: number }> = []
-
-  // Вспомогательная функция для безопасного получения баланса
-  const getBalanceSafe = async (
-    fn: () => Promise<BalanceResult>,
-    platformName: string,
-    defaultLimit: number = 0
-  ): Promise<number> => {
-    try {
-      const result = await fn()
-      console.log(`[Platform Limits] ${platformName}: balance=${result.balance}, limit=${result.limit}`)
-      return result.limit
-    } catch (error) {
-      console.error(`[Platform Limits] Error getting ${platformName} balance:`, error)
-      return defaultLimit
-    }
-  }
-
   // 1xbet
   try {
     const xbetCfg = CASHDESK_CONFIG['1xbet']
