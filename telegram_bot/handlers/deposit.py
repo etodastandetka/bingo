@@ -482,7 +482,19 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             await state.update_data(qr_message_id=qr_message.message_id)
             
             # Запускаем фоновую задачу для обновления таймера
-            asyncio.create_task(update_qr_timer(bot, message.chat.id, qr_message.message_id, qr_created_at, timer_duration, lang, amount_with_cents, data.get("casino_name"), account_id, keyboard))
+            import logging
+            logger = logging.getLogger(__name__)
+            timer_task = asyncio.create_task(update_qr_timer(bot, message.chat.id, qr_message.message_id, qr_created_at, timer_duration, lang, amount_with_cents, data.get("casino_name"), account_id, keyboard))
+            logger.info(f"[Timer] Created timer task for message {qr_message.message_id}, chat {message.chat.id}")
+            
+            # Добавляем обработку ошибок для задачи
+            def timer_task_done(task):
+                try:
+                    task.result()
+                except Exception as e:
+                    logger.error(f"[Timer] Timer task failed for message {qr_message.message_id}: {e}")
+            
+            timer_task.add_done_callback(timer_task_done)
             
             # Создаем несозданную заявку при показе QR-кода
             try:
