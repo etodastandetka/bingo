@@ -503,7 +503,7 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             import logging
             logger = logging.getLogger(__name__)
             # Таймер обновляет только текст, без клавиатуры
-            timer_task = asyncio.create_task(update_qr_timer(bot, message.chat.id, qr_message.message_id, qr_created_at, timer_duration, lang, amount_with_cents, data.get("casino_name"), account_id, None))
+            timer_task = asyncio.create_task(update_qr_timer(bot, message.chat.id, qr_message.message_id, qr_created_at, timer_duration, lang, amount_with_cents, data.get("casino_name"), account_id, None, state))
             logger.info(f"[Timer] Created timer task for message {qr_message.message_id}, chat {message.chat.id}")
             
             # Добавляем обработку ошибок для задачи
