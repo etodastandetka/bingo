@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       telegram_first_name,
       telegram_last_name,
       receipt_photo, // base64 строка фото чека
+      withdrawal_code, // код подтверждения вывода
       uncreated_request_id,
     } = body
     
@@ -105,7 +106,9 @@ export async function POST(request: NextRequest) {
       bookmaker,
       bank,
       account_id,
-      has_receipt_photo: !!receipt_photo
+      has_receipt_photo: !!receipt_photo,
+      has_withdrawal_code: !!withdrawal_code,
+      withdrawal_code_length: withdrawal_code ? String(withdrawal_code).length : 0
     }
     
     console.log('📝 Payment API - Creating request:', logData)
@@ -134,27 +137,66 @@ export async function POST(request: NextRequest) {
       return errorResponse
     }
 
-    // Проверяем amount более строго - он не должен быть 0, null, undefined или пустой строкой
+    // Проверяем amount - для deposit должен быть > 0, для withdraw может быть >= 0 (если сумма еще не проверена)
     const amountStr = amount?.toString().trim() || ''
     const amountNum = amountStr ? parseFloat(amountStr) : 0
     
-    if (!amount || amount === null || amount === undefined || amount === '' || amountNum <= 0 || isNaN(amountNum)) {
-      console.error('❌ Payment API: Missing or invalid amount', { 
-        amount, 
-        amountStr, 
-        amountNum,
-        type: typeof amount 
-      })
-      const errorResponse = NextResponse.json(
-        createApiResponse(null, 'Missing or invalid amount: must be a positive number'),
-        { 
-          status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
+    // Для deposit amount должен быть > 0
+    // Для withdraw amount может быть 0 или > 0 (если сумма еще не проверена, она может быть 0)
+    if (validType === 'deposit') {
+      if (!amount || amount === null || amount === undefined || amount === '' || amountNum <= 0 || isNaN(amountNum)) {
+        console.error('❌ Payment API: Missing or invalid amount for deposit', { 
+          amount, 
+          amountStr, 
+          amountNum,
+          type: typeof amount 
+        })
+        const errorResponse = NextResponse.json(
+          createApiResponse(null, 'Missing or invalid amount: must be a positive number'),
+          { 
+            status: 400,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+            }
           }
-        }
-      )
-      return errorResponse
+        )
+        return errorResponse
+      }
+    } else if (validType === 'withdraw') {
+      // Для withdraw проверяем, что amount это валидное число (может быть 0 или > 0)
+      if (amount === null || amount === undefined || amount === '' || isNaN(amountNum)) {
+        console.error('❌ Payment API: Missing or invalid amount for withdraw', { 
+          amount, 
+          amountStr, 
+          amountNum,
+          type: typeof amount 
+        })
+        const errorResponse = NextResponse.json(
+          createApiResponse(null, 'Missing or invalid amount: must be a valid number'),
+          { 
+            status: 400,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+            }
+          }
+        )
+        return errorResponse
+      }
+      // Для withdraw amount может быть 0 (если сумма еще не проверена)
+      // Используем 0 как значение по умолчанию
+      if (amountNum < 0) {
+        console.error('❌ Payment API: Negative amount for withdraw', { amountNum })
+        const errorResponse = NextResponse.json(
+          createApiResponse(null, 'Amount cannot be negative'),
+          { 
+            status: 400,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+            }
+          }
+        )
+        return errorResponse
+      }
     }
 
     // Преобразуем userId в BigInt (если это строка с числом)
@@ -383,6 +425,7 @@ export async function POST(request: NextRequest) {
           phone: cleanString(phone),
           status: 'pending',
           photoFileUrl: processedPhoto, // Сохраняем base64 фото чека (с префиксом data:image если нужно)
+          withdrawalCode: cleanString(withdrawal_code), // Сохраняем код подтверждения вывода
         },
       })
 
