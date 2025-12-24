@@ -47,8 +47,7 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
                     await bot.edit_message_caption(
                         chat_id=chat_id,
                         message_id=message_id,
-                        caption=payment_text,
-                        reply_markup=keyboard
+                        caption=payment_text
                     )
                 except:
                     pass
