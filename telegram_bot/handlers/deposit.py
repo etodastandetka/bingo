@@ -113,11 +113,12 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
                                    timer=timer_text)
             
             try:
-                # Обновляем только текст, без изменения клавиатуры
+                # Обновляем текст и сохраняем клавиатуру
                 await bot.edit_message_caption(
                     chat_id=chat_id,
                     message_id=message_id,
-                    caption=payment_text
+                    caption=payment_text,
+                    reply_markup=keyboard if keyboard else None
                 )
                 logger.debug(f"[Timer] Updated message {message_id} to {timer_text}")
             except Exception as e:
@@ -527,15 +528,14 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             qr_message = await message.answer_photo(
                 photo=photo,
                 caption=payment_text,
-                reply_markup=cancel_keyboard
+                reply_markup=keyboard if keyboard else None
             )
             
-            # Если есть inline кнопки банков, отправляем их отдельным сообщением
-            if keyboard and bank_buttons:
-                await message.answer(
-                    get_text(lang, 'deposit', 'select_bank', default='Выберите банк для оплаты:'),
-                    reply_markup=keyboard
-                )
+            # Отправляем reply клавиатуру с кнопкой отмены отдельным сообщением
+            await message.answer(
+                get_text(lang, 'deposit', 'cancel', default='❌ Операция отменена'),
+                reply_markup=cancel_keyboard
+            )
             
             # Сохраняем ID сообщения с QR-кодом для возможности удаления и обновления
             await state.update_data(qr_message_id=qr_message.message_id)
