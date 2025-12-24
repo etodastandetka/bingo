@@ -23,6 +23,11 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
     timer_key = f"{chat_id}_{message_id}"
     active_timers[timer_key] = True
     
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"[Timer] Started for message {message_id}, created_at={created_at}, duration={duration}")
+    
     try:
         while active_timers.get(timer_key, False):
             current_time = int(time.time())
@@ -31,6 +36,22 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
             
             if remaining <= 0:
                 # Таймер истек
+                logger.info(f"[Timer] Expired for message {message_id}")
+                # Обновляем последний раз с 00:00
+                payment_text = get_text(lang, 'deposit', 'qr_payment_info',
+                                       amount=amount,
+                                       casino=casino,
+                                       account_id=account_id,
+                                       timer="0:00")
+                try:
+                    await bot.edit_message_caption(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        caption=payment_text,
+                        reply_markup=keyboard
+                    )
+                except:
+                    pass
                 break
             
             # Форматируем оставшееся время
@@ -52,21 +73,26 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
                     caption=payment_text,
                     reply_markup=keyboard
                 )
+                logger.debug(f"[Timer] Updated message {message_id} to {timer_text}")
             except Exception as e:
                 # Если сообщение было удалено или не может быть отредактировано, останавливаем таймер
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.debug(f"Could not update timer: {e}")
-                break
+                logger.warning(f"[Timer] Could not update message {message_id}: {e}")
+                # Не останавливаем таймер сразу, продолжаем попытки
+                await asyncio.sleep(1)
+                continue
             
             # Ждем 1 секунду до следующего обновления
             await asyncio.sleep(1)
             
     except asyncio.CancelledError:
+        logger.info(f"[Timer] Cancelled for message {message_id}")
         pass
+    except Exception as e:
+        logger.error(f"[Timer] Error in timer for message {message_id}: {e}")
     finally:
         # Удаляем таймер из активных
         active_timers.pop(timer_key, None)
+        logger.info(f"[Timer] Stopped for message {message_id}")
 
 async def get_lang_from_state(state: FSMContext) -> str:
     """Получить язык из состояния"""
