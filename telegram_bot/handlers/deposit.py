@@ -18,7 +18,7 @@ router = Router()
 # Словарь для отслеживания активных таймеров (чтобы можно было их остановить)
 active_timers = {}
 
-async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: int, duration: int, lang: str, amount: float, casino: str, account_id: str, keyboard):
+async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: int, duration: int, lang: str, amount: float, casino: str, account_id: str, keyboard, state: FSMContext = None):
     """Фоновая задача для обновления таймера в сообщении с QR кодом"""
     timer_key = f"{chat_id}_{message_id}"
     active_timers[timer_key] = True
@@ -36,21 +36,68 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
             
             if remaining <= 0:
                 # Таймер истек
-                logger.info(f"[Timer] Expired for message {message_id}")
-                # Обновляем последний раз с 00:00
-                payment_text = get_text(lang, 'deposit', 'qr_payment_info',
-                                       amount=amount,
-                                       casino=casino,
-                                       account_id=account_id,
-                                       timer="0:00")
+                logger.info(f"[Timer] Expired for message {message_id}, deleting message and returning to main menu")
+                
+                # Удаляем сообщение с QR-кодом
                 try:
-                    await bot.edit_message_caption(
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        caption=payment_text
+                    await bot.delete_message(chat_id=chat_id, message_id=message_id)
+                    logger.info(f"[Timer] Deleted QR message {message_id}")
+                except Exception as e:
+                    logger.warning(f"[Timer] Could not delete message {message_id}: {e}")
+                
+                # Отправляем главное меню
+                try:
+                    from handlers.start import cmd_start
+                    from aiogram.fsm.context import FSMContext
+                    from aiogram.types import Message as TelegramMessage
+                    
+                    # Создаем объект Message для отправки главного меню
+                    # Но для этого нужен реальный объект message, создадим через bot.send_message
+                    from config import Config
+                    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+                    
+                    first_name = "пользователь" if lang == 'ru' else "колдонуучу"
+                    text = f"""{get_text(lang, 'start', 'greeting', name=first_name)}
+
+{get_text(lang, 'start', 'auto_deposit')}
+{get_text(lang, 'start', 'auto_withdraw')}
+{get_text(lang, 'start', 'working')}
+
+{get_text(lang, 'start', 'support', support=Config.SUPPORT)}"""
+                    
+                    keyboard_main = ReplyKeyboardMarkup(
+                        keyboard=[
+                            [
+                                KeyboardButton(text=get_text(lang, 'menu', 'deposit')),
+                                KeyboardButton(text=get_text(lang, 'menu', 'withdraw'))
+                            ],
+                            [
+                                KeyboardButton(text=get_text(lang, 'menu', 'instruction')),
+                                KeyboardButton(text=get_text(lang, 'menu', 'language'))
+                            ]
+                        ],
+                        resize_keyboard=True
                     )
-                except:
-                    pass
+                    
+                    # Отправляем сообщение с главным меню
+                    timeout_message = get_text(lang, 'deposit', 'timer_expired', default='⏰ Время на оплату истекло. Вы возвращены в главное меню.')
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=f"{timeout_message}\n\n{text}",
+                        reply_markup=keyboard_main
+                    )
+                    logger.info(f"[Timer] Sent main menu to chat {chat_id}")
+                    
+                    # Очищаем состояние FSM
+                    if state:
+                        try:
+                            await state.clear()
+                            logger.info(f"[Timer] Cleared FSM state for chat {chat_id}")
+                        except Exception as e:
+                            logger.warning(f"[Timer] Could not clear state: {e}")
+                except Exception as e:
+                    logger.error(f"[Timer] Error sending main menu: {e}")
+                
                 break
             
             # Форматируем оставшееся время
