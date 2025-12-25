@@ -385,7 +385,7 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
     try:
         checking_msg = await message.answer("🔍 Проверяю код вывода...")
         
-        amount_result = await APIClient.check_withdraw_amount(casino_id, account_id, withdrawal_code)
+        amount_result = await APIClient.check_withdraw_amount(casino_id, str(message.from_user.id), withdrawal_code)
         
         # Удаляем сообщение о проверке
         try:
@@ -436,23 +436,27 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
         request_id = request_data.get('data', {}).get('id')
         
         if request_id:
-            # Формируем сообщение с суммой
+            # Формируем сообщение с суммой для всех казино
             if withdraw_amount > 0:
+                # Форматируем сумму без лишних нулей
+                amount_str = f"{withdraw_amount:.2f}".rstrip('0').rstrip('.')
+                
                 if lang == 'ky':
-                    success_message = f"✅ Ваша заявка на вывод {withdraw_amount:.2f} KGS была отправлена!\n\n"
+                    success_message = f"✅ Сумма вывода на {amount_str} сом получен.\n\n"
                     success_message += f"🎰 Казино: {data.get('casino_name')}\n"
                     success_message += f"🏦 Банк: {data.get('bank_name')}\n"
                     success_message += f"📱 Телефон: {data.get('phone')}\n"
                     success_message += f"🆔 ID: {account_id}\n\n"
-                    success_message += f"Ваша заявка будет обработана в ближайшее время."
+                    success_message += f"Ожидайте поступление денег. Ваша заявка будет обработана в ближайшее время."
                 else:
-                    success_message = f"✅ Ваша заявка на вывод {withdraw_amount:.2f} KGS была отправлена!\n\n"
+                    success_message = f"✅ Сумма вывода на {amount_str} сом получен.\n\n"
                     success_message += f"🎰 Казино: {data.get('casino_name')}\n"
                     success_message += f"🏦 Банк: {data.get('bank_name')}\n"
                     success_message += f"📱 Телефон: {data.get('phone')}\n"
                     success_message += f"🆔 ID: {account_id}\n\n"
-                    success_message += f"Ваша заявка будет обработана в ближайшее время."
+                    success_message += f"Ожидайте поступление денег. Ваша заявка будет обработана в ближайшее время."
             else:
+                # Если сумма не получена, используем стандартное сообщение
                 success_message = get_text(lang, 'withdraw', 'request_created',
                         casino=data.get("casino_name"),
                         bank=data.get("bank_name"),
