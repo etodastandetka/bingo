@@ -290,7 +290,7 @@ export async function depositMostbetAPI(
       brandId: config.brand_id || 1, // По умолчанию Mostbet
       playerId: String(userId), // ID игрока в казино
       amount: amount,
-      currency: 'RUB', // Изменено на RUB согласно документации
+      currency: 'KGS', // KGS для Киргизии
     }
     const requestBody = JSON.stringify(requestBodyData)
 
