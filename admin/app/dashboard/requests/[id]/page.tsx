@@ -62,7 +62,7 @@ export default function RequestDetailPage() {
   const [confirming, setConfirming] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
-  const [paymentModalAction, setPaymentModalAction] = useState
+  const [paymentModalAction, setPaymentModalAction] = useState<'approve' | 'reject' | null>(null)
   const [imageModalOpen, setImageModalOpen] = useState(false)
   const [imageZoom, setImageZoom] = useState(1)
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 })
