@@ -264,7 +264,7 @@ export async function getPlatformLimits(): Promise<
   // 1xbet
   try {
     const dbConfig = await getCasinoConfig('1xbet')
-    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+    if (dbConfig && 'cashdeskid' in dbConfig && dbConfig.cashdeskid && parseInt(dbConfig.cashdeskid) > 0) {
       const xbetCfg = {
         hash: dbConfig.hash,
         cashierpass: dbConfig.cashierpass,
@@ -283,7 +283,7 @@ export async function getPlatformLimits(): Promise<
   // Melbet
   try {
     const dbConfig = await getCasinoConfig('melbet')
-    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+    if (dbConfig && 'cashdeskid' in dbConfig && dbConfig.cashdeskid && parseInt(dbConfig.cashdeskid) > 0) {
       const melbetCfg = {
         hash: dbConfig.hash,
         cashierpass: dbConfig.cashierpass,
@@ -316,7 +316,7 @@ export async function getPlatformLimits(): Promise<
   // Mostbet
   try {
     const dbConfig = await getCasinoConfig('mostbet')
-    if (dbConfig && 'cashpoint_id' in dbConfig && parseInt(dbConfig.cashpoint_id) > 0) {
+    if (dbConfig && 'cashpoint_id' in dbConfig && dbConfig.cashpoint_id && parseInt(dbConfig.cashpoint_id) > 0) {
       const mostbetCfg = {
         api_key: dbConfig.api_key,
         secret: dbConfig.secret,
@@ -336,7 +336,7 @@ export async function getPlatformLimits(): Promise<
   // Winwin
   try {
     const dbConfig = await getCasinoConfig('winwin')
-    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+    if (dbConfig && 'cashdeskid' in dbConfig && dbConfig.cashdeskid && parseInt(dbConfig.cashdeskid) > 0) {
       const winwinCfg = {
         hash: dbConfig.hash,
         cashierpass: dbConfig.cashierpass,
@@ -355,7 +355,7 @@ export async function getPlatformLimits(): Promise<
   // 888starz
   try {
     const dbConfig = await getCasinoConfig('888starz')
-    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+    if (dbConfig && 'cashdeskid' in dbConfig && dbConfig.cashdeskid && parseInt(dbConfig.cashdeskid) > 0) {
       const starzCfg = {
         hash: dbConfig.hash,
         cashierpass: dbConfig.cashierpass,
@@ -374,7 +374,7 @@ export async function getPlatformLimits(): Promise<
   // 1xCasino
   try {
     const dbConfig = await getCasinoConfig('1xcasino')
-    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+    if (dbConfig && 'cashdeskid' in dbConfig && dbConfig.cashdeskid && parseInt(dbConfig.cashdeskid) > 0) {
       const xcasinoCfg = {
         hash: dbConfig.hash,
         cashierpass: dbConfig.cashierpass,
@@ -393,7 +393,7 @@ export async function getPlatformLimits(): Promise<
   // BetWinner
   try {
     const dbConfig = await getCasinoConfig('betwinner')
-    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+    if (dbConfig && 'cashdeskid' in dbConfig && dbConfig.cashdeskid && parseInt(dbConfig.cashdeskid) > 0) {
       const betwinnerCfg = {
         hash: dbConfig.hash,
         cashierpass: dbConfig.cashierpass,
@@ -412,7 +412,7 @@ export async function getPlatformLimits(): Promise<
   // WowBet
   try {
     const dbConfig = await getCasinoConfig('wowbet')
-    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+    if (dbConfig && 'cashdeskid' in dbConfig && dbConfig.cashdeskid && parseInt(dbConfig.cashdeskid) > 0) {
       const wowbetCfg = {
         hash: dbConfig.hash,
         cashierpass: dbConfig.cashierpass,
