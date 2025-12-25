@@ -369,6 +369,9 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
 @router.message(DepositStates.waiting_for_amount)
 async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot):
     """Сумма получена, генерируем QR код и показываем кнопки банков"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     lang = await get_lang_from_state(state)
     
     # Игнорируем невидимые символы (например, неразрывный пробел)
