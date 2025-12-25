@@ -127,18 +127,24 @@ export async function matchAndProcessPayment(
   const request = exactMatches[0]
 
   // Дополнительная проверка: убеждаемся, что платеж еще не обработан
-  const existingProcessedPayment = await prisma.incomingPayment.findFirst({
-    where: {
-      id: paymentId,
-      isProcessed: true,
-    },
+  // Проверяем как isProcessed, так и requestId (платеж может быть связан, но еще не обработан)
+  const currentPayment = await prisma.incomingPayment.findUnique({
+    where: { id: paymentId },
   })
 
-  if (existingProcessedPayment) {
-    console.log(`⚠️ Payment ${paymentId} is already processed, skipping`)
+  if (!currentPayment) {
+    console.log(`⚠️ Payment ${paymentId} not found, skipping`)
     return {
       success: false,
-      message: 'Payment already processed',
+      message: 'Payment not found',
+    }
+  }
+
+  if (currentPayment.isProcessed || currentPayment.requestId !== null) {
+    console.log(`⚠️ Payment ${paymentId} is already processed or linked (isProcessed: ${currentPayment.isProcessed}, requestId: ${currentPayment.requestId}), skipping`)
+    return {
+      success: false,
+      message: 'Payment already processed or linked',
     }
   }
 
@@ -154,14 +160,57 @@ export async function matchAndProcessPayment(
     `🔍 Found matching request: ID ${request.id}, Account: ${request.accountId}, Bookmaker: ${request.bookmaker}`
   )
 
+  // Проверяем еще раз, что заявка все еще pending и не обрабатывается
+  // Это предотвращает race condition при одновременной обработке нескольких платежей
+  const currentRequest = await prisma.request.findUnique({
+    where: { id: request.id },
+    include: {
+      incomingPayments: {
+        where: {
+          isProcessed: true,
+        },
+      },
+    },
+  })
+
+  if (!currentRequest || currentRequest.status !== 'pending') {
+    console.log(`⚠️ Request ${request.id} is no longer pending (status: ${currentRequest?.status}), skipping`)
+    return {
+      success: false,
+      message: 'Request is no longer pending',
+    }
+  }
+
+  if (currentRequest.incomingPayments && currentRequest.incomingPayments.length > 0) {
+    console.log(`⚠️ Request ${request.id} already has processed payment, skipping`)
+    return {
+      success: false,
+      message: 'Request already has processed payment',
+    }
+  }
+
   // Обновляем статус платежа - связываем с заявкой
-  await prisma.incomingPayment.update({
-    where: { id: paymentId },
+  // Используем updateMany с условием для атомарности (предотвращает race condition)
+  const updateResult = await prisma.incomingPayment.updateMany({
+    where: {
+      id: paymentId,
+      isProcessed: false,
+      requestId: null, // Только если еще не связан
+    },
     data: {
       requestId: request.id,
       isProcessed: true,
     },
   })
+
+  // Если updateMany вернул 0, значит платеж уже был обработан другим процессом
+  if (updateResult.count === 0) {
+    console.log(`⚠️ Payment ${paymentId} was already processed by another process, skipping`)
+    return {
+      success: false,
+      message: 'Payment was already processed by another process',
+    }
+  }
 
   // Пополняем баланс через казино API (использует localhost API)
   try {

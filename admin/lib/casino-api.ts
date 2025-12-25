@@ -243,6 +243,7 @@ export async function getPlatformLimits(): Promise<
   Array<{ key: string; name: string; limit: number }>
 > {
   const limits: Array<{ key: string; name: string; limit: number }> = []
+  const { getCasinoConfig } = await import('./casino-config')
 
   // Вспомогательная функция для безопасного получения баланса
   const getBalanceSafe = async (
@@ -262,8 +263,14 @@ export async function getPlatformLimits(): Promise<
 
   // 1xbet
   try {
-    const xbetCfg = CASHDESK_CONFIG['1xbet']
-    if (xbetCfg.cashdeskid > 0) {
+    const dbConfig = await getCasinoConfig('1xbet')
+    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+      const xbetCfg = {
+        hash: dbConfig.hash,
+        cashierpass: dbConfig.cashierpass,
+        login: dbConfig.login,
+        cashdeskid: parseInt(dbConfig.cashdeskid),
+      }
       const limit = await getBalanceSafe(() => getCashdeskBalance('1xbet', xbetCfg), '1xbet')
       limits.push({ key: '1xbet', name: '1xbet', limit })
     } else {
@@ -275,8 +282,14 @@ export async function getPlatformLimits(): Promise<
 
   // Melbet
   try {
-    const melbetCfg = CASHDESK_CONFIG.melbet
-    if (melbetCfg.cashdeskid > 0) {
+    const dbConfig = await getCasinoConfig('melbet')
+    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+      const melbetCfg = {
+        hash: dbConfig.hash,
+        cashierpass: dbConfig.cashierpass,
+        login: dbConfig.login,
+        cashdeskid: parseInt(dbConfig.cashdeskid),
+      }
       const limit = await getBalanceSafe(() => getCashdeskBalance('melbet', melbetCfg), 'Melbet')
       limits.push({ key: 'melbet', name: 'Melbet', limit })
     } else {
@@ -288,8 +301,9 @@ export async function getPlatformLimits(): Promise<
 
   // 1WIN
   try {
-    const onewinCfg = ONEWIN_CONFIG
-    if (onewinCfg.api_key) {
+    const dbConfig = await getCasinoConfig('1win')
+    if (dbConfig && 'api_key' in dbConfig && dbConfig.api_key) {
+      const onewinCfg = { api_key: dbConfig.api_key }
       const limit = await getBalanceSafe(() => get1winBalance(onewinCfg), '1WIN')
       limits.push({ key: '1win', name: '1WIN', limit })
     } else {
@@ -301,8 +315,15 @@ export async function getPlatformLimits(): Promise<
 
   // Mostbet
   try {
-    const mostbetCfg = MOSTBET_CONFIG
-    if (mostbetCfg.cashpoint_id > 0) {
+    const dbConfig = await getCasinoConfig('mostbet')
+    if (dbConfig && 'cashpoint_id' in dbConfig && parseInt(dbConfig.cashpoint_id) > 0) {
+      const mostbetCfg = {
+        api_key: dbConfig.api_key,
+        secret: dbConfig.secret,
+        cashpoint_id: parseInt(dbConfig.cashpoint_id),
+        x_project: dbConfig.x_project || 'MBC',
+        brand_id: dbConfig.brand_id || 1,
+      }
       const limit = await getBalanceSafe(() => getMostbetBalance(mostbetCfg), 'Mostbet')
       limits.push({ key: 'mostbet', name: 'Mostbet', limit })
     } else {
@@ -314,8 +335,14 @@ export async function getPlatformLimits(): Promise<
 
   // Winwin
   try {
-    const winwinCfg = CASHDESK_CONFIG.winwin
-    if (winwinCfg.cashdeskid > 0) {
+    const dbConfig = await getCasinoConfig('winwin')
+    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+      const winwinCfg = {
+        hash: dbConfig.hash,
+        cashierpass: dbConfig.cashierpass,
+        login: dbConfig.login,
+        cashdeskid: parseInt(dbConfig.cashdeskid),
+      }
       const limit = await getBalanceSafe(() => getCashdeskBalance('winwin', winwinCfg), 'Winwin')
       limits.push({ key: 'winwin', name: 'Winwin', limit })
     } else {
@@ -327,8 +354,14 @@ export async function getPlatformLimits(): Promise<
 
   // 888starz
   try {
-    const starzCfg = CASHDESK_CONFIG['888starz']
-    if (starzCfg.cashdeskid > 0) {
+    const dbConfig = await getCasinoConfig('888starz')
+    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+      const starzCfg = {
+        hash: dbConfig.hash,
+        cashierpass: dbConfig.cashierpass,
+        login: dbConfig.login,
+        cashdeskid: parseInt(dbConfig.cashdeskid),
+      }
       const limit = await getBalanceSafe(() => getCashdeskBalance('888starz', starzCfg), '888starz')
       limits.push({ key: '888starz', name: '888starz', limit })
     } else {
@@ -340,8 +373,14 @@ export async function getPlatformLimits(): Promise<
 
   // 1xCasino
   try {
-    const xcasinoCfg = CASHDESK_CONFIG['1xcasino']
-    if (xcasinoCfg.cashdeskid > 0) {
+    const dbConfig = await getCasinoConfig('1xcasino')
+    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+      const xcasinoCfg = {
+        hash: dbConfig.hash,
+        cashierpass: dbConfig.cashierpass,
+        login: dbConfig.login,
+        cashdeskid: parseInt(dbConfig.cashdeskid),
+      }
       const limit = await getBalanceSafe(() => getCashdeskBalance('1xcasino', xcasinoCfg), '1xCasino')
       limits.push({ key: '1xcasino', name: '1xCasino', limit })
     } else {
@@ -353,8 +392,14 @@ export async function getPlatformLimits(): Promise<
 
   // BetWinner
   try {
-    const betwinnerCfg = CASHDESK_CONFIG['betwinner']
-    if (betwinnerCfg.cashdeskid > 0) {
+    const dbConfig = await getCasinoConfig('betwinner')
+    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+      const betwinnerCfg = {
+        hash: dbConfig.hash,
+        cashierpass: dbConfig.cashierpass,
+        login: dbConfig.login,
+        cashdeskid: parseInt(dbConfig.cashdeskid),
+      }
       const limit = await getBalanceSafe(() => getCashdeskBalance('betwinner', betwinnerCfg), 'BetWinner')
       limits.push({ key: 'betwinner', name: 'BetWinner', limit })
     } else {
@@ -366,8 +411,14 @@ export async function getPlatformLimits(): Promise<
   
   // WowBet
   try {
-    const wowbetCfg = CASHDESK_CONFIG['wowbet']
-    if (wowbetCfg.cashdeskid > 0) {
+    const dbConfig = await getCasinoConfig('wowbet')
+    if (dbConfig && 'cashdeskid' in dbConfig && parseInt(dbConfig.cashdeskid) > 0) {
+      const wowbetCfg = {
+        hash: dbConfig.hash,
+        cashierpass: dbConfig.cashierpass,
+        login: dbConfig.login,
+        cashdeskid: parseInt(dbConfig.cashdeskid),
+      }
       const limit = await getBalanceSafe(() => getCashdeskBalance('wowbet', wowbetCfg), 'WowBet')
       limits.push({ key: 'wowbet', name: 'WowBet', limit })
     } else {

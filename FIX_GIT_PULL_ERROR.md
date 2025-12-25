@@ -1,9 +1,23 @@
 # 🔧 Исправление ошибки "refusing to merge unrelated histories" на сервере
 
 ## ❌ Проблема:
-При выполнении `git pull` на сервере возникает ошибка:
-```
-fatal: refusing to merge unrelated histories
+При выполнении `git pull` на сервере возникают ошибки:
+1. `fatal: refusing to merge unrelated histories`
+2. `Committer identity unknown` / `fatal: unable to auto-detect email address`
+
+## 🔧 ШАГ 0: Настройка Git (если возникает ошибка "Committer identity unknown")
+
+**ВАЖНО**: Сначала настройте Git, иначе merge commit не создастся!
+
+```bash
+# Настройте имя и email для Git (глобально для всех репозиториев)
+git config --global user.email "admin@bingo.kg"  # или любой ваш email
+git config --global user.name "Server Admin"     # или любое имя
+
+# Или только для текущего репозитория:
+cd /var/www/bingo_bot  # или /var/www/luxon/admin_nextjs если это ваш проект
+git config user.email "admin@bingo.kg"
+git config user.name "Server Admin"
 ```
 
 ## ✅ Решение:
@@ -63,8 +77,14 @@ nano update-admin.sh
 ## 📋 Полная последовательность команд для обновления на сервере:
 
 ```bash
+# 0. СНАЧАЛА настройте Git (если еще не настроен)
+git config --global user.email "admin@bingo.kg"
+git config --global user.name "Server Admin"
+
 # 1. Перейдите в директорию проекта
 cd /var/www/bingo_bot
+# ИЛИ если ваш проект находится в другом месте (например /var/www/luxon/admin_nextjs):
+# cd /var/www/luxon/admin_nextjs
 
 # 2. Получите последние изменения
 git fetch origin

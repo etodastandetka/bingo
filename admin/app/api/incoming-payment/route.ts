@@ -71,12 +71,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Создаем запись о входящем платеже
+    const paymentAmount = parseFloat(amount)
+    const paymentDateObj = paymentDate ? new Date(paymentDate) : new Date()
+
+    // ВАЖНО: Проверяем, не существует ли уже такой платеж (по сумме, дате и банку)
+    // Это предотвращает дубликаты при повторной отправке запроса
+    // Увеличиваем окно поиска до ±10 минут для более надежной проверки
+    const existingPayment = await prisma.incomingPayment.findFirst({
+      where: {
+        amount: paymentAmount,
+        bank: bank || null,
+        paymentDate: {
+          gte: new Date(paymentDateObj.getTime() - 10 * 60000), // ±10 минут
+          lte: new Date(paymentDateObj.getTime() + 10 * 60000),
+        },
+      },
+    })
+
+    if (existingPayment) {
+      console.log(`⚠️ Payment already exists: ID ${existingPayment.id}, amount: ${paymentAmount}, date: ${paymentDateObj.toISOString()}`)
+      console.log(`   Returning existing payment instead of creating duplicate.`)
+      
+      // Возвращаем существующий платеж
+      const response = NextResponse.json(
+        createApiResponse(
+          {
+            id: existingPayment.id,
+            amount: existingPayment.amount.toString(),
+            bank: existingPayment.bank,
+            paymentDate: existingPayment.paymentDate.toISOString(),
+            isProcessed: existingPayment.isProcessed,
+          },
+          'Payment already exists (duplicate prevented)'
+        )
+      )
+      response.headers.set('Access-Control-Allow-Origin', '*')
+      return response
+    }
+
+    // Создаем запись о входящем платеже только если дубликата нет
     const incomingPayment = await prisma.incomingPayment.create({
       data: {
-        amount: parseFloat(amount),
+        amount: paymentAmount,
         bank: bank || null,
-        paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+        paymentDate: paymentDateObj,
         notificationText: notificationText || null,
         isProcessed: false,
       },
