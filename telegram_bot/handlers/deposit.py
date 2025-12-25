@@ -270,6 +270,9 @@ async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
 @router.message(DepositStates.waiting_for_account_id)
 async def deposit_account_id_received(message: Message, state: FSMContext, bot: Bot):
     """ID счета получен, запрашиваем сумму"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     lang = await get_lang_from_state(state)
     
     if message.text == get_text(lang, 'deposit', 'cancel'):
