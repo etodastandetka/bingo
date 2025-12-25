@@ -293,9 +293,11 @@ export async function getPlatformLimits(): Promise<
       const limit = await getBalanceSafe(() => getCashdeskBalance('melbet', melbetCfg), 'Melbet')
       limits.push({ key: 'melbet', name: 'Melbet', limit })
     } else {
+      console.error('[Platform Limits] Melbet: конфигурация не найдена или некорректна', dbConfig)
       limits.push({ key: 'melbet', name: 'Melbet', limit: 0 })
     }
   } catch (error) {
+    console.error('[Platform Limits] Melbet: ошибка при получении конфигурации', error)
     limits.push({ key: 'melbet', name: 'Melbet', limit: 0 })
   }
 
@@ -327,9 +329,11 @@ export async function getPlatformLimits(): Promise<
       const limit = await getBalanceSafe(() => getMostbetBalance(mostbetCfg), 'Mostbet')
       limits.push({ key: 'mostbet', name: 'Mostbet', limit })
     } else {
+      console.error('[Platform Limits] Mostbet: конфигурация не найдена или некорректна', dbConfig)
       limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
     }
   } catch (error) {
+    console.error('[Platform Limits] Mostbet: ошибка при получении конфигурации', error)
     limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
   }
 
