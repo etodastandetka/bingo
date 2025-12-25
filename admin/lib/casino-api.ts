@@ -12,7 +12,7 @@ interface CashdeskConfig {
 interface MostbetConfig {
   api_key: string
   secret: string
-  cashpoint_id: number
+  cashpoint_id: string | number  // Может быть строкой (C92905) или числом
   x_project?: string
   brand_id?: number
 }
@@ -75,7 +75,7 @@ const CASHDESK_CONFIG: Record<string, CashdeskConfig> = {
 const MOSTBET_CONFIG: MostbetConfig = {
   api_key: process.env.MOSTBET_API_KEY || 'api-key:3d83ac24-7fd2-498d-84b4-f2a7e80401fb',
   secret: process.env.MOSTBET_SECRET || 'baa104d1-73a6-4914-866a-ddbbe0aae11a',
-  cashpoint_id: parseInt(process.env.MOSTBET_CASHPOINT_ID || '48436'),
+  cashpoint_id: process.env.MOSTBET_CASHPOINT_ID || '48436', // Может быть строкой с буквами (C92905)
   x_project: process.env.MOSTBET_X_PROJECT || 'MBC',
   brand_id: parseInt(process.env.MOSTBET_BRAND_ID || '1'),
 }
@@ -169,7 +169,9 @@ async function getMostbetBalance(cfg: MostbetConfig): Promise<BalanceResult> {
     const seconds = String(now.getUTCSeconds()).padStart(2, '0')
     const timestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 
-    const path = `/mbc/gateway/v1/api/cashpoint/${cfg.cashpoint_id}/balance`
+    // cashpoint_id может быть строкой или числом, конвертируем в строку для URL
+    const cashpointIdStr = String(cfg.cashpoint_id)
+    const path = `/mbc/gateway/v1/api/cashpoint/${cashpointIdStr}/balance`
     const url = `https://apimb.com${path}`
 
     // API key может быть с префиксом или без
@@ -204,17 +206,22 @@ async function getMostbetBalance(cfg: MostbetConfig): Promise<BalanceResult> {
       'Accept': '*/*',
     }
 
+    console.log(`[Mostbet Balance] Request: URL=${url}, cashpoint_id=${cashpointIdStr}`)
+    
     const response = await fetch(url, { headers, method: 'GET' })
 
     if (response.ok) {
       const data = await response.json()
+      console.log(`[Mostbet Balance] Response OK:`, data)
       if (data && typeof data.balance !== 'undefined') {
+        const balance = parseFloat(data.balance) || 0
+        console.log(`[Mostbet Balance] Parsed balance: ${balance}, currency: ${data.currency || 'N/A'}`)
         return {
-          balance: parseFloat(data.balance) || 0,
-          limit: parseFloat(data.balance) || 0, // Лимит равен балансу
+          balance,
+          limit: balance, // Лимит равен балансу
         }
       } else {
-        console.error('[Mostbet] Invalid response data:', data)
+        console.error('[Mostbet] Invalid response data - balance field missing:', data)
       }
     } else {
       const errorText = await response.text().catch(() => '')
@@ -327,11 +334,13 @@ export async function getPlatformLimits(): Promise<
   // Mostbet
   try {
     const dbConfig = await getCasinoConfig('mostbet')
-    if (dbConfig && 'cashpoint_id' in dbConfig && dbConfig.cashpoint_id && parseInt(dbConfig.cashpoint_id) > 0) {
+    if (dbConfig && 'cashpoint_id' in dbConfig && dbConfig.cashpoint_id && String(dbConfig.cashpoint_id).trim() !== '') {
+      // cashpoint_id может быть строкой (C92905) или числом
+      const cashpointId = String(dbConfig.cashpoint_id)
       const mostbetCfg = {
         api_key: dbConfig.api_key,
         secret: dbConfig.secret,
-        cashpoint_id: parseInt(dbConfig.cashpoint_id),
+        cashpoint_id: cashpointId, // Сохраняем как строку
         x_project: dbConfig.x_project || 'MBC',
         brand_id: dbConfig.brand_id || 1,
       }
@@ -339,7 +348,7 @@ export async function getPlatformLimits(): Promise<
       const limit = await getBalanceSafe(() => getMostbetBalance(mostbetCfg), 'Mostbet')
       limits.push({ key: 'mostbet', name: 'Mostbet', limit })
     } else {
-      console.error('[Platform Limits] Mostbet: конфигурация не найдена или некорректна', dbConfig ? `конфигурация есть, но cashpoint_id отсутствует или равен 0. Тип: ${Object.keys(dbConfig).join(', ')}` : 'конфигурация не найдена')
+      console.error('[Platform Limits] Mostbet: конфигурация не найдена или некорректна', dbConfig ? `конфигурация есть, но cashpoint_id отсутствует или пустой. Тип: ${Object.keys(dbConfig).join(', ')}` : 'конфигурация не найдена')
       limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
     }
   } catch (error) {
