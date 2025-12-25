@@ -574,11 +574,10 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             )
             
             # Отправляем reply клавиатуру с кнопкой отмены
-            # Отправляем невидимое сообщение (только для показа клавиатуры)
-            # Используем неразрывный пробел, чтобы сообщение было невидимым
+            # Используем видимый текст вместо невидимого символа (Telegram не принимает пустой текст)
             keyboard_message = await bot.send_message(
                 chat_id=message.chat.id,
-                text='\u200B',  # Неразрывный пробел (невидимый символ)
+                text='⬇️',  # Используем стрелку вниз как минимально видимый текст
                 reply_markup=cancel_keyboard
             )
             await state.update_data(keyboard_message_id=keyboard_message.message_id)
