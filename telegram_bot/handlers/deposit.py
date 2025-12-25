@@ -564,20 +564,19 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                                    account_id=account_id,
                                    timer=format_timer(remaining_seconds))
             
-            # Отправляем фото QR кода с inline кнопками банков
+            # Отправляем фото QR кода с inline кнопками банков и reply клавиатурой с кнопкой отмены
             # Используем BufferedInputFile для работы с bytes напрямую
             photo = BufferedInputFile(qr_image_bytes, filename='qr_code.png')
             qr_message = await message.answer_photo(
                 photo=photo,
                 caption=payment_text,
-                reply_markup=keyboard if keyboard else None
+                reply_markup=keyboard if keyboard else None  # Inline клавиатура с банками
             )
             
-            # Отправляем reply клавиатуру с кнопкой отмены
-            # Используем видимый текст вместо невидимого символа (Telegram не принимает пустой текст)
-            keyboard_message = await bot.send_message(
-                chat_id=message.chat.id,
-                text='⬇️',  # Используем стрелку вниз как минимально видимый текст
+            # Отправляем отдельное сообщение с reply клавиатурой для кнопки "Отмена"
+            # Reply клавиатуру нельзя добавить к фото через edit, поэтому отправляем отдельное сообщение
+            keyboard_message = await message.answer(
+                text=' ',  # Пробел как минимальный текст (Telegram требует непустой текст)
                 reply_markup=cancel_keyboard
             )
             await state.update_data(keyboard_message_id=keyboard_message.message_id)
