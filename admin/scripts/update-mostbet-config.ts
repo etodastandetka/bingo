@@ -11,7 +11,7 @@ async function updateMostbetConfig() {
     const mostbetConfig = {
       api_key: '8ff736b6-43bf-4502-afdd-c222de58b03c', // Без префикса, код добавит api-key: автоматически
       secret: '5c10831e-ebab-42fd-b27e-53c2003f52be',
-      cashpoint_id: 'C92905', // Важно: это строка с буквами, НЕ число!
+      cashpoint_id: '92905', // ID кассы (как в документации - может быть числом или строкой)
       x_project: 'MBC',
       brand_id: 1,
     }
@@ -54,7 +54,7 @@ async function updateMostbetConfig() {
     }
 
     console.log('\n✅ Конфигурация Mostbet успешно обновлена!')
-    console.log('\n⚠️  ВАЖНО: cashpoint_id содержит буквы (C92905), убедитесь что он передается как строка, а не число!')
+    console.log(`\n📋 Cashpoint ID: ${mostbetConfig.cashpoint_id}`)
 
   } catch (error) {
     console.error('❌ Ошибка при обновлении конфигурации Mostbet:', error)
