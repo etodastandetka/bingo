@@ -68,8 +68,6 @@ export default function RequestDetailPage() {
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [isDragging, setIsDragging] = useState(false)
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })<'approve' | 'reject' | null>(null)
 
   const pushToast = (message: string, type: 'success' | 'error' | 'info' = 'info', timeout = 4000) => {
     setToast({ message, type })
