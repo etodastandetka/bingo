@@ -63,13 +63,29 @@ BANKS = [
 
 async def generate_qr_async(amount, bank):
     """Асинхронная генерация QR кода"""
+    print(f"[Payment Site] Calling admin API: {API_BASE_URL}/public/generate-qr")
     connector = aiohttp.TCPConnector(ssl=ssl_context)
     async with aiohttp.ClientSession(connector=connector) as session:
-        async with session.post(
-            f'{API_BASE_URL}/public/generate-qr',
-            json={'amount': amount, 'bank': bank}
-        ) as response:
-            return await response.json()
+        try:
+            async with session.post(
+                f'{API_BASE_URL}/public/generate-qr',
+                json={'amount': amount, 'bank': bank},
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    print(f"[Payment Site] Admin API response: success={result.get('success')}")
+                    return result
+                else:
+                    error_text = await response.text()
+                    print(f"[Payment Site] Admin API error ({response.status}): {error_text}")
+                    return {'success': False, 'error': f'Admin API error: {response.status} - {error_text[:100]}'}
+        except asyncio.TimeoutError:
+            print(f"[Payment Site] Timeout connecting to admin API: {API_BASE_URL}")
+            return {'success': False, 'error': 'Connection timeout to admin API'}
+        except Exception as e:
+            print(f"[Payment Site] Error connecting to admin API: {e}")
+            return {'success': False, 'error': f'Connection error: {str(e)}'}
 
 def generate_qr_image(qr_hash, unique_id=None):
     """Генерация изображения QR кода с встроенным водяным знаком и уникальным ID"""
@@ -306,21 +322,52 @@ def generate_qr():
         amount = float(data.get('amount', 0))
         bank = data.get('bank', 'omoney')  # По умолчанию O!Money
         
+        print(f"[Payment Site] Generating QR for amount: {amount}, bank: {bank}")
+        
         # Асинхронный вызов
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        qr_data = loop.run_until_complete(generate_qr_async(amount, bank))
-        loop.close()
+        try:
+            qr_data = loop.run_until_complete(generate_qr_async(amount, bank))
+        except Exception as e:
+            print(f"[Payment Site] Error calling admin API: {e}")
+            loop.close()
+            return jsonify({
+                'success': False,
+                'error': f'Failed to connect to admin API: {str(e)}'
+            }), 500
+        finally:
+            loop.close()
+        
+        print(f"[Payment Site] QR data received: success={qr_data.get('success')}, error={qr_data.get('error')}")
         
         if qr_data.get('success'):
             qr_hash = qr_data.get('qr_hash')
+            if not qr_hash:
+                print(f"[Payment Site] QR hash is empty in response: {qr_data}")
+                return jsonify({
+                    'success': False,
+                    'error': 'QR hash not found in admin API response'
+                }), 400
+            
             # Получаем unique_id из параметров запроса
             unique_id = request.json.get('unique_id')
             # Получаем ссылку на O!Money по умолчанию
             all_bank_urls = qr_data.get('all_bank_urls', {})
             omoney_url = all_bank_urls.get('omoney') or all_bank_urls.get('O!Money') or f'https://api.dengi.o.kg/ru/qr/#{qr_hash}'
-            # Кодируем ссылку O!Money в QR код вместо qr_hash
-            qr_image = generate_qr_image(omoney_url, unique_id)
+            
+            print(f"[Payment Site] Generating QR image for URL: {omoney_url[:50]}...")
+            
+            try:
+                # Кодируем ссылку O!Money в QR код вместо qr_hash
+                qr_image = generate_qr_image(omoney_url, unique_id)
+                print(f"[Payment Site] QR image generated successfully, length: {len(qr_image)}")
+            except Exception as e:
+                print(f"[Payment Site] Error generating QR image: {e}", exc_info=True)
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to generate QR image: {str(e)}'
+                }), 500
             
             return jsonify({
                 'success': True,
@@ -330,12 +377,15 @@ def generate_qr():
                 'bank_urls': qr_data.get('all_bank_urls', {})  # Для совместимости
             })
         else:
+            error_msg = qr_data.get('error', 'Failed to generate QR')
+            print(f"[Payment Site] Admin API returned error: {error_msg}")
             return jsonify({
                 'success': False,
-                'error': qr_data.get('error', 'Failed to generate QR')
+                'error': error_msg
             }), 400
             
     except Exception as e:
+        print(f"[Payment Site] Unexpected error in generate_qr: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
