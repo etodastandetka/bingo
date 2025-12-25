@@ -384,7 +384,6 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
         data = await state.get_data()
         qr_message_id = data.get('qr_message_id')
-        keyboard_message_id = data.get('keyboard_message_id')
         
         if qr_message_id:
             # Останавливаем таймер
@@ -393,13 +392,6 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             
             try:
                 await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
-            except Exception:
-                pass
-        
-        # Удаляем сообщение с клавиатурой если есть
-        if keyboard_message_id:
-            try:
-                await bot.delete_message(chat_id=message.chat.id, message_id=keyboard_message_id)
             except Exception:
                 pass
                 
@@ -537,7 +529,27 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                 row = bank_buttons[i:i+2]
                 keyboard_rows.append(row)
             
-            keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows) if bank_buttons else None
+            # Добавляем кнопку "Отмена" в последний ряд
+            if keyboard_rows:
+                # Если последний ряд неполный, добавляем отмену туда, иначе создаем новый ряд
+                if len(keyboard_rows[-1]) == 1:
+                    keyboard_rows[-1].append(InlineKeyboardButton(
+                        text=get_text(lang, 'deposit', 'cancel'),
+                        callback_data='deposit_cancel'
+                    ))
+                else:
+                    keyboard_rows.append([InlineKeyboardButton(
+                        text=get_text(lang, 'deposit', 'cancel'),
+                        callback_data='deposit_cancel'
+                    )])
+            else:
+                # Если нет кнопок банков, создаем только кнопку отмены
+                keyboard_rows.append([InlineKeyboardButton(
+                    text=get_text(lang, 'deposit', 'cancel'),
+                    callback_data='deposit_cancel'
+                )])
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows) if keyboard_rows else None
             
             # Создаем reply клавиатуру с кнопкой отмены
             cancel_keyboard = ReplyKeyboardMarkup(
@@ -564,22 +576,14 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                                    account_id=account_id,
                                    timer=format_timer(remaining_seconds))
             
-            # Отправляем фото QR кода с inline кнопками банков и reply клавиатурой с кнопкой отмены
+            # Отправляем фото QR кода с inline кнопками банков и кнопкой "Отмена"
             # Используем BufferedInputFile для работы с bytes напрямую
             photo = BufferedInputFile(qr_image_bytes, filename='qr_code.png')
             qr_message = await message.answer_photo(
                 photo=photo,
                 caption=payment_text,
-                reply_markup=keyboard if keyboard else None  # Inline клавиатура с банками
+                reply_markup=keyboard if keyboard else None  # Inline клавиатура с банками и отменой
             )
-            
-            # Отправляем отдельное сообщение с reply клавиатурой для кнопки "Отмена"
-            # Reply клавиатуру нельзя добавить к фото через edit, поэтому отправляем отдельное сообщение
-            keyboard_message = await message.answer(
-                text=' ',  # Пробел как минимальный текст (Telegram требует непустой текст)
-                reply_markup=cancel_keyboard
-            )
-            await state.update_data(keyboard_message_id=keyboard_message.message_id)
             
             # Сохраняем ID сообщения с QR-кодом для возможности удаления и обновления
             await state.update_data(qr_message_id=qr_message.message_id)
@@ -660,6 +664,32 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         await cmd_start(message, state, bot)
         return
 
+
+@router.callback_query(F.data == 'deposit_cancel')
+async def deposit_cancel_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Обработка нажатия на кнопку "Отмена" в процессе депозита"""
+    lang = await get_lang_from_state(state)
+    
+    # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
+    data = await state.get_data()
+    qr_message_id = data.get('qr_message_id')
+    
+    if qr_message_id:
+        # Останавливаем таймер
+        timer_key = f"{callback.message.chat.id}_{qr_message_id}"
+        active_timers.pop(timer_key, None)
+        
+        try:
+            await bot.delete_message(chat_id=callback.message.chat.id, message_id=qr_message_id)
+        except Exception:
+            pass
+    
+    await state.clear()
+    
+    # Показываем главное меню
+    from handlers.start import cmd_start
+    await cmd_start(callback.message, state, bot)
+    await callback.answer()
 
 @router.message(DepositStates.waiting_for_receipt, F.photo)
 async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot):
@@ -780,12 +810,29 @@ async def deposit_invalid_receipt(message: Message, state: FSMContext, bot: Bot)
     
     await message.answer(get_text(lang, 'deposit', 'invalid_receipt'))
 
-# Этот обработчик не нужен, так как отмена обрабатывается в каждом состоянии отдельно
-# @router.message(F.text.in_(['❌ Операция отменена', '❌ Аракет жокко чыгарылды']))
-# async def cancel_deposit(message: Message, state: FSMContext, bot: Bot):
-#     """Отмена операции пополнения"""
-#     await state.clear()
-#     # Показываем главное меню
-#     from handlers.start import cmd_start
-#     await cmd_start(message, state, bot)
+@router.callback_query(F.data == 'deposit_cancel')
+async def deposit_cancel_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Обработка нажатия на кнопку "Отмена" в процессе депозита"""
+    lang = await get_lang_from_state(state)
+    
+    # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
+    data = await state.get_data()
+    qr_message_id = data.get('qr_message_id')
+    
+    if qr_message_id:
+        # Останавливаем таймер
+        timer_key = f"{callback.message.chat.id}_{qr_message_id}"
+        active_timers.pop(timer_key, None)
+        
+        try:
+            await bot.delete_message(chat_id=callback.message.chat.id, message_id=qr_message_id)
+        except Exception:
+            pass
+    
+    await state.clear()
+    
+    # Показываем главное меню
+    from handlers.start import cmd_start
+    await cmd_start(callback.message, state, bot)
+    await callback.answer()
 
