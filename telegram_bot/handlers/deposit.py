@@ -551,12 +551,6 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows) if keyboard_rows else None
             
-            # Создаем reply клавиатуру с кнопкой отмены
-            cancel_keyboard = ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))]],
-                resize_keyboard=True
-            )
-            
             # Сохраняем время создания QR кода для таймера (5 минут = 300 секунд)
             qr_created_at = int(time.time())
             timer_duration = 300  # 5 минут в секундах
