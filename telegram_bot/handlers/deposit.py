@@ -437,28 +437,49 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         
         try:
             # Генерируем QR hash и получаем ссылки банков
+            logger.info(f"[Deposit] Generating QR hash for amount: {amount_with_cents}, casino: {casino_id}")
             qr_result = await APIClient.generate_qr(amount_with_cents, 'omoney')
             
+            logger.info(f"[Deposit] QR hash result: success={qr_result.get('success')}, error={qr_result.get('error')}")
+            
             if not qr_result.get('success'):
+                error_msg = qr_result.get('error', 'Unknown error')
+                logger.error(f"[Deposit] QR hash generation failed: {error_msg}")
                 await generating_msg.delete()
-                await message.answer(get_text(lang, 'deposit', 'qr_error'))
+                # Более детальное сообщение об ошибке
+                if 'No active wallet' in error_msg or 'requisite' in error_msg.lower():
+                    await message.answer("❌ Ошибка: не настроен активный кошелек для приема платежей. Обратитесь к администратору.")
+                else:
+                    await message.answer(get_text(lang, 'deposit', 'qr_error'))
                 return
             
             qr_hash = qr_result.get('qr_hash')
             all_bank_urls = qr_result.get('all_bank_urls', {})
             
             if not qr_hash:
+                logger.error(f"[Deposit] QR hash is empty in response: {qr_result}")
                 await generating_msg.delete()
                 await message.answer(get_text(lang, 'deposit', 'qr_error'))
                 return
             
+            logger.info(f"[Deposit] QR hash generated successfully: {qr_hash[:20]}...")
+            
             # Генерируем QR изображение через payment_site API
+            logger.info(f"[Deposit] Generating QR image for amount: {amount_with_cents}")
             qr_image_result = await APIClient.generate_qr_image(amount_with_cents, 'omoney')
             qr_image_base64 = qr_image_result.get('qr_image', '')
             
+            logger.info(f"[Deposit] QR image result: has_image={bool(qr_image_base64)}, error={qr_image_result.get('error')}")
+            
             if not qr_image_base64:
+                error_msg = qr_image_result.get('error', 'Unknown error')
+                logger.error(f"[Deposit] QR image generation failed: {error_msg}")
                 await generating_msg.delete()
-                await message.answer(get_text(lang, 'deposit', 'qr_error'))
+                # Более детальное сообщение об ошибке
+                if 'timeout' in error_msg.lower() or 'connection' in error_msg.lower():
+                    await message.answer("❌ Ошибка: не удалось подключиться к серверу генерации QR кода. Попробуйте позже.")
+                else:
+                    await message.answer(get_text(lang, 'deposit', 'qr_error'))
                 return
             
             # Удаляем сообщение о генерации

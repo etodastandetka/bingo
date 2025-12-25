@@ -1,4 +1,5 @@
 import aiohttp
+import asyncio
 import ssl
 from config import Config
 from typing import Optional, Dict, Any
@@ -154,27 +155,58 @@ class APIClient:
     @staticmethod
     async def generate_qr_image(amount: float, bank: str = 'omoney') -> Dict[str, Any]:
         """Генерировать QR код и получить изображение (base64)"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
             # Используем payment_site API который возвращает готовое изображение
             payment_site_url = Config.PAYMENT_SITE_URL
+            logger.info(f"[QR Image] Using payment site URL: {payment_site_url}")
+            
             if 'localhost' in payment_site_url.lower():
                 # Для localhost пробуем сначала локальный, потом fallback
                 try:
                     async with session.post(
                         f'{payment_site_url}/api/generate-qr',
                         json={'amount': amount, 'bank': bank},
-                        timeout=aiohttp.ClientTimeout(total=5)
+                        timeout=aiohttp.ClientTimeout(total=10)
                     ) as response:
-                        return await response.json()
-                except:
+                        if response.status == 200:
+                            result = await response.json()
+                            logger.info(f"[QR Image] Success from localhost: {payment_site_url}")
+                            return result
+                        else:
+                            error_text = await response.text()
+                            logger.error(f"[QR Image] Error from localhost ({response.status}): {error_text}")
+                            return {'success': False, 'error': f'Server error: {response.status}'}
+                except asyncio.TimeoutError:
+                    logger.error(f"[QR Image] Timeout connecting to localhost: {payment_site_url}")
+                    payment_site_url = Config.PAYMENT_FALLBACK_URL
+                except Exception as e:
+                    logger.error(f"[QR Image] Error connecting to localhost: {e}")
                     payment_site_url = Config.PAYMENT_FALLBACK_URL
             
-            async with session.post(
-                f'{payment_site_url}/api/generate-qr',
-                json={'amount': amount, 'bank': bank}
-            ) as response:
-                return await response.json()
+            try:
+                async with session.post(
+                    f'{payment_site_url}/api/generate-qr',
+                    json={'amount': amount, 'bank': bank},
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        logger.info(f"[QR Image] Success from payment site: {payment_site_url}")
+                        return result
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"[QR Image] Error from payment site ({response.status}): {error_text}")
+                        return {'success': False, 'error': f'Server error: {response.status} - {error_text[:100]}'}
+            except asyncio.TimeoutError:
+                logger.error(f"[QR Image] Timeout connecting to payment site: {payment_site_url}")
+                return {'success': False, 'error': 'Connection timeout'}
+            except Exception as e:
+                logger.error(f"[QR Image] Error connecting to payment site: {e}")
+                return {'success': False, 'error': str(e)}
     
     @staticmethod
     async def get_payment_settings() -> Dict[str, Any]:
