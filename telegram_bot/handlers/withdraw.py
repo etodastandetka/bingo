@@ -385,7 +385,7 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
     try:
         checking_msg = await message.answer("🔍 Проверяю код вывода...")
         
-        amount_result = await APIClient.check_withdraw_amount(casino_id, str(message.from_user.id), withdrawal_code)
+        amount_result = await APIClient.check_withdraw_amount(casino_id, account_id, withdrawal_code)
         
         # Удаляем сообщение о проверке
         try:
