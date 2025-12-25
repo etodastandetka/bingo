@@ -124,6 +124,9 @@ async function getCashdeskBalance(
     const url = `https://partners.servcul.com/CashdeskBotAPI/Cashdesk/${cfg.cashdeskid}/Balance?confirm=${confirm}&dt=${formattedDt}`
     const headers = { sign }
 
+    // Логируем детали запроса для диагностики (без пароля)
+    console.log(`[${casino}] Request: cashdeskid=${cfg.cashdeskid}, login=${cfg.login}, hash=${cfg.hash.substring(0, 8)}...`)
+
     const response = await fetch(url, { headers, method: 'GET' })
 
     if (response.ok) {
@@ -210,10 +213,15 @@ async function getMostbetBalance(cfg: MostbetConfig): Promise<BalanceResult> {
           balance: parseFloat(data.balance) || 0,
           limit: parseFloat(data.balance) || 0, // Лимит равен балансу
         }
+      } else {
+        console.error('[Mostbet] Invalid response data:', data)
       }
+    } else {
+      const errorText = await response.text().catch(() => '')
+      console.error(`[Mostbet] API error (${response.status}):`, errorText)
     }
   } catch (error) {
-    console.error('Error getting Mostbet balance:', error)
+    console.error('[Mostbet] Error getting balance:', error)
   }
 
   return { balance: 0, limit: 0 }
@@ -290,10 +298,11 @@ export async function getPlatformLimits(): Promise<
         login: dbConfig.login,
         cashdeskid: parseInt(dbConfig.cashdeskid),
       }
+      console.log(`[Platform Limits] Melbet: используем конфигурацию из БД, cashdeskid=${melbetCfg.cashdeskid}, login=${melbetCfg.login}`)
       const limit = await getBalanceSafe(() => getCashdeskBalance('melbet', melbetCfg), 'Melbet')
       limits.push({ key: 'melbet', name: 'Melbet', limit })
     } else {
-      console.error('[Platform Limits] Melbet: конфигурация не найдена или некорректна', dbConfig)
+      console.error('[Platform Limits] Melbet: конфигурация не найдена или некорректна', dbConfig ? 'конфигурация есть, но cashdeskid отсутствует или равен 0' : 'конфигурация не найдена')
       limits.push({ key: 'melbet', name: 'Melbet', limit: 0 })
     }
   } catch (error) {
@@ -326,10 +335,11 @@ export async function getPlatformLimits(): Promise<
         x_project: dbConfig.x_project || 'MBC',
         brand_id: dbConfig.brand_id || 1,
       }
+      console.log(`[Platform Limits] Mostbet: используем конфигурацию из БД, cashpoint_id=${mostbetCfg.cashpoint_id}, api_key=${mostbetCfg.api_key.substring(0, 20)}...`)
       const limit = await getBalanceSafe(() => getMostbetBalance(mostbetCfg), 'Mostbet')
       limits.push({ key: 'mostbet', name: 'Mostbet', limit })
     } else {
-      console.error('[Platform Limits] Mostbet: конфигурация не найдена или некорректна', dbConfig)
+      console.error('[Platform Limits] Mostbet: конфигурация не найдена или некорректна', dbConfig ? `конфигурация есть, но cashpoint_id отсутствует или равен 0. Тип: ${Object.keys(dbConfig).join(', ')}` : 'конфигурация не найдена')
       limits.push({ key: 'mostbet', name: 'Mostbet', limit: 0 })
     }
   } catch (error) {
