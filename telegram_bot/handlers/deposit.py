@@ -149,11 +149,16 @@ async def get_lang_from_state(state: FSMContext) -> str:
 @router.message(F.text.in_(['💰 Пополнить', '💰 Толтуруу']))
 async def deposit_start(message: Message, state: FSMContext):
     """Начало процесса пополнения - выбор казино"""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    
+    # Сохраняем язык перед очисткой состояния
+    lang = await get_lang_from_state(state)
+    
     # Очищаем предыдущее состояние (если была незавершенная операция)
     await state.clear()
     
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    lang = await get_lang_from_state(state)
+    # Восстанавливаем язык
+    await state.update_data(language=lang)
     
     # Получаем настройки из админки
     settings = await APIClient.get_payment_settings()
