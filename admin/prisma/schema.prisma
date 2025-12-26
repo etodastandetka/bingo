@@ -345,3 +345,21 @@ model QuickReply {
   @@index([order])
   @@map("quick_replies")
 }
+
+model Shift {
+  id                  Int      @id @default(autoincrement())
+  date                DateTime @unique @db.Date
+  isClosed            Boolean  @default(false) @map("is_closed")
+  totalDeposits       Decimal  @default(0) @map("total_deposits") @db.Decimal(12, 2)
+  totalDepositsCount  Int      @default(0) @map("total_deposits_count")
+  totalWithdrawals    Decimal  @default(0) @map("total_withdrawals") @db.Decimal(12, 2)
+  totalWithdrawalsCount Int    @default(0) @map("total_withdrawals_count")
+  totalProfit         Decimal  @default(0) @map("total_profit") @db.Decimal(12, 2)
+  casinoStats         Json?    @map("casino_stats")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([date])
+  @@index([isClosed])
+  @@map("shifts")
+}
