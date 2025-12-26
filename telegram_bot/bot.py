@@ -24,13 +24,14 @@ async def main():
     from aiogram.client.telegram import TelegramAPIServer
     from aiogram.exceptions import TelegramNetworkError
     
-    # Создаем сессию с увеличенными таймаутами
-    # Увеличиваем таймауты для стабильной работы
+    # Создаем сессию с таймаутом как числом (в секундах) для aiogram
+    # aiogram ожидает числовое значение, а не ClientTimeout объект
     session = AiohttpSession(
         api=TelegramAPIServer.from_base('https://api.telegram.org'),
-        timeout=aiohttp.ClientTimeout(total=60, connect=30, sock_read=30)  # 60 секунд общий, 30 на подключение и чтение
+        timeout=30.0  # 30 секунд в числовом формате
     )
     
+    # Создаем бота
     bot = Bot(token=Config.BOT_TOKEN, session=session)
     dp = Dispatcher(storage=MemoryStorage())
     
@@ -45,12 +46,18 @@ async def main():
     logger.info("Бот запущен!")
     
     # Запуск polling с обработкой ошибок и retry
+    # Указываем request_timeout как число (в секундах) для совместимости
     max_retries = 5
     retry_delay = 5  # секунд
     
     for attempt in range(max_retries):
         try:
-            await dp.start_polling(bot, allowed_updates=["message", "callback_query", "chat_member"])
+            # Используем request_timeout как число, а не ClientTimeout объект
+            await dp.start_polling(
+                bot, 
+                allowed_updates=["message", "callback_query", "chat_member"],
+                request_timeout=30.0  # 30 секунд в числовом формате
+            )
             break  # Успешный запуск
         except TelegramNetworkError as e:
             if attempt < max_retries - 1:
