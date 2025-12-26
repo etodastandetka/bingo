@@ -400,15 +400,34 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
         except:
             pass
         
-        amount_value = amount_result.get('data', {}).get('amount') if amount_result.get('success') else None
+        # Логируем ответ для отладки
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[Withdraw] Amount check result: {amount_result}")
+        
+        # Проверяем структуру ответа: может быть data.amount или просто amount
+        amount_value = None
+        if amount_result.get('success'):
+            # Проверяем разные варианты структуры ответа
+            if 'data' in amount_result and amount_result['data']:
+                amount_value = amount_result['data'].get('amount')
+            # Если нет в data, проверяем напрямую
+            if amount_value is None:
+                amount_value = amount_result.get('amount')
+        
+        logger.info(f"[Withdraw] Extracted amount value: {amount_value}")
+        
         if amount_value is not None:
-            withdraw_amount = amount_value
+            withdraw_amount = float(amount_value)
+            logger.info(f"[Withdraw] Parsed withdraw amount: {withdraw_amount}")
             if withdraw_amount <= 0:
                 amount_check_ok = False
+                logger.warning(f"[Withdraw] Amount is <= 0: {withdraw_amount}")
                 await message.answer("⚠️ Сумма вывода не найдена. Проверьте код и попробуйте ещё раз.")
         else:
             amount_check_ok = False
             error_message = amount_result.get('error') or amount_result.get('message') or 'Не удалось получить сумму вывода'
+            logger.error(f"[Withdraw] Amount not found in response. Error: {error_message}")
             await message.answer(f"⚠️ {error_message}")
     except Exception as e:
         print(f"Error checking withdraw amount: {e}")
