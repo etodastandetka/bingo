@@ -242,18 +242,30 @@ export default function RootLayout({
                   }
                 });
                 
-                // Перехватываем console.error для ChunkLoadError
+                // Перехватываем console.error для ChunkLoadError и Server Action errors
                 var originalConsoleError = console.error;
                 console.error = function() {
                   var errorString = Array.prototype.slice.call(arguments).join(' ');
                   if (errorString.includes('ChunkLoadError') || 
                       (errorString.includes('404') && errorString.includes('_next/static/chunks')) ||
-                      (errorString.includes('Loading chunk'))) {
+                      (errorString.includes('Loading chunk')) ||
+                      (errorString.includes('Failed to find Server Action')) ||
+                      (errorString.includes('Server Action'))) {
                     console.warn('[ChunkErrorHandler] Console error detected:', errorString);
                     reloadPage();
                   }
                   originalConsoleError.apply(console, arguments);
                 };
+                
+                // Перехватываем ошибки Server Actions
+                window.addEventListener('error', function(event) {
+                  var errorMessage = event.message || '';
+                  if (errorMessage.includes('Failed to find Server Action') || 
+                      errorMessage.includes('Server Action')) {
+                    console.warn('[ChunkErrorHandler] Server Action error detected:', errorMessage);
+                    reloadPage();
+                  }
+                }, true);
               })();
             `,
           }}
