@@ -57,8 +57,8 @@ export async function getCasinoConfig(bookmaker: string) {
 
     // Fallback на дефолтные значения
     return {
-      hash: process.env.MELBET_HASH || '5c6459e67bde6c8ace972e2a4d7e1f83d05e2b68c0741474b0fa57e46a19bda1',
-      cashierpass: process.env.MELBET_CASHIERPASS || 'ScgOQgUzZs',
+      hash: process.env.MELBET_HASH || 'e926a363ccb63af5348d5e8154fdaf07795224ea551eeaeab5e5ebe0511ffefa',
+      cashierpass: process.env.MELBET_CASHIERPASS || 'pUdKHv4SoV',
       login: process.env.MELBET_LOGIN || 'bakhtark',
       cashdeskid: process.env.MELBET_CASHDESKID || '1350588',
     }

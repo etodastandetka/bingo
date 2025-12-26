@@ -31,13 +31,18 @@ async function updateCasinoPasswords() {
           : existing.value
 
         config.cashierpass = password
+        
+        // Обновляем hash для melbet, если это melbet
+        if (casino === 'melbet') {
+          config.hash = 'e926a363ccb63af5348d5e8154fdaf07795224ea551eeaeab5e5ebe0511ffefa'
+        }
 
         await prisma.botConfiguration.update({
           where: { id: existing.id },
           data: { value: JSON.stringify(config) }
         })
 
-        console.log(`✅ ${casino}: пароль обновлен`)
+        console.log(`✅ ${casino}: пароль${casino === 'melbet' ? ' и hash' : ''} обновлен`)
       } else {
         // Создаем новую конфигурацию с дефолтными значениями и новым паролем
         const defaultConfigs: Record<string, any> = {
@@ -48,7 +53,7 @@ async function updateCasinoPasswords() {
             cashdeskid: '1343871',
           },
           'melbet': {
-            hash: '5c6459e67bde6c8ace972e2a4d7e1f83d05e2b68c0741474b0fa57e46a19bda1',
+            hash: 'e926a363ccb63af5348d5e8154fdaf07795224ea551eeaeab5e5ebe0511ffefa',
             cashierpass: password,
             login: 'bakhtark',
             cashdeskid: '1350588',
