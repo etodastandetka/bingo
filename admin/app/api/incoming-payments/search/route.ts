@@ -66,11 +66,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Получаем похожие пополнения
+    // Получаем похожие пополнения (без лимита, чтобы показать все пополнения на эту сумму)
     const payments = await prisma.incomingPayment.findMany({
       where,
       orderBy: { paymentDate: 'desc' },
-      take: 50,
+      // Убрали take: 50, чтобы показать все пополнения на эту сумму
       include: {
         request: {
           select: {

@@ -1273,7 +1273,7 @@ export default function RequestDetailPage() {
               </label>
           </div>
 
-          <div className="max-h-[500px] overflow-y-auto pr-2 payments-scroll">
+          <div className="max-h-[600px] overflow-y-auto pr-2 payments-scroll custom-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: '#4B5563 #1F2937' }}>
             {similarPayments.length === 0 ? (
               <p className="text-sm text-gray-500">Ничего не найдено</p>
             ) : (
