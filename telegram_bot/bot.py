@@ -18,8 +18,17 @@ async def main():
         logger.error("BOT_TOKEN не установлен! Проверьте файл .env")
         return
     
-    # Инициализация бота и диспетчера
-    bot = Bot(token=Config.BOT_TOKEN)
+    # Инициализация бота и диспетчера с увеличенными таймаутами
+    from aiogram.client.session.aiohttp import AiohttpSession
+    from aiogram.client.telegram import TelegramAPIServer
+    
+    # Создаем сессию с увеличенными таймаутами
+    session = AiohttpSession(
+        api=TelegramAPIServer.from_base('https://api.telegram.org'),
+        timeout=aiohttp.ClientTimeout(total=30, connect=10)  # 30 секунд общий таймаут, 10 секунд на подключение
+    )
+    
+    bot = Bot(token=Config.BOT_TOKEN, session=session)
     dp = Dispatcher(storage=MemoryStorage())
     
     # Регистрация роутеров

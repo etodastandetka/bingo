@@ -247,7 +247,7 @@ class APIClient:
                         # Прямой запрос с коротким таймаутом
                         async with session.get(
                             f'{api_url}/public/payment-settings',
-                            timeout=aiohttp.ClientTimeout(total=1)
+                            timeout=aiohttp.ClientTimeout(total=5)
                         ) as response:
                             if response.status == 200:
                                 data = await response.json()
@@ -258,7 +258,7 @@ class APIClient:
                 
                 async with session.get(
                     f'{api_url}/public/payment-settings',
-                    timeout=aiohttp.ClientTimeout(total=2)
+                    timeout=aiohttp.ClientTimeout(total=10)
                 ) as response:
                     data = await response.json()
                     return data if data.get('success') else {}

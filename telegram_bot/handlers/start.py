@@ -1,3 +1,4 @@
+import asyncio
 from aiogram import Router, F, Bot
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
@@ -25,13 +26,20 @@ async def check_channel_subscription(bot: Bot, user_id: int, channel: str) -> bo
         # Убираем @ если есть
         channel_username = channel.lstrip('@')
         
-        # Получаем информацию о пользователе в канале
-        chat_member = await bot.get_chat_member(f'@{channel_username}', user_id)
+        # Получаем информацию о пользователе в канале с таймаутом
+        chat_member = await asyncio.wait_for(
+            bot.get_chat_member(f'@{channel_username}', user_id),
+            timeout=5.0  # 5 секунд таймаут
+        )
         
         # Проверяем статус подписки
         # member, administrator, creator - подписан
         # left, kicked - не подписан
         return chat_member.status in ['member', 'administrator', 'creator']
+    except asyncio.TimeoutError:
+        # Таймаут - считаем что подписан, чтобы не блокировать бота
+        print(f"Error checking channel subscription: Request timeout")
+        return True
     except Exception as e:
         # Если канал не найден или ошибка, считаем что подписан (чтобы не блокировать бота)
         print(f"Error checking channel subscription: {e}")
@@ -55,26 +63,38 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
         except Exception:
             pass
     
-    # Проверяем блокировку пользователя
+    # Проверяем блокировку пользователя (с таймаутом)
     try:
-        blocked_check = await APIClient.check_blocked(str(message.from_user.id))
+        blocked_check = await asyncio.wait_for(
+            APIClient.check_blocked(str(message.from_user.id)),
+            timeout=3.0  # 3 секунды таймаут
+        )
         if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
             blocked_data = blocked_check.get('data', {})
             blocked_message = blocked_data.get('message', 'Вы заблокированы')
             await message.answer(blocked_message)
             return
+    except asyncio.TimeoutError:
+        print(f"Timeout checking blocked status, continuing...")
+        # Продолжаем работу при таймауте
     except Exception as e:
         print(f"Error checking blocked status: {e}")
         # Продолжаем работу, если проверка не удалась
     
-    # Проверяем pause режим
+    # Проверяем pause режим (с таймаутом)
     settings = {}
     try:
-        settings = await APIClient.get_payment_settings()
+        settings = await asyncio.wait_for(
+            APIClient.get_payment_settings(),
+            timeout=3.0  # 3 секунды таймаут
+        )
         if settings.get('pause', False):
             maintenance_message = settings.get('maintenance_message', get_text(lang, 'start', 'bot_paused'))
             await message.answer(maintenance_message)
             return
+    except asyncio.TimeoutError:
+        print(f"Timeout getting payment settings, continuing with defaults...")
+        # Продолжаем работу с дефолтными настройками
     except Exception:
         pass  # Если не удалось получить настройки, продолжаем работу
     
@@ -137,10 +157,15 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
     """Проверка подписки после нажатия кнопки"""
     lang = await get_lang_from_state(state)
     
-    # Получаем настройки для канала
+    # Получаем настройки для канала (с таймаутом)
     settings = {}
     try:
-        settings = await APIClient.get_payment_settings()
+        settings = await asyncio.wait_for(
+            APIClient.get_payment_settings(),
+            timeout=3.0  # 3 секунды таймаут
+        )
+    except asyncio.TimeoutError:
+        print(f"Timeout getting payment settings in subscription check, using defaults...")
     except Exception:
         pass
     
