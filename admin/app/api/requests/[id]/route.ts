@@ -260,7 +260,8 @@ export async function PATCH(
         // и есть сообщение для отправки
         if (notificationMessage && !isOperatorRequest) {
           // Отправляем уведомление асинхронно (не блокируем ответ)
-          sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
+          // Передаем requestId для удаления сообщения "Ваша заявка отправлена"
+          sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, updatedRequest.id)
             .then(() => {
               // После отправки уведомления отправляем главное меню
               return sendMainMenuToUser(currentRequest.userId, updatedRequest.bookmaker)

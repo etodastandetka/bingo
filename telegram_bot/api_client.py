@@ -209,6 +209,32 @@ class APIClient:
                 return {'success': False, 'error': str(e)}
     
     @staticmethod
+    async def update_request_message_id(request_id: int, message_id: int) -> Dict[str, Any]:
+        """Обновить ID сообщения о создании заявки"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.patch(
+                        f'{api_url}/api/requests/{request_id}/message-id',
+                        json={'message_id': message_id},
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.patch(
+                f'{api_url}/api/requests/{request_id}/message-id',
+                json={'message_id': message_id},
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
     async def get_payment_settings() -> Dict[str, Any]:
         """Получить настройки платежей из админки"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)

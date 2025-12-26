@@ -8,27 +8,27 @@ datasource db {
 }
 
 model AdminUser {
-  id           Int                @id @default(autoincrement())
-  username     String             @unique
+  id           Int                 @id @default(autoincrement())
+  username     String              @unique
   password     String
-  email        String?            @unique
-  isActive     Boolean            @default(true)
-  isSuperAdmin Boolean            @default(false)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  email        String?             @unique
+  isActive     Boolean             @default(true)
+  isSuperAdmin Boolean             @default(false)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
   loginHistory AdminLoginHistory[]
 
   @@map("admin_users")
 }
 
 model AdminLoginHistory {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  username  String   @db.VarChar(255)
-  ipAddress String?  @map("ip_address") @db.VarChar(45)
-  userAgent String?  @map("user_agent")
-  device    String?  @db.VarChar(100)
-  createdAt DateTime @default(now()) @map("created_at")
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  username  String    @db.VarChar(255)
+  ipAddress String?   @map("ip_address") @db.VarChar(45)
+  userAgent String?   @map("user_agent")
+  device    String?   @db.VarChar(100)
+  createdAt DateTime  @default(now()) @map("created_at")
   user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -74,29 +74,30 @@ model BotUserData {
 }
 
 model Request {
-  id               Int               @id @default(autoincrement())
-  userId           BigInt            @map("user_id")
-  username         String?           @db.VarChar(255)
-  firstName        String?           @map("first_name") @db.VarChar(255)
-  lastName         String?           @map("last_name") @db.VarChar(255)
-  bookmaker        String?           @db.VarChar(100)
-  accountId        String?           @map("account_id") @db.VarChar(255)
-  amount           Decimal?          @db.Decimal(10, 2)
-  requestType      String            @default("deposit") @map("request_type") @db.VarChar(20)
-  status           String            @default("pending") @db.VarChar(20)
-  statusDetail     String?           @map("status_detail") @db.VarChar(50)
-  processedBy      String?           @map("processed_by") @db.VarChar(255)
-  processedByUsername String?        @map("processed_by_username") @db.VarChar(255)
-  withdrawalCode   String?           @map("withdrawal_code") @db.VarChar(255)
-  casinoError      String?           @map("casino_error")
-  photoFileId      String?           @map("photo_file_id") @db.VarChar(255)
-  photoFileUrl     String?           @map("photo_file_url")
-  bank             String?           @db.VarChar(100)
-  phone            String?           @db.VarChar(20)
-  createdAt        DateTime          @default(now()) @map("created_at")
-  updatedAt        DateTime          @updatedAt @map("updated_at")
-  processedAt      DateTime?         @map("processed_at")
-  incomingPayments IncomingPayment[]
+  id                      Int               @id @default(autoincrement())
+  userId                  BigInt            @map("user_id")
+  username                String?           @db.VarChar(255)
+  firstName               String?           @map("first_name") @db.VarChar(255)
+  lastName                String?           @map("last_name") @db.VarChar(255)
+  bookmaker               String?           @db.VarChar(100)
+  accountId               String?           @map("account_id") @db.VarChar(255)
+  amount                  Decimal?          @db.Decimal(10, 2)
+  requestType             String            @default("deposit") @map("request_type") @db.VarChar(20)
+  status                  String            @default("pending") @db.VarChar(20)
+  statusDetail            String?           @map("status_detail") @db.VarChar(50)
+  processedBy             String?           @map("processed_by") @db.VarChar(255)
+  processedByUsername     String?           @map("processed_by_username") @db.VarChar(255)
+  withdrawalCode          String?           @map("withdrawal_code") @db.VarChar(255)
+  casinoError             String?           @map("casino_error")
+  photoFileId             String?           @map("photo_file_id") @db.VarChar(255)
+  photoFileUrl            String?           @map("photo_file_url")
+  bank                    String?           @db.VarChar(100)
+  phone                   String?           @db.VarChar(20)
+  requestCreatedMessageId BigInt?           @map("request_created_message_id")
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
+  processedAt             DateTime?         @map("processed_at")
+  incomingPayments        IncomingPayment[]
 
   @@index([userId])
   @@index([status])
@@ -264,20 +265,20 @@ model IncomingPayment {
 }
 
 model UncreatedRequest {
-  id             Int      @id @default(autoincrement())
-  userId         BigInt   @map("user_id")
-  username       String?  @db.VarChar(255)
-  firstName      String?  @map("first_name") @db.VarChar(255)
-  lastName       String?  @map("last_name") @db.VarChar(255)
-  bookmaker      String?  @db.VarChar(100)
-  accountId      String?  @map("account_id") @db.VarChar(255)
-  bank           String?  @db.VarChar(100)
-  amount         Decimal? @db.Decimal(10, 2)
-  requestType    String   @default("deposit") @map("request_type") @db.VarChar(20)
-  status         String   @default("not_created") @db.VarChar(30)
-  createdRequestId Int?   @map("created_request_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id               Int      @id @default(autoincrement())
+  userId           BigInt   @map("user_id")
+  username         String?  @db.VarChar(255)
+  firstName        String?  @map("first_name") @db.VarChar(255)
+  lastName         String?  @map("last_name") @db.VarChar(255)
+  bookmaker        String?  @db.VarChar(100)
+  accountId        String?  @map("account_id") @db.VarChar(255)
+  bank             String?  @db.VarChar(100)
+  amount           Decimal? @db.Decimal(10, 2)
+  requestType      String   @default("deposit") @map("request_type") @db.VarChar(20)
+  status           String   @default("not_created") @db.VarChar(30)
+  createdRequestId Int?     @map("created_request_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@index([userId, status])
   @@map("uncreated_requests")

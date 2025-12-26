@@ -761,11 +761,21 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
             # Сохраняем request_id в state для возможных уведомлений
             await state.update_data(request_id=request_id)
             
-            await message.answer(
+            # Отправляем сообщение о создании заявки и сохраняем его ID
+            request_created_msg = await message.answer(
                 get_text(lang, 'deposit', 'request_created',
                         amount=amount,
                         account_id=account_id)
             )
+            
+            # Сохраняем ID сообщения в заявке через API
+            if request_id and request_created_msg.message_id:
+                try:
+                    await APIClient.update_request_message_id(request_id, request_created_msg.message_id)
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Failed to save request message ID: {e}")
             # НЕ возвращаем главное меню и НЕ очищаем state
             # Главное меню вернется только когда деньги зачислятся или заявка отменится
         else:

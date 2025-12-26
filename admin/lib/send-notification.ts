@@ -26,12 +26,44 @@ export function getBotTokenByBookmaker(bookmaker: string | null | undefined): st
 }
 
 /**
+ * Удаление сообщения "Ваша заявка отправлена" при успешном пополнении или отклонении
+ */
+export async function deleteRequestCreatedMessage(
+  userId: bigint,
+  messageId: bigint | null,
+  bookmaker?: string | null
+): Promise<void> {
+  if (!messageId) return
+
+  try {
+    const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
+    if (!botToken) return
+
+    const deleteMessageUrl = `https://api.telegram.org/bot${botToken}/deleteMessage`
+    await fetch(deleteMessageUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: userId.toString(),
+        message_id: Number(messageId),
+      })
+    })
+  } catch (error) {
+    // Игнорируем ошибки удаления (сообщение могло быть уже удалено)
+    console.warn('Failed to delete request created message:', error)
+  }
+}
+
+/**
  * Отправка уведомления пользователю через Telegram бота
  */
 export async function sendNotificationToUser(
   userId: bigint,
   message: string,
-  bookmaker?: string | null
+  bookmaker?: string | null,
+  requestId?: number | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
@@ -39,6 +71,26 @@ export async function sendNotificationToUser(
     if (!botToken) {
       console.error('BOT_TOKEN not configured')
       return { success: false, error: 'BOT_TOKEN not configured' }
+    }
+
+    // Если есть requestId, удаляем сообщение "Ваша заявка отправлена" перед отправкой нового
+    if (requestId) {
+      try {
+        const request = await prisma.request.findUnique({
+          where: { id: requestId },
+          select: { requestCreatedMessageId: true },
+        })
+        if (request?.requestCreatedMessageId) {
+          await deleteRequestCreatedMessage(userId, request.requestCreatedMessageId, bookmaker)
+          // Очищаем message_id после удаления
+          await prisma.request.update({
+            where: { id: requestId },
+            data: { requestCreatedMessageId: null },
+          })
+        }
+      } catch (error) {
+        console.warn('Failed to delete request created message:', error)
+      }
     }
 
     const sendMessageUrl = `https://api.telegram.org/bot${botToken}/sendMessage`
