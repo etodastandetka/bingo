@@ -20,7 +20,7 @@ export async function matchAndProcessPayment(
   amount: number
 ): Promise<MatchResult> {
   // Проверяем, включено ли автопополнение
-  const autodepositSetting = await prisma.botConfiguration.findFirst({
+  const autodepositSetting = await prisma.botSetting.findUnique({
     where: { key: 'autodeposit_enabled' },
   })
   
