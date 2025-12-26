@@ -254,7 +254,6 @@ class APIClient:
                                 return data if data.get('success') else {}
                     except:
                         # Если локальный недоступен, используем fallback из конфига
-                        from config import Config
                         api_url = Config.API_FALLBACK_URL
                 
                 async with session.get(
