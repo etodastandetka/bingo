@@ -403,31 +403,46 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
         # Логируем ответ для отладки
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"[Withdraw] Amount check result: {amount_result}")
+        logger.info(f"[Withdraw] Amount check result (full): {amount_result}")
+        logger.info(f"[Withdraw] Amount check result type: {type(amount_result)}")
+        logger.info(f"[Withdraw] Amount check result keys: {amount_result.keys() if isinstance(amount_result, dict) else 'Not a dict'}")
         
         # Проверяем структуру ответа: может быть data.amount или просто amount
         amount_value = None
-        if amount_result.get('success'):
+        success = amount_result.get('success', False)
+        logger.info(f"[Withdraw] Success flag: {success}")
+        
+        if success:
             # Проверяем разные варианты структуры ответа
             if 'data' in amount_result and amount_result['data']:
+                logger.info(f"[Withdraw] Found 'data' key: {amount_result['data']}")
                 amount_value = amount_result['data'].get('amount')
+                logger.info(f"[Withdraw] Amount from data: {amount_value}")
             # Если нет в data, проверяем напрямую
             if amount_value is None:
                 amount_value = amount_result.get('amount')
+                logger.info(f"[Withdraw] Amount from root: {amount_value}")
         
-        logger.info(f"[Withdraw] Extracted amount value: {amount_value}")
+        logger.info(f"[Withdraw] Final extracted amount value: {amount_value}, type: {type(amount_value)}")
         
         if amount_value is not None:
-            withdraw_amount = float(amount_value)
-            logger.info(f"[Withdraw] Parsed withdraw amount: {withdraw_amount}")
-            if withdraw_amount <= 0:
+            try:
+                withdraw_amount = float(amount_value)
+                logger.info(f"[Withdraw] Parsed withdraw amount: {withdraw_amount}")
+                if withdraw_amount <= 0:
+                    amount_check_ok = False
+                    logger.warning(f"[Withdraw] Amount is <= 0: {withdraw_amount}")
+                    await message.answer("⚠️ Сумма вывода не найдена. Проверьте код и попробуйте ещё раз.")
+                else:
+                    logger.info(f"[Withdraw] Amount is valid: {withdraw_amount}")
+            except (ValueError, TypeError) as e:
+                logger.error(f"[Withdraw] Error parsing amount: {e}, value: {amount_value}")
                 amount_check_ok = False
-                logger.warning(f"[Withdraw] Amount is <= 0: {withdraw_amount}")
-                await message.answer("⚠️ Сумма вывода не найдена. Проверьте код и попробуйте ещё раз.")
+                await message.answer("⚠️ Ошибка при обработке суммы вывода. Попробуйте ещё раз.")
         else:
             amount_check_ok = False
             error_message = amount_result.get('error') or amount_result.get('message') or 'Не удалось получить сумму вывода'
-            logger.error(f"[Withdraw] Amount not found in response. Error: {error_message}")
+            logger.error(f"[Withdraw] Amount not found in response. Success: {success}, Error: {error_message}, Full response: {amount_result}")
             await message.answer(f"⚠️ {error_message}")
     except Exception as e:
         print(f"Error checking withdraw amount: {e}")

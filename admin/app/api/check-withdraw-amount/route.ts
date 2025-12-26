@@ -91,12 +91,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (result.success) {
+      const responseData = {
+        amount: result.amount,
+        transactionId: result.transactionId,
+        message: result.message || 'Сумма вывода успешно получена',
+      }
+      console.log(`[Check Withdraw Amount API] Returning success response:`, responseData)
       return NextResponse.json(
-        createApiResponse({
-          amount: result.amount,
-          transactionId: result.transactionId,
-          message: result.message || 'Сумма вывода успешно получена',
-        }, result.message || 'Сумма вывода успешно получена'),
+        createApiResponse(
+          responseData,
+          undefined,
+          result.message || 'Сумма вывода успешно получена'
+        ),
         { status: 200 }
       )
     }
