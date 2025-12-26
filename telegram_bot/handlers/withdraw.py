@@ -20,6 +20,9 @@ async def get_lang_from_state(state: FSMContext) -> str:
 @router.message(F.text.in_(['💸 Вывести', '💸 Чыгаруу']))
 async def withdraw_start(message: Message, state: FSMContext):
     """Начало процесса вывода - выбор казино"""
+    # Очищаем предыдущее состояние (если была незавершенная операция)
+    await state.clear()
+    
     lang = await get_lang_from_state(state)
     
     # Проверяем блокировку пользователя
