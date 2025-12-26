@@ -83,17 +83,24 @@ export async function checkWithdrawAmountCashdesk(
 
     if (data.summa !== undefined && data.summa !== null) {
       amount = parseFloat(String(data.summa))
+      console.log(`[Cashdesk Check Withdraw] Found summa (lowercase): ${data.summa}, parsed: ${amount}`)
     } else if (data.Summa !== undefined && data.Summa !== null) {
       amount = parseFloat(String(data.Summa))
+      console.log(`[Cashdesk Check Withdraw] Found Summa (capitalized): ${data.Summa}, parsed: ${amount}`)
+    } else {
+      console.log(`[Cashdesk Check Withdraw] No summa/Summa found in response. Available keys:`, Object.keys(data))
     }
 
-    // Берем абсолютное значение (API может вернуть отрицательное)
+    // Берем абсолютное значение (API может вернуть отрицательное, например -150)
     const absoluteAmount = Math.abs(amount)
+    console.log(`[Cashdesk Check Withdraw] Amount: ${amount}, Absolute amount: ${absoluteAmount}`)
 
     // API может возвращать success (маленькая) или Success (большая буква)
     const isSuccess = response.ok && (data.success === true || data.Success === true)
+    console.log(`[Cashdesk Check Withdraw] Success check: response.ok=${response.ok}, data.success=${data.success}, data.Success=${data.Success}, isSuccess=${isSuccess}`)
 
     if (isSuccess && absoluteAmount > 0) {
+      console.log(`[Cashdesk Check Withdraw] Returning success with amount: ${absoluteAmount}`)
       return {
         success: true,
         amount: absoluteAmount,
