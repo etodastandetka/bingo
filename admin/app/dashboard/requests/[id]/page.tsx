@@ -1383,6 +1383,32 @@ export default function RequestDetailPage() {
             </div>
       )}
 
+      {/* Кнопки подтверждения / отклонения для выводов в ожидании/отложенных */}
+      {(request.status === 'pending' || request.status === 'deferred') && request.requestType === 'withdraw' && (
+        <div className="mx-4 mb-4 flex space-x-3">
+          <button
+            onClick={() => {
+              setStatusModalAction('approved')
+              setStatusModalOpen(true)
+            }}
+            disabled={statusModalLoading}
+            className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors"
+          >
+            Подтвердить
+          </button>
+          <button
+            onClick={() => {
+              setStatusModalAction('rejected')
+              setStatusModalOpen(true)
+            }}
+            disabled={statusModalLoading}
+            className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-gray-700 text-white font-bold py-3 px-4 rounded-xl transition-colors"
+          >
+            Отклонить
+          </button>
+        </div>
+      )}
+
       {/* Ошибка казино (если есть) */}
       {request.casinoError && (
         <div className="mx-4 mb-4 bg-red-900 bg-opacity-30 rounded-2xl p-4 border border-red-700">
