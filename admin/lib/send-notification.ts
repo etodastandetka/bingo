@@ -66,11 +66,16 @@ export async function sendNotificationToUser(
   requestId?: number | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log(`[sendNotificationToUser] userId: ${userId.toString()}, bookmaker: ${bookmaker || 'null'}, requestId: ${requestId || 'null'}`)
+    
     const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
 
+    console.log(`[sendNotificationToUser] botToken: ${botToken ? 'configured' : 'NOT configured'}, bookmaker: ${bookmaker}`)
+
     if (!botToken) {
-      console.error('BOT_TOKEN not configured')
-      return { success: false, error: 'BOT_TOKEN not configured' }
+      const errorMsg = `BOT_TOKEN not configured for bookmaker: ${bookmaker || 'main'}`
+      console.error(`❌ [sendNotificationToUser] ${errorMsg}`)
+      return { success: false, error: errorMsg }
     }
 
     // Если есть requestId, удаляем сообщение "Ваша заявка отправлена" перед отправкой нового
@@ -110,9 +115,12 @@ export async function sendNotificationToUser(
     const telegramData = await telegramResponse.json()
 
     if (!telegramData.ok) {
-      console.error('Failed to send notification:', telegramData.description)
-      return { success: false, error: telegramData.description || 'Failed to send message' }
+      const errorMsg = `Telegram API error: ${telegramData.description || 'Unknown error'}`
+      console.error(`❌ [sendNotificationToUser] ${errorMsg}`, telegramData)
+      return { success: false, error: errorMsg }
     }
+
+    console.log(`✅ [sendNotificationToUser] Message sent successfully to user ${userId.toString()}, message_id: ${telegramData.result?.message_id}`)
 
     // Сохраняем сообщение в БД
     try {

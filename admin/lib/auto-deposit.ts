@@ -265,18 +265,25 @@ export async function matchAndProcessPayment(
 
       const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang)
       
+      console.log(`📨 [Auto-Deposit] Attempting to send notification to user ${request.userId.toString()}, bookmaker: ${request.bookmaker}, requestId: ${request.id}`)
+      
       // Передаем bookmaker и requestId для правильной отправки уведомления
-      await sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, request.id)
-      console.log(`📨 Notification sent to user ${request.userId.toString()} for request ${request.id}`)
+      const notificationResult = await sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, request.id)
+      
+      if (notificationResult.success) {
+        console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
+      } else {
+        console.error(`❌ [Auto-Deposit] Failed to send notification to user ${request.userId.toString()} for request ${request.id}: ${notificationResult.error}`)
+      }
       
       // Отправляем главное меню после уведомления
       const { sendMainMenuToUser } = await import('./send-notification')
       await sendMainMenuToUser(request.userId, request.bookmaker).catch((error) => {
-        console.warn('Failed to send main menu after autodeposit:', error)
+        console.warn('⚠️ [Auto-Deposit] Failed to send main menu after autodeposit:', error)
       })
     } catch (notificationError) {
-      // Игнорируем ошибки отправки уведомлений
-      console.warn('Failed to send notification after autodeposit:', notificationError)
+      // Логируем ошибки отправки уведомлений с деталями
+      console.error(`❌ [Auto-Deposit] Exception while sending notification after autodeposit for request ${request.id}:`, notificationError)
     }
 
     return {
