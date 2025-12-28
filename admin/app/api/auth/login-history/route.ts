@@ -179,7 +179,7 @@ export async function DELETE(request: NextRequest) {
 
     // Проверяем, является ли удаляемая запись текущей сессией
     const isCurrentSession = 
-      entryToDelete.user_id === user.id &&
+      entryToDelete.user_id === user.userId &&
       entryToDelete.ip_address === currentIp &&
       entryToDelete.user_agent === currentUserAgent
 
