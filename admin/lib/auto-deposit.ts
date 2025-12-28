@@ -12,6 +12,105 @@ interface MatchResult {
 }
 
 /**
+ * Проверка заявок старше 5 минут и поиск платежей для них
+ * Вызывается каждую секунду для мгновенного автопополнения
+ */
+export async function checkPendingRequestsForPayments(): Promise<void> {
+  try {
+    // Проверяем, включено ли автопополнение
+    const autodepositSetting = await prisma.botSetting.findUnique({
+      where: { key: 'autodeposit_enabled' },
+    })
+    
+    const isAutodepositEnabled = autodepositSetting && (
+      (typeof autodepositSetting.value === 'string' && (autodepositSetting.value.toLowerCase() === 'true' || autodepositSetting.value === '1')) ||
+      (typeof autodepositSetting.value === 'boolean' && autodepositSetting.value) ||
+      (typeof autodepositSetting.value === 'number' && autodepositSetting.value === 1) ||
+      (autodepositSetting.value !== null && String(autodepositSetting.value).toLowerCase() === 'true') ||
+      (autodepositSetting.value !== null && String(autodepositSetting.value) === '1')
+    )
+    
+    if (!isAutodepositEnabled) {
+      return
+    }
+
+    // Ищем заявки на пополнение со статусом pending старше 5 минут
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
+
+    const pendingRequests = await prisma.request.findMany({
+      where: {
+        requestType: 'deposit',
+        status: 'pending',
+        createdAt: {
+          gte: thirtyMinutesAgo, // Не старше 30 минут
+          lte: fiveMinutesAgo,    // Но старше 5 минут
+        },
+        // Исключаем заявки, которые уже имеют связанный обработанный платеж
+        incomingPayments: {
+          none: {
+            isProcessed: true,
+          },
+        },
+      },
+      include: {
+        incomingPayments: {
+          where: {
+            isProcessed: true,
+          },
+        },
+      },
+    })
+
+    if (pendingRequests.length === 0) {
+      return
+    }
+
+    console.log(`🔍 [Auto-Deposit Check] Found ${pendingRequests.length} pending requests older than 5 minutes`)
+
+    // Для каждой заявки ищем платежи по сумме
+    for (const request of pendingRequests) {
+      if (!request.amount) continue
+      if (request.incomingPayments && request.incomingPayments.length > 0) continue
+
+      const requestAmount = parseFloat(request.amount.toString())
+
+      // Ищем необработанные платежи с такой же суммой
+      const matchingPayments = await prisma.incomingPayment.findMany({
+        where: {
+          isProcessed: false,
+          requestId: null,
+          amount: requestAmount,
+          paymentDate: {
+            gte: new Date(request.createdAt.getTime() - 5 * 60 * 1000), // Платежи после создания заявки (с запасом)
+            lte: new Date(),
+          },
+        },
+        orderBy: {
+          paymentDate: 'asc',
+        },
+      })
+
+      if (matchingPayments.length > 0) {
+        // Берем первый платеж
+        const payment = matchingPayments[0]
+        console.log(`🎯 [Auto-Deposit Check] Found matching payment ${payment.id} for request ${request.id}, processing...`)
+        
+        // Обрабатываем платеж
+        const result = await matchAndProcessPayment(payment.id, requestAmount)
+        if (result.success) {
+          console.log(`✅ [Auto-Deposit Check] Successfully processed payment ${payment.id} for request ${request.id}`)
+        } else {
+          console.log(`⚠️ [Auto-Deposit Check] Failed to process payment ${payment.id} for request ${request.id}: ${result.message}`)
+        }
+      }
+    }
+  } catch (error: any) {
+    console.error(`❌ [Auto-Deposit Check] Error checking pending requests:`, error)
+  }
+}
+
+/**
  * Сопоставление платежа с заявкой и автоматическое пополнение
  * Ищет заявки на пополнение со статусом pending за последние 5 минут
  */

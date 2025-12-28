@@ -644,6 +644,16 @@ export async function startWatcher(): Promise<void> {
     console.warn('⚠️ Initial timeout check failed:', error.message)
   })
 
+  // Запускаем проверку заявок старше 5 минут каждую секунду для мгновенного автопополнения
+  const { checkPendingRequestsForPayments } = await import('./auto-deposit')
+  const autoDepositCheckInterval = setInterval(() => {
+    checkPendingRequestsForPayments().catch((error) => {
+      console.warn('⚠️ Auto-deposit check failed:', error.message)
+    })
+  }, 1000) // Каждую секунду
+
+  console.log('✅ Auto-deposit check started (every 1 second)')
+
   while (true) {
     try {
       const settings = await getWatcherSettings()
