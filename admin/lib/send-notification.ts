@@ -26,6 +26,52 @@ export function getBotTokenByBookmaker(bookmaker: string | null | undefined): st
 }
 
 /**
+ * Редактирование сообщения "Ваша заявка отправлена" на "Ваши средства зачислены"
+ */
+export async function editRequestCreatedMessage(
+  userId: bigint,
+  messageId: bigint | null,
+  newMessage: string,
+  bookmaker?: string | null
+): Promise<boolean> {
+  if (!messageId) return false
+
+  try {
+    const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
+    if (!botToken) {
+      console.warn(`[editRequestCreatedMessage] BOT_TOKEN not configured for bookmaker: ${bookmaker || 'main'}`)
+      return false
+    }
+
+    const editMessageUrl = `https://api.telegram.org/bot${botToken}/editMessageText`
+    const response = await fetch(editMessageUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: userId.toString(),
+        message_id: Number(messageId),
+        text: newMessage,
+        parse_mode: 'HTML',
+      })
+    })
+
+    const data = await response.json()
+    if (data.ok) {
+      console.log(`✅ [editRequestCreatedMessage] Message ${messageId} edited successfully for user ${userId}`)
+      return true
+    } else {
+      console.warn(`⚠️ [editRequestCreatedMessage] Failed to edit message ${messageId}: ${data.description}`)
+      return false
+    }
+  } catch (error) {
+    console.warn('Failed to edit request created message:', error)
+    return false
+  }
+}
+
+/**
  * Удаление сообщения "Ваша заявка отправлена" при успешном пополнении или отклонении
  */
 export async function deleteRequestCreatedMessage(
@@ -78,7 +124,7 @@ export async function sendNotificationToUser(
       return { success: false, error: errorMsg }
     }
 
-    // Если есть requestId, удаляем сообщение "Ваша заявка отправлена" перед отправкой нового
+    // Если есть requestId, редактируем сообщение "Ваша заявка отправлена" на новое сообщение
     if (requestId) {
       try {
         const request = await prisma.request.findUnique({
@@ -86,15 +132,54 @@ export async function sendNotificationToUser(
           select: { requestCreatedMessageId: true },
         })
         if (request?.requestCreatedMessageId) {
-          await deleteRequestCreatedMessage(userId, request.requestCreatedMessageId, bookmaker)
-          // Очищаем message_id после удаления
-          await prisma.request.update({
-            where: { id: requestId },
-            data: { requestCreatedMessageId: null },
-          })
+          // Пытаемся отредактировать сообщение вместо удаления
+          const edited = await editRequestCreatedMessage(userId, request.requestCreatedMessageId, message, bookmaker)
+          if (edited) {
+            // Если редактирование успешно, не отправляем новое сообщение
+            console.log(`✅ [sendNotificationToUser] Message ${request.requestCreatedMessageId} edited successfully, skipping new message send`)
+            // Очищаем message_id после редактирования
+            await prisma.request.update({
+              where: { id: requestId },
+              data: { requestCreatedMessageId: null },
+            })
+            // Сохраняем сообщение в БД
+            try {
+              let botType = 'main'
+              if (bookmaker) {
+                const normalized = bookmaker.toLowerCase()
+                if (normalized.includes('mostbet')) {
+                  botType = 'mostbet'
+                } else if (normalized.includes('1xbet') || normalized.includes('xbet')) {
+                  botType = '1xbet'
+                }
+              }
+              // Получаем message_id из отредактированного сообщения (оно то же самое)
+              await prisma.chatMessage.create({
+                data: {
+                  userId,
+                  messageText: message,
+                  messageType: 'text',
+                  direction: 'out',
+                  botType,
+                  telegramMessageId: request.requestCreatedMessageId,
+                },
+              })
+            } catch (dbError) {
+              console.warn('Failed to save edited notification to DB:', dbError)
+            }
+            return { success: true }
+          } else {
+            // Если редактирование не удалось, удаляем старое сообщение и отправляем новое
+            console.log(`⚠️ [sendNotificationToUser] Failed to edit message, deleting and sending new one`)
+            await deleteRequestCreatedMessage(userId, request.requestCreatedMessageId, bookmaker)
+            await prisma.request.update({
+              where: { id: requestId },
+              data: { requestCreatedMessageId: null },
+            })
+          }
         }
       } catch (error) {
-        console.warn('Failed to delete request created message:', error)
+        console.warn('Failed to edit/delete request created message:', error)
       }
     }
 
