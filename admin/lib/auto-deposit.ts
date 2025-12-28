@@ -3,7 +3,7 @@
  */
 import { prisma } from './prisma'
 import { depositToCasino } from './deposit-balance'
-import { sendNotificationToUser, formatDepositMessage, getAdminUsername } from './send-notification'
+import { sendNotificationToUser, formatDepositMessage, getAdminUsername, sendMainMenuToUser } from './send-notification'
 
 interface MatchResult {
   success: boolean
@@ -250,37 +250,37 @@ export async function matchAndProcessPayment(
       `✅ Auto-deposit successful: Request ${request.id}, Account ${request.accountId}`
     )
 
-    // Отправляем уведомление пользователю
+    // Отправляем уведомление пользователю (такая же логика, как при подтверждении админом)
     try {
+      // Получаем язык пользователя
       const user = await prisma.botUser.findUnique({
         where: { userId: request.userId },
         select: { language: true },
       }).catch(() => null)
       const lang = user?.language || 'ru'
 
+      // Получаем username админа
       const adminUsername = await getAdminUsername()
       const amount = parseFloat(request.amount?.toString() || '0')
       const casino = request.bookmaker || 'Неизвестно'
       const accountId = request.accountId || ''
 
+      // Формируем сообщение (такое же, как при подтверждении админом)
       const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang)
       
-      console.log(`📨 [Auto-Deposit] Attempting to send notification to user ${request.userId.toString()}, bookmaker: ${request.bookmaker}, requestId: ${request.id}`)
+      console.log(`📨 [Auto-Deposit] Sending notification to user ${request.userId.toString()}, bookmaker: ${request.bookmaker}, requestId: ${request.id}`)
       
+      // Отправляем уведомление (такая же логика, как при подтверждении админом)
       // Передаем bookmaker и requestId для правильной отправки уведомления
-      const notificationResult = await sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, request.id)
-      
-      if (notificationResult.success) {
-        console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
-      } else {
-        console.error(`❌ [Auto-Deposit] Failed to send notification to user ${request.userId.toString()} for request ${request.id}: ${notificationResult.error}`)
-      }
-      
-      // Отправляем главное меню после уведомления
-      const { sendMainMenuToUser } = await import('./send-notification')
-      await sendMainMenuToUser(request.userId, request.bookmaker).catch((error) => {
-        console.warn('⚠️ [Auto-Deposit] Failed to send main menu after autodeposit:', error)
-      })
+      sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, request.id)
+        .then(() => {
+          console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
+          // После отправки уведомления отправляем главное меню (как при подтверждении админом)
+          return sendMainMenuToUser(request.userId, request.bookmaker)
+        })
+        .catch((error) => {
+          console.error(`❌ [Auto-Deposit] Error sending notification or main menu for request ${request.id}:`, error)
+        })
     } catch (notificationError) {
       // Логируем ошибки отправки уведомлений с деталями
       console.error(`❌ [Auto-Deposit] Exception while sending notification after autodeposit for request ${request.id}:`, notificationError)
