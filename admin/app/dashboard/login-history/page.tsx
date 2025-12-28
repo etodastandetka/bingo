@@ -88,6 +88,12 @@ export default function LoginHistoryPage() {
         setHistory(history.filter(h => h.id !== selectedId))
         setShowDeleteModal(false)
         setSelectedId(null)
+        
+        // Если это была текущая сессия - перенаправляем на страницу входа
+        if (data.data?.loggedOut) {
+          window.location.href = '/login'
+          return
+        }
       } else {
         alert(data.error || 'Не удалось удалить запись')
       }

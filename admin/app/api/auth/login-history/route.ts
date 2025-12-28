@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    requireAuth(request)
+    const user = requireAuth(request)
 
     const body = await request.json()
     const { id } = body
@@ -139,6 +139,51 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    // Получаем текущий IP и user-agent для сравнения
+    const currentIp = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || 
+                     request.headers.get('x-real-ip') || 
+                     request.ip ||
+                     'unknown'
+    const currentUserAgent = request.headers.get('user-agent') || null
+
+    // Получаем информацию об удаляемой записи
+    let entryToDelete: any = null
+    try {
+      if ((prisma as any).adminLoginHistory) {
+        entryToDelete = await (prisma as any).adminLoginHistory.findUnique({
+          where: { id: parseInt(id) },
+        })
+      } else {
+        const result = await prisma.$queryRaw<any[]>`
+          SELECT 
+            id,
+            user_id,
+            ip_address,
+            user_agent,
+            device
+          FROM admin_login_history 
+          WHERE id = ${parseInt(id)}
+        `
+        entryToDelete = result[0] || null
+      }
+    } catch (error: any) {
+      // Игнорируем ошибки получения записи
+    }
+
+    if (!entryToDelete) {
+      return NextResponse.json(
+        createApiResponse(null, 'Login history entry not found'),
+        { status: 404 }
+      )
+    }
+
+    // Проверяем, является ли удаляемая запись текущей сессией
+    const isCurrentSession = 
+      entryToDelete.user_id === user.id &&
+      entryToDelete.ip_address === currentIp &&
+      entryToDelete.user_agent === currentUserAgent
+
+    // Удаляем запись
     try {
       if ((prisma as any).adminLoginHistory) {
         await (prisma as any).adminLoginHistory.delete({
@@ -158,6 +203,19 @@ export async function DELETE(request: NextRequest) {
         )
       }
       throw error
+    }
+
+    // Если это текущая сессия - выходим из системы
+    if (isCurrentSession) {
+      const response = NextResponse.json(
+        createApiResponse({ 
+          message: 'Login history entry deleted successfully',
+          loggedOut: true 
+        })
+      )
+      // Удаляем cookie авторизации
+      response.cookies.delete('auth_token')
+      return response
     }
 
     return NextResponse.json(
