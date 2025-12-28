@@ -24,11 +24,25 @@ async def main():
     from aiogram.client.telegram import TelegramAPIServer
     from aiogram.exceptions import TelegramNetworkError
     
-    # Создаем сессию с таймаутом как числом (в секундах) для aiogram
-    # aiogram ожидает числовое значение, а не ClientTimeout объект
-    session = AiohttpSession(
-        api=TelegramAPIServer.from_base('https://api.telegram.org'),
-        timeout=30.0  # 30 секунд в числовом формате
+    # Создаем кастомную сессию, которая возвращает числовой таймаут
+    # Проблема: aiogram пытается сложить bot.session.timeout (ClientTimeout) с int
+    # Решение: создаем сессию без таймаута и переопределяем свойство timeout
+    class CustomAiohttpSession(AiohttpSession):
+        def __init__(self, *args, **kwargs):
+            # Не передаем timeout в конструктор
+            kwargs.pop('timeout', None)
+            super().__init__(*args, **kwargs)
+            # Сохраняем числовое значение таймаута
+            self._numeric_timeout = 30.0
+        
+        @property
+        def timeout(self):
+            # Возвращаем числовое значение вместо ClientTimeout
+            return self._numeric_timeout
+    
+    # Создаем кастомную сессию
+    session = CustomAiohttpSession(
+        api=TelegramAPIServer.from_base('https://api.telegram.org')
     )
     
     # Создаем бота
