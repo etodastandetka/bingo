@@ -49,11 +49,11 @@ export async function matchAndProcessPayment(
     }
   }
 
-  // Ищем заявки на пополнение со статусом pending за последние 10 минут (увеличено)
-  const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+  // Ищем заявки на пополнение со статусом pending за последние 30 минут (увеличено для надежности)
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
 
   console.log(
-    `🔍 Matching payment ${paymentId}: looking for requests with amount ${amount} created after ${tenMinutesAgo.toISOString()}`
+    `🔍 Matching payment ${paymentId}: looking for requests with amount ${amount} created after ${thirtyMinutesAgo.toISOString()}`
   )
 
   const matchingRequests = await prisma.request.findMany({
@@ -61,7 +61,7 @@ export async function matchAndProcessPayment(
       requestType: 'deposit',
       status: 'pending',
       createdAt: {
-        gte: tenMinutesAgo,
+        gte: thirtyMinutesAgo,
       },
       // Исключаем заявки, которые уже имеют связанный обработанный платеж
       incomingPayments: {
@@ -83,7 +83,7 @@ export async function matchAndProcessPayment(
   })
 
   console.log(
-    `📋 Found ${matchingRequests.length} pending deposit requests in the last 10 minutes (without processed payments)`
+    `📋 Found ${matchingRequests.length} pending deposit requests in the last 30 minutes (without processed payments)`
   )
 
   // Фильтруем вручную, т.к. Prisma может иметь проблемы с точным сравнением Decimal
@@ -106,7 +106,7 @@ export async function matchAndProcessPayment(
     const diff = Math.abs(reqAmount - amount)
     const isMatch = diff < 0.01 // Точность до 1 копейки
     
-    console.log(`[Auto-Deposit] Request ${req.id}: amount=${reqAmount}, diff=${diff}, match=${isMatch}`)
+    console.log(`[Auto-Deposit] Request ${req.id}: amount=${reqAmount}, payment=${amount}, diff=${diff.toFixed(4)}, match=${isMatch}, createdAt=${req.createdAt.toISOString()}`)
     
     return isMatch
   })
