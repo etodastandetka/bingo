@@ -26,19 +26,28 @@ async def main():
     
     # Создаем кастомную сессию, которая возвращает числовой таймаут
     # Проблема: aiogram пытается сложить bot.session.timeout (ClientTimeout) с int
-    # Решение: создаем сессию без таймаута и переопределяем свойство timeout
+    # Решение: создаем сессию с переопределенным свойством timeout (getter + setter)
     class CustomAiohttpSession(AiohttpSession):
         def __init__(self, *args, **kwargs):
-            # Не передаем timeout в конструктор
-            kwargs.pop('timeout', None)
+            # Сохраняем числовое значение таймаута перед вызовом super()
+            self._numeric_timeout = kwargs.pop('timeout', 30.0)
+            # Если передан ClientTimeout, извлекаем числовое значение
+            if isinstance(self._numeric_timeout, aiohttp.ClientTimeout):
+                self._numeric_timeout = self._numeric_timeout.total or 30.0
             super().__init__(*args, **kwargs)
-            # Сохраняем числовое значение таймаута
-            self._numeric_timeout = 30.0
         
         @property
         def timeout(self):
             # Возвращаем числовое значение вместо ClientTimeout
             return self._numeric_timeout
+        
+        @timeout.setter
+        def timeout(self, value):
+            # Сохраняем числовое значение, даже если передан ClientTimeout
+            if isinstance(value, aiohttp.ClientTimeout):
+                self._numeric_timeout = value.total or 30.0
+            else:
+                self._numeric_timeout = float(value) if value is not None else 30.0
     
     # Создаем кастомную сессию
     session = CustomAiohttpSession(
