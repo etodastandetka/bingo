@@ -122,11 +122,17 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
                 )
                 logger.debug(f"[Timer] Updated message {message_id} to {timer_text}")
             except Exception as e:
-                # Если сообщение было удалено или не может быть отредактировано, останавливаем таймер
-                logger.warning(f"[Timer] Could not update message {message_id}: {e}")
-                # Не останавливаем таймер сразу, продолжаем попытки
-                await asyncio.sleep(1)
-                continue
+                error_str = str(e).lower()
+                # Если сообщение было удалено или не найдено, останавливаем таймер
+                if 'not found' in error_str or 'message to edit not found' in error_str or 'message can\'t be edited' in error_str:
+                    logger.info(f"[Timer] Message {message_id} not found or can't be edited, stopping timer: {e}")
+                    active_timers[timer_key] = False
+                    break
+                else:
+                    # Для других ошибок логируем предупреждение и продолжаем
+                    logger.warning(f"[Timer] Could not update message {message_id}: {e}")
+                    await asyncio.sleep(1)
+                    continue
             
             # Ждем 1 секунду до следующего обновления
             await asyncio.sleep(1)
