@@ -12,8 +12,9 @@ interface MatchResult {
 }
 
 /**
- * Проверка заявок старше 5 минут и поиск платежей для них
+ * Проверка заявок младше 5 минут и поиск платежей для них
  * Вызывается каждую секунду для мгновенного автопополнения
+ * Заявки старше 5 минут пропускаются (не обрабатываются автопополнением)
  */
 export async function checkPendingRequestsForPayments(): Promise<void> {
   try {
@@ -34,17 +35,18 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
       return
     }
 
-    // Ищем заявки на пополнение со статусом pending старше 5 минут
+    // Ищем заявки на пополнение со статусом pending МЛАДШЕ 5 минут
+    // Заявки старше 5 минут пропускаются (не обрабатываются автопополнением)
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
+    const now = new Date()
 
     const pendingRequests = await prisma.request.findMany({
       where: {
         requestType: 'deposit',
         status: 'pending',
         createdAt: {
-          gte: thirtyMinutesAgo, // Не старше 30 минут
-          lte: fiveMinutesAgo,    // Но старше 5 минут
+          gte: fiveMinutesAgo, // Не старше 5 минут (младше 5 минут)
+          lte: now,            // Но не в будущем
         },
         // Исключаем заявки, которые уже имеют связанный обработанный платеж
         incomingPayments: {
@@ -66,7 +68,7 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
       return
     }
 
-    console.log(`🔍 [Auto-Deposit Check] Found ${pendingRequests.length} pending requests older than 5 minutes`)
+    console.log(`🔍 [Auto-Deposit Check] Found ${pendingRequests.length} pending requests younger than 5 minutes`)
 
     // Для каждой заявки ищем платежи по сумме
     for (const request of pendingRequests) {
