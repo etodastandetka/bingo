@@ -265,8 +265,9 @@ export async function matchAndProcessPayment(
 
       const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang)
       
-      await sendNotificationToUser(request.userId, notificationMessage)
-      console.log(`📨 Notification sent to user ${request.userId.toString()}`)
+      // Передаем bookmaker и requestId для правильной отправки уведомления
+      await sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, request.id)
+      console.log(`📨 Notification sent to user ${request.userId.toString()} for request ${request.id}`)
       
       // Отправляем главное меню после уведомления
       const { sendMainMenuToUser } = await import('./send-notification')
