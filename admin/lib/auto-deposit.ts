@@ -213,12 +213,16 @@ export async function matchAndProcessPayment(
   }
 
   // Пополняем баланс через казино API (использует localhost API)
+  const depositStartTime = Date.now()
   try {
+    console.log(`⏱️ [Auto-Deposit] Starting deposit for request ${request.id} at ${new Date().toISOString()}`)
     const depositResult = await depositToCasino(
       request.bookmaker,
       request.accountId,
       parseFloat(request.amount?.toString() || '0')
     )
+    const depositDuration = Date.now() - depositStartTime
+    console.log(`⏱️ [Auto-Deposit] Deposit completed for request ${request.id} in ${depositDuration}ms`)
 
     if (!depositResult.success) {
       // Сохраняем ошибку казино в базе данных перед выбросом исключения
@@ -250,17 +254,16 @@ export async function matchAndProcessPayment(
       `✅ Auto-deposit successful: Request ${request.id}, Account ${request.accountId}`
     )
 
-    // Отправляем уведомление пользователю (такая же логика, как при подтверждении админом)
-    try {
-      // Получаем язык пользователя
-      const user = await prisma.botUser.findUnique({
+    // Отправляем уведомление пользователю асинхронно (не блокируем ответ)
+    // Используем Promise.all для параллельного получения данных
+    Promise.all([
+      prisma.botUser.findUnique({
         where: { userId: request.userId },
         select: { language: true },
-      }).catch(() => null)
+      }).catch(() => null),
+      getAdminUsername()
+    ]).then(([user, adminUsername]) => {
       const lang = user?.language || 'ru'
-
-      // Получаем username админа
-      const adminUsername = await getAdminUsername()
       const amount = parseFloat(request.amount?.toString() || '0')
       const casino = request.bookmaker || 'Неизвестно'
       const accountId = request.accountId || ''
@@ -272,7 +275,7 @@ export async function matchAndProcessPayment(
       
       // Отправляем уведомление (такая же логика, как при подтверждении админом)
       // Передаем bookmaker и requestId для правильной отправки уведомления
-      sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, request.id)
+      return sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, request.id)
         .then(() => {
           console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
           // После отправки уведомления отправляем главное меню (как при подтверждении админом)
@@ -281,10 +284,9 @@ export async function matchAndProcessPayment(
         .catch((error) => {
           console.error(`❌ [Auto-Deposit] Error sending notification or main menu for request ${request.id}:`, error)
         })
-    } catch (notificationError) {
-      // Логируем ошибки отправки уведомлений с деталями
-      console.error(`❌ [Auto-Deposit] Exception while sending notification after autodeposit for request ${request.id}:`, notificationError)
-    }
+    }).catch((error) => {
+      console.error(`❌ [Auto-Deposit] Exception while preparing notification for request ${request.id}:`, error)
+    })
 
     return {
       success: true,
