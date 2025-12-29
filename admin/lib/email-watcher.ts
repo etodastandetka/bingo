@@ -42,16 +42,30 @@ async function getWatcherSettings(): Promise<WatcherSettings> {
   const password = activeRequisite?.password || ''
 
   // Получаем только флаг включен/выключен из БД
-  const enabledSetting = await prisma.botSetting.findUnique({
+  // Сначала проверяем BotConfiguration (новый способ), затем BotSetting (старый способ для совместимости)
+  let autodepositValue: string | null = null
+  
+  const botConfigSetting = await prisma.botConfiguration.findUnique({
     where: { key: 'autodeposit_enabled' },
   })
+  
+  if (botConfigSetting) {
+    autodepositValue = botConfigSetting.value
+  } else {
+    const botSetting = await prisma.botSetting.findUnique({
+      where: { key: 'autodeposit_enabled' },
+    })
+    if (botSetting) {
+      autodepositValue = botSetting.value
+    }
+  }
 
   // Фиксированные настройки для Timeweb
   // IMAP сервер: imap.timeweb.ru
   // Порт SSL: 993
   // Порт STARTTLS: 143 (не используется, используем SSL)
   return {
-    enabled: enabledSetting?.value === '1',
+    enabled: autodepositValue === '1' || autodepositValue?.toLowerCase() === 'true',
     imapHost: 'imap.timeweb.ru', // Timeweb IMAP сервер
     email,
     password,

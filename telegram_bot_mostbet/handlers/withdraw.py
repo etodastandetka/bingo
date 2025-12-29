@@ -304,7 +304,15 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
         
         amount_value = amount_result.get('data', {}).get('amount') if amount_result.get('success') else None
         if amount_value is not None:
-            withdraw_amount = amount_value
+            # Явно преобразуем в float для правильного парсинга суммы
+            try:
+                withdraw_amount = float(amount_value)
+            except (ValueError, TypeError):
+                withdraw_amount = 0
+                amount_check_ok = False
+                await message.answer("⚠️ Ошибка при обработке суммы вывода. Проверьте код и попробуйте ещё раз.")
+                return
+            
             if withdraw_amount <= 0:
                 amount_check_ok = False
                 await message.answer("⚠️ Сумма вывода не найдена. Проверьте код и попробуйте ещё раз.")

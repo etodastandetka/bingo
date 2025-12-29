@@ -251,7 +251,9 @@ export async function checkWithdrawAmountMostbet(
     }
 
     const transactionId = withdrawal.transactionId
-    const amount = withdrawal.amount || 0
+    // Явно преобразуем amount в число (может прийти как строка или число)
+    const amount = withdrawal.amount != null ? parseFloat(String(withdrawal.amount)) : 0
+    console.log(`[Mostbet Check Withdraw] Extracted amount from list: ${withdrawal.amount} (type: ${typeof withdrawal.amount}), parsed: ${amount}`)
 
     // Шаг 2: Подтверждаем вывод кодом
     // Генерируем новый timestamp для запроса подтверждения (каждый запрос должен иметь свой timestamp)
@@ -321,12 +323,16 @@ export async function checkWithdrawAmountMostbet(
     // По документации при успешном подтверждении возвращается статус NEW или COMPLETED
     // Проверяем успешный ответ и наличие transactionId
     if (confirmResponse.ok && confirmData.transactionId) {
-      const finalAmount = confirmData.amount || amount || 0
+      // Используем amount из confirmData, если есть, иначе из списка (amount)
+      const finalAmount = confirmData.amount != null 
+        ? parseFloat(String(confirmData.amount))
+        : (amount || 0)
+      console.log(`[Mostbet Check Withdraw] Final amount: confirmData.amount=${confirmData.amount}, list amount=${amount}, final=${finalAmount}`)
       // Статус может быть NEW, COMPLETED, PROCESSING и т.д.
       // Любой статус при успешном ответе означает, что транзакция подтверждена
       return {
         success: true,
-        amount: parseFloat(String(finalAmount)),
+        amount: finalAmount,
         transactionId: transactionId,
         message: 'Withdrawal confirmed successfully',
       }

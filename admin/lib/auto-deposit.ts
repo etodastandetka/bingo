@@ -19,16 +19,28 @@ interface MatchResult {
 export async function checkPendingRequestsForPayments(): Promise<void> {
   try {
     // Проверяем, включено ли автопополнение
-    const autodepositSetting = await prisma.botSetting.findUnique({
+    // Сначала проверяем BotConfiguration (новый способ), затем BotSetting (старый способ для совместимости)
+    let autodepositValue: string | null = null
+    
+    const botConfigSetting = await prisma.botConfiguration.findUnique({
       where: { key: 'autodeposit_enabled' },
     })
     
-    const isAutodepositEnabled = autodepositSetting && (
-      (typeof autodepositSetting.value === 'string' && (autodepositSetting.value.toLowerCase() === 'true' || autodepositSetting.value === '1')) ||
-      (typeof autodepositSetting.value === 'boolean' && autodepositSetting.value) ||
-      (typeof autodepositSetting.value === 'number' && autodepositSetting.value === 1) ||
-      (autodepositSetting.value !== null && String(autodepositSetting.value).toLowerCase() === 'true') ||
-      (autodepositSetting.value !== null && String(autodepositSetting.value) === '1')
+    if (botConfigSetting) {
+      autodepositValue = botConfigSetting.value
+    } else {
+      const botSetting = await prisma.botSetting.findUnique({
+        where: { key: 'autodeposit_enabled' },
+      })
+      if (botSetting) {
+        autodepositValue = botSetting.value
+      }
+    }
+    
+    const isAutodepositEnabled = autodepositValue && (
+      (typeof autodepositValue === 'string' && (autodepositValue.toLowerCase() === 'true' || autodepositValue === '1')) ||
+      (autodepositValue !== null && String(autodepositValue).toLowerCase() === 'true') ||
+      (autodepositValue !== null && String(autodepositValue) === '1')
     )
     
     if (!isAutodepositEnabled) {
@@ -121,23 +133,35 @@ export async function matchAndProcessPayment(
   amount: number
 ): Promise<MatchResult> {
   // Проверяем, включено ли автопополнение
-  const autodepositSetting = await prisma.botSetting.findUnique({
+  // Сначала проверяем BotConfiguration (новый способ), затем BotSetting (старый способ для совместимости)
+  let autodepositValue: string | null = null
+  
+  const botConfigSetting = await prisma.botConfiguration.findUnique({
     where: { key: 'autodeposit_enabled' },
   })
   
+  if (botConfigSetting) {
+    autodepositValue = botConfigSetting.value
+  } else {
+    const botSetting = await prisma.botSetting.findUnique({
+      where: { key: 'autodeposit_enabled' },
+    })
+    if (botSetting) {
+      autodepositValue = botSetting.value
+    }
+  }
+  
   console.log(`[Auto-Deposit] Checking autodeposit setting:`, {
-    found: !!autodepositSetting,
-    value: autodepositSetting?.value,
-    valueType: typeof autodepositSetting?.value,
-    valueString: autodepositSetting?.value ? String(autodepositSetting.value) : null
+    found: !!autodepositValue,
+    value: autodepositValue,
+    valueType: typeof autodepositValue,
+    valueString: autodepositValue ? String(autodepositValue) : null
   })
   
-  const isAutodepositEnabled = autodepositSetting && (
-    (typeof autodepositSetting.value === 'string' && (autodepositSetting.value.toLowerCase() === 'true' || autodepositSetting.value === '1')) ||
-    (typeof autodepositSetting.value === 'boolean' && autodepositSetting.value) ||
-    (typeof autodepositSetting.value === 'number' && autodepositSetting.value === 1) ||
-    (autodepositSetting.value !== null && String(autodepositSetting.value).toLowerCase() === 'true') ||
-    (autodepositSetting.value !== null && String(autodepositSetting.value) === '1')
+  const isAutodepositEnabled = autodepositValue && (
+    (typeof autodepositValue === 'string' && (autodepositValue.toLowerCase() === 'true' || autodepositValue === '1')) ||
+    (autodepositValue !== null && String(autodepositValue).toLowerCase() === 'true') ||
+    (autodepositValue !== null && String(autodepositValue) === '1')
   )
   
   console.log(`[Auto-Deposit] Autodeposit enabled: ${isAutodepositEnabled}`)
@@ -358,7 +382,7 @@ export async function matchAndProcessPayment(
     // Отправляем уведомление пользователю асинхронно (не блокируем ответ)
     // Используем Promise.all для параллельного получения данных
     Promise.all([
-      prisma.botUser.findUnique({
+      prisma.botUser.findUnique({ 
         where: { userId: request.userId },
         select: { language: true },
       }).catch(() => null),
