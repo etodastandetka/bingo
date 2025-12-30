@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       `0015qr.demirbank.kg` +  // Под-тег 00: домен
       `01047001` +              // Под-тег 01: короткий тип (7001)
       `10${requisiteLen}${requisite}` +  // Под-тег 10: реквизит
-      `120211130212`            // Под-теги 12, 13: дополнительные поля
+      `120212130212`            // Под-теги 12, 13: дополнительные поля (12=12 запретить редактирование суммы, 13=12 запретить редактирование ID плательщика)
     )
     const merchantAccountLen = merchantAccountValue.length.toString().padStart(2, '0')
     
