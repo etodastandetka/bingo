@@ -68,11 +68,24 @@ export async function POST(request: NextRequest) {
     // Формируем TLV структуру
     const requisiteLen = requisite.length.toString().padStart(2, '0')
     
+    // Формируем дополнительное поле для комментария (под-тег 35)
+    // Структура: key, label, value, title, visible_state
+    const commentValue = 'пополнение @bingokg_bot'
+    const commentData = JSON.stringify({
+      key: 'comment',
+      label: 'Комментарий',
+      value: commentValue,
+      title: commentValue,
+      visible_state: '11' // Отображается пользователю
+    })
+    const commentDataLen = commentData.length.toString().padStart(2, '0')
+    
     const merchantAccountValue = (
       `0015qr.demirbank.kg` +  // Под-тег 00: домен
       `01047001` +              // Под-тег 01: короткий тип (7001)
       `10${requisiteLen}${requisite}` +  // Под-тег 10: реквизит
-      `120212130212`            // Под-теги 12, 13: дополнительные поля (12=12 запретить редактирование суммы, 13=12 запретить редактирование ID плательщика)
+      `120212130212` +          // Под-теги 12, 13: дополнительные поля (12=12 запретить редактирование суммы, 13=12 запретить редактирование ID плательщика)
+      `35${commentDataLen}${commentData}`  // Под-тег 35: комментарий к платежу
     )
     const merchantAccountLen = merchantAccountValue.length.toString().padStart(2, '0')
     
