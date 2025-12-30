@@ -432,8 +432,11 @@ export async function matchAndProcessPayment(
       const casino = request.bookmaker || 'Неизвестно'
       const accountId = request.accountId || ''
 
+      // Для автопополнения всегда используем 1s
+      const processingTime = '1s'
+
       // Формируем сообщение (такое же, как при подтверждении админом)
-      const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang)
+      const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
       
       console.log(`📨 [Auto-Deposit] Sending notification to user ${request.userId.toString()}, bookmaker: ${request.bookmaker}, requestId: ${request.id}`)
       

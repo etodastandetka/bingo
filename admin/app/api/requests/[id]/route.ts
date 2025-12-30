@@ -209,7 +209,39 @@ export async function PATCH(
           // Успешное пополнение или вывод
 
           if (currentRequest.requestType === 'deposit') {
-            notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang)
+            // Для пополнения вычисляем время обработки
+            let processingTime: string | null = null
+            if (updatedRequest.createdAt && updatedRequest.processedAt) {
+              const createdAt = new Date(updatedRequest.createdAt)
+              const processedAt = new Date(updatedRequest.processedAt)
+              const diffMs = processedAt.getTime() - createdAt.getTime()
+              
+              if (diffMs > 0) {
+                const diffSeconds = Math.floor(diffMs / 1000)
+                const diffMinutes = Math.floor(diffSeconds / 60)
+                const diffHours = Math.floor(diffMinutes / 60)
+                
+                if (diffHours > 0) {
+                  processingTime = `${diffHours} Hour${diffHours > 1 ? 's' : ''}`
+                } else if (diffMinutes > 0) {
+                  const remainingSeconds = diffSeconds % 60
+                  if (remainingSeconds > 0) {
+                    processingTime = `${diffMinutes} Minute${diffMinutes > 1 ? 's' : ''} ${remainingSeconds}s`
+                  } else {
+                    processingTime = `${diffMinutes} Minute${diffMinutes > 1 ? 's' : ''}`
+                  }
+                } else {
+                  processingTime = `${diffSeconds}s`
+                }
+              }
+            }
+            
+            // Если автопополнение или время не вычислено - используем 1s
+            if (!processingTime || updatedRequest.processedBy === 'автопополнение' || updatedRequest.processedBy === 'autodeposit') {
+              processingTime = '1s'
+            }
+            
+            notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
           } else {
             // Для вывода используем новый формат с временем обработки и банком
             // Вычисляем время обработки
@@ -324,14 +356,11 @@ export async function PATCH(
                 console.error('Failed to send withdrawal notifications:', error)
               })
           } else {
-            // Для пополнения используем старую логику
-            sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, updatedRequest.id)
-              .then(() => {
-                // После отправки уведомления отправляем главное меню
-                return sendMainMenuToUser(currentRequest.userId, updatedRequest.bookmaker)
-              })
+            // Для пополнения отправляем сообщение с инлайн кнопкой "Главное меню"
+            const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
+            sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
               .catch((error) => {
-                console.error('Failed to send notification or main menu:', error)
+                console.error('Failed to send deposit notification with main menu button:', error)
               })
           }
         }

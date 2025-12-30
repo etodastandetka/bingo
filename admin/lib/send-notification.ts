@@ -269,22 +269,31 @@ export async function getAdminUsername(): Promise<string> {
 }
 
 /**
- * Формирование сообщения о пополнении
+ * Формирование сообщения о пополнении (новый формат)
  */
-export function formatDepositMessage(amount: number, casino: string, accountId: string, adminUsername: string, lang: string = 'ru'): string {
-  if (lang === 'ky') {
-    return `✅ Ваши средства зачислены!\n\n` +
-           `💰 Сумма: ${amount.toFixed(2)} KGS\n` +
-           `🎰 Казино: ${casino}\n` +
-           `🆔 ID: ${accountId}\n\n` +
-           `Эгер кандайдыр бир көйгөйлөр болсо, ${adminUsername} менен байланышыңыз.`
+export function formatDepositMessage(
+  amount: number, 
+  casino: string, 
+  accountId: string, 
+  adminUsername: string, 
+  lang: string = 'ru',
+  processingTime?: string | null
+): string {
+  // Формируем время обработки
+  let timeText = '1s' // По умолчанию для автопополнения
+  if (processingTime) {
+    timeText = processingTime
   }
   
-  return `✅ Ваши средства зачислены!\n\n` +
-         `💰 Сумма: ${amount.toFixed(2)} KGS\n` +
-         `🎰 Казино: ${casino}\n` +
-         `🆔 ID: ${accountId}\n\n` +
-         `Если есть какие-то проблемы, пишите ${adminUsername}.`
+  if (lang === 'ky') {
+    return `✅   ${timeText}\n` +
+           `💸   ${amount.toFixed(2)} KGS\n` +
+           `🆔   ${accountId}`
+  }
+  
+  return `✅   ${timeText}\n` +
+         `💸   ${amount.toFixed(2)} KGS\n` +
+         `🆔   ${accountId}`
 }
 
 /**
