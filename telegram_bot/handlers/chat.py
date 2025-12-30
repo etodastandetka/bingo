@@ -182,11 +182,13 @@ async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
 @router.message(F.photo)
 async def chat_message_photo(message: Message, state: FSMContext, bot: Bot):
     """Обработка фото в чате"""
-    # Проверяем, что пользователь не находится в процессе вывода (где требуется фото QR)
+    # Проверяем, что пользователь не находится в процессе депозита или вывода (где требуется фото)
     current_state = await state.get_state()
-    if current_state and 'withdraw' in str(current_state).lower():
-        # Если пользователь в процессе вывода, не обрабатываем как сообщение чата
-        return
+    if current_state:
+        state_str = str(current_state).lower()
+        # Если пользователь в процессе депозита или вывода, не обрабатываем как сообщение чата
+        if 'withdraw' in state_str or 'deposit' in state_str:
+            return
     
     user_id = message.from_user.id
     

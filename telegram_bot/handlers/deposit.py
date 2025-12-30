@@ -226,9 +226,15 @@ async def deposit_start(message: Message, state: FSMContext):
     )
     await state.set_state(DepositStates.waiting_for_casino)
 
-@router.callback_query(F.data.startswith('casino_'), DepositStates.waiting_for_casino)
+@router.callback_query(F.data.startswith('casino_'))
 async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
     """Казино выбрано, запрашиваем ID счета"""
+    # Проверяем текущее состояние - если не в процессе пополнения, начинаем заново
+    current_state = await state.get_state()
+    if current_state and 'deposit' not in str(current_state).lower():
+        # Если пользователь не в процессе пополнения, очищаем состояние и начинаем заново
+        await state.clear()
+    
     lang = await get_lang_from_state(state)
     casino_id = callback.data.replace('casino_', '')
     casino_name = next((c['name'] for c in Config.CASINOS if c['id'] == casino_id), casino_id)
