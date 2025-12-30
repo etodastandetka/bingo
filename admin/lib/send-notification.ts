@@ -288,22 +288,85 @@ export function formatDepositMessage(amount: number, casino: string, accountId: 
 }
 
 /**
- * Формирование сообщения о выводе
+ * Формирование инструкции для вывода (перед сообщением о выводе)
  */
-export function formatWithdrawMessage(amount: number, casino: string, accountId: string, adminUsername: string, lang: string = 'ru'): string {
-  if (lang === 'ky') {
-    return `✅ Ваши средства выведены!\n\n` +
-           `💰 Сумма: ${amount.toFixed(2)} KGS\n` +
-           `🎰 Казино: ${casino}\n` +
-           `🆔 ID: ${accountId}\n\n` +
-           `Эгер кандайдыр бир көйгөйлөр болсо, ${adminUsername} менен байланышыңыз.`
+export function formatWithdrawInstruction(casino: string): string {
+  const casinoLower = casino.toLowerCase()
+  const is888starz = casinoLower.includes('888starz') || casinoLower.includes('888')
+  
+  if (is888starz) {
+    return `📍 Заходим👇🏻\n` +
+           `📍1. Настройки!\n` +
+           `📍2. Вывести со счета!\n` +
+           `📍3. Касса\n` +
+           `📍4. Сумму для Вывода!\n` +
+           `📍(Город Бишкек, улица Киевская)\n` +
+           `📍5. Подтвердить\n` +
+           `📍6. Получить Код!\n` +
+           `📍7. Отправить его нам`
   }
   
-  return `✅ Ваши средства выведены!\n\n` +
-         `💰 Сумма: ${amount.toFixed(2)} KGS\n` +
-         `🎰 Казино: ${casino}\n` +
-         `🆔 ID: ${accountId}\n\n` +
-         `Если есть какие-то проблемы, пишите ${adminUsername}.`
+  return `📍 Заходим👇🏻\n` +
+         `📍1. Настройки!\n` +
+         `📍2. Вывести со счета!\n` +
+         `📍3. Касса\n` +
+         `📍4. Сумму для Вывода!\n` +
+         `📍(Город Бишкек, Bingo KG)\n` +
+         `📍5. Подтвердить\n` +
+         `📍6. Получить Код!\n` +
+         `📍7. Отправить его нам`
+}
+
+/**
+ * Формирование сообщения о выводе (новый формат)
+ */
+export function formatWithdrawMessage(
+  amount: number, 
+  casino: string, 
+  accountId: string, 
+  adminUsername: string, 
+  lang: string = 'ru',
+  processingTime?: string | null,
+  bank?: string | null
+): string {
+  // Формируем время обработки
+  let timeText = '1s' // По умолчанию для автопополнения
+  if (processingTime) {
+    timeText = processingTime
+  }
+  
+  // Формируем банк
+  let bankText = ''
+  if (bank) {
+    bankText = `\n💳   ${bank}`
+  }
+  
+  if (lang === 'ky') {
+    return `✅   ${timeText}\n` +
+           `💸   ${amount.toFixed(2)} KGS` +
+           bankText
+  }
+  
+  return `✅   ${timeText}\n` +
+         `💸   ${amount.toFixed(2)} KGS` +
+         bankText
+}
+
+/**
+ * Формирование сообщения о принятии заявки на вывод
+ */
+export function formatWithdrawRequestMessage(amount: number, accountId: string, adminUsername: string, lang: string = 'ru'): string {
+  if (lang === 'ky') {
+    return `✅ Вывод ${amount.toFixed(2)} сом\n` +
+           `🆔 ${accountId}\n` +
+           `⏳ Ваши деньги поступят на ваш кошелёк в течение 5 минут.\n\n` +
+           `👨‍💻 Оператор:  ${adminUsername}`
+  }
+  
+  return `✅ Вывод ${amount.toFixed(2)} сом\n` +
+         `🆔 ${accountId}\n` +
+         `⏳ Ваши деньги поступят на ваш кошелёк в течение 5 минут.\n\n` +
+         `👨‍💻 Оператор:  ${adminUsername}`
 }
 
 /**
@@ -321,6 +384,58 @@ export function formatRejectMessage(requestType: string, adminUsername: string, 
   
   return `❌ Ваша заявка на ${typeText} была отклонена.\n\n` +
          `Если есть какие-то проблемы, пишите ${adminUsername}.`
+}
+
+/**
+ * Отправка сообщения с инлайн кнопкой "Главное меню"
+ */
+export async function sendMessageWithMainMenuButton(
+  userId: bigint,
+  message: string,
+  bookmaker?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
+    
+    if (!botToken) {
+      const errorMsg = `BOT_TOKEN not configured for bookmaker: ${bookmaker || 'main'}`
+      console.error(`❌ [sendMessageWithMainMenuButton] ${errorMsg}`)
+      return { success: false, error: errorMsg }
+    }
+
+    const sendMessageUrl = `https://api.telegram.org/bot${botToken}/sendMessage`
+    const response = await fetch(sendMessageUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: userId.toString(),
+        text: message,
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [[
+            {
+              text: '← Главное меню',
+              callback_data: 'main_menu'
+            }
+          ]]
+        }
+      })
+    })
+
+    const data = await response.json()
+    if (data.ok) {
+      console.log(`✅ [sendMessageWithMainMenuButton] Message sent with main menu button to user ${userId.toString()}`)
+      return { success: true }
+    } else {
+      console.error(`❌ [sendMessageWithMainMenuButton] Failed to send message: ${data.description}`)
+      return { success: false, error: data.description }
+    }
+  } catch (error: any) {
+    console.error('❌ [sendMessageWithMainMenuButton] Error:', error)
+    return { success: false, error: error.message }
+  }
 }
 
 /**

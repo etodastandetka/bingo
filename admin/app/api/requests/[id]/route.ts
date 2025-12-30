@@ -196,20 +196,63 @@ export async function PATCH(
         const adminUsername = await getAdminUsername()
 
         let notificationMessage = ''
+        
+        // Вычисляем значения для использования в уведомлениях
+        const amount = updatedRequest.amount ? parseFloat(updatedRequest.amount.toString()) : 0
+        const casino = updatedRequest.bookmaker || 'Неизвестно'
+        const accountId = updatedRequest.accountId || ''
 
         // Проверяем, была ли заявка на проверке (операторская)
         const isOperatorRequest = currentRequest.statusDetail === 'pending_check' || updatedRequest.statusDetail === 'pending_check'
 
         if (['completed', 'approved', 'auto_completed', 'autodeposit_success'].includes(body.status)) {
           // Успешное пополнение или вывод
-          const amount = updatedRequest.amount ? parseFloat(updatedRequest.amount.toString()) : 0
-          const casino = updatedRequest.bookmaker || 'Неизвестно'
-          const accountId = updatedRequest.accountId || ''
 
           if (currentRequest.requestType === 'deposit') {
             notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang)
           } else {
-            notificationMessage = formatWithdrawMessage(amount, casino, accountId, adminUsername, lang)
+            // Для вывода используем новый формат с временем обработки и банком
+            // Вычисляем время обработки
+            let processingTime: string | null = null
+            if (updatedRequest.createdAt && updatedRequest.processedAt) {
+              const createdAt = new Date(updatedRequest.createdAt)
+              const processedAt = new Date(updatedRequest.processedAt)
+              const diffMs = processedAt.getTime() - createdAt.getTime()
+              
+              if (diffMs > 0) {
+                const diffSeconds = Math.floor(diffMs / 1000)
+                const diffMinutes = Math.floor(diffSeconds / 60)
+                const diffHours = Math.floor(diffMinutes / 60)
+                
+                if (diffHours > 0) {
+                  processingTime = `${diffHours} Hour${diffHours > 1 ? 's' : ''}`
+                } else if (diffMinutes > 0) {
+                  const remainingSeconds = diffSeconds % 60
+                  if (remainingSeconds > 0) {
+                    processingTime = `${diffMinutes} Minute${diffMinutes > 1 ? 's' : ''} ${remainingSeconds}s`
+                  } else {
+                    processingTime = `${diffMinutes} Minute${diffMinutes > 1 ? 's' : ''}`
+                  }
+                } else {
+                  processingTime = `${diffSeconds}s`
+                }
+              }
+            }
+            
+            // Если автопополнение или время не вычислено - используем 1s
+            if (!processingTime || updatedRequest.processedBy === 'автопополнение' || updatedRequest.processedBy === 'autodeposit') {
+              processingTime = '1s'
+            }
+            
+            notificationMessage = formatWithdrawMessage(
+              amount, 
+              casino, 
+              accountId, 
+              adminUsername, 
+              lang,
+              processingTime,
+              updatedRequest.bank
+            )
           }
 
           // Если это операторская заявка (была на проверке) - отправляем только в оператор-бот
@@ -261,16 +304,36 @@ export async function PATCH(
         // Отправляем уведомление в основной бот только если это не операторская заявка
         // и есть сообщение для отправки
         if (notificationMessage && !isOperatorRequest) {
-          // Отправляем уведомление асинхронно (не блокируем ответ)
-          // Передаем requestId для удаления сообщения "Ваша заявка отправлена"
-          sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, updatedRequest.id)
-            .then(() => {
-              // После отправки уведомления отправляем главное меню
-              return sendMainMenuToUser(currentRequest.userId, updatedRequest.bookmaker)
-            })
-            .catch((error) => {
-              console.error('Failed to send notification or main menu:', error)
-            })
+          // Для вывода отправляем несколько сообщений: инструкцию, сообщение о принятии, и финальное сообщение с кнопкой
+          if (currentRequest.requestType === 'withdraw') {
+            const { formatWithdrawInstruction, formatWithdrawRequestMessage, sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
+            
+            // 1. Отправляем инструкцию
+            const instruction = formatWithdrawInstruction(casino)
+            sendNotificationToUser(currentRequest.userId, instruction, updatedRequest.bookmaker, null)
+              .then(() => {
+                // 2. Отправляем сообщение о принятии заявки
+                const requestMessage = formatWithdrawRequestMessage(amount, accountId, adminUsername, lang)
+                return sendNotificationToUser(currentRequest.userId, requestMessage, updatedRequest.bookmaker, null)
+              })
+              .then(() => {
+                // 3. Отправляем финальное сообщение с инлайн кнопкой "Главное меню"
+                return sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
+              })
+              .catch((error) => {
+                console.error('Failed to send withdrawal notifications:', error)
+              })
+          } else {
+            // Для пополнения используем старую логику
+            sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, updatedRequest.id)
+              .then(() => {
+                // После отправки уведомления отправляем главное меню
+                return sendMainMenuToUser(currentRequest.userId, updatedRequest.bookmaker)
+              })
+              .catch((error) => {
+                console.error('Failed to send notification or main menu:', error)
+              })
+          }
         }
       } catch (error) {
         // Игнорируем ошибки отправки уведомлений, чтобы не блокировать обновление заявки
