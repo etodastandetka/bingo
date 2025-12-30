@@ -110,6 +110,7 @@ export async function GET(
         userId: requestData.userId.toString(), // Преобразуем BigInt в строку
         amount: requestData.amount ? requestData.amount.toString() : null,
         photoFileUrl: requestData.photoFileUrl, // Фото чека (base64 или URL)
+        withdrawalCode: requestData.withdrawalCode, // Код вывода
         userNote: userNote, // Заметка пользователя
         createdAt: requestData.createdAt.toISOString(),
         updatedAt: requestData.updatedAt.toISOString(),
