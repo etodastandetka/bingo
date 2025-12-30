@@ -123,9 +123,18 @@ export async function POST(request: NextRequest) {
       `32${merchantAccountLen}${merchantAccountValue}` +  // 32 - Merchant Account
       `52044829` +  // 52 - Merchant Category Code
       `5303417` +   // 53 - Transaction Currency
-      `54${amountLen}${amountStr}` +  // 54 - Amount
+      `54${amountLen}${amountStr}` +  // 54 - Amount (в тыйнах)
       `5909DEMIRBANK`  // 59 - Merchant Name
     )
+    
+    console.log(`📦 Payload structure:`)
+    console.log(`  00 (Version): 01`)
+    console.log(`  01 (Type): 11 (static)`)
+    console.log(`  32 (Merchant Account): length=${merchantAccountLen}, value=${merchantAccountValue.substring(0, 30)}...`)
+    console.log(`  52 (MCC): 4829`)
+    console.log(`  53 (Currency): 417 (KGS)`)
+    console.log(`  54 (Amount): length=${amountLen}, value=${amountStr} (${amount} сом)`)
+    console.log(`  59 (Merchant Name): DEMIRBANK`)
     
     // Вычисляем SHA256 контрольную сумму от payload (БЕЗ 6304)
     const checksumFull = createHash('sha256').update(payload).digest('hex')
