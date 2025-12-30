@@ -229,6 +229,9 @@ async def deposit_start(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith('casino_'))
 async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
     """Казино выбрано, запрашиваем ID счета"""
+    # Показываем анимацию загрузки при нажатии
+    await callback.answer()
+    
     # Проверяем текущее состояние - если не в процессе пополнения, начинаем заново
     current_state = await state.get_state()
     if current_state and 'deposit' not in str(current_state).lower():
@@ -241,8 +244,22 @@ async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
     
     await state.update_data(casino_id=casino_id, casino_name=casino_name)
     
-    # Удаляем сообщение с кнопками выбора букмекера
+    # Плавная анимация: сначала изменяем сообщение, затем удаляем
     try:
+        import asyncio
+        # Изменяем сообщение на "Выбрано..." для плавного перехода
+        try:
+            await callback.message.edit_text(
+                f"✅ {get_text(lang, 'deposit', 'select_casino', default='Выберите казино')}\n\n🎰 {casino_name}",
+                reply_markup=None  # Убираем кнопки
+            )
+        except Exception:
+            pass  # Если не удалось изменить, просто удаляем
+        
+        # Небольшая задержка для плавности анимации
+        await asyncio.sleep(0.3)
+        
+        # Удаляем сообщение с кнопками выбора букмекера
         await callback.message.delete()
     except Exception:
         pass  # Игнорируем ошибки удаления (если сообщение уже удалено или нет прав)
