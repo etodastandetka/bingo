@@ -1065,43 +1065,18 @@ export default function RequestDetailPage() {
 
       {/* Сокращенная основная карточка с ID и суммой */}
       <div className="mx-4 mb-4 bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-4 border border-gray-700 shadow-lg">
-        <div className="space-y-2">
-          {/* Время обработки */}
-          {request?.processedAt && (
-            <div className="flex items-center space-x-2">
-              <span className="text-white">✅</span>
-              <span className="text-white font-medium">{formatProcessingTime() || '1s'}</span>
-            </div>
-          )}
-          
-          {/* Сумма */}
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center space-x-2">
-            <span className="text-white">💸</span>
-            <span className={`text-white font-medium ${showMinus ? 'text-red-500' : (isDeposit ? 'text-green-500' : 'text-red-500')}`}>
-              {displayAmount} KGS
-            </span>
+            <span className="text-lg font-bold text-white">{request.accountId || request.id}</span>
+            <button
+              onClick={() => copyToClipboard(request.accountId || request.id.toString())}
+              className="p-1 hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
           </div>
-          
-          {/* ID заявки */}
-          <div className="flex items-center space-x-2">
-            <span className="text-white">🆔</span>
-            <div className="flex items-center space-x-2">
-              <span className="text-white font-medium">{request.id}</span>
-              <button
-                onClick={() => copyToClipboard(request.id.toString())}
-                className="p-1 hover:bg-gray-700 rounded-lg transition-colors"
-              >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        {/* Статус и дата создания */}
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
-          <p className="text-xs text-gray-400">{formatDate(request.createdAt)}</p>
           <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
             <div className={`w-1.5 h-1.5 rounded-full ${
               getStatusLabel(request.status) === 'Успешно' ? 'bg-blue-600' :
@@ -1111,6 +1086,17 @@ export default function RequestDetailPage() {
             }`}></div>
             {getStatusLabel(request.status)}
           </div>
+        </div>
+
+        <p className="text-xs text-gray-400 mb-2">{formatDate(request.createdAt)}</p>
+
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-gray-400">
+            {isDeposit ? 'Пополнение' : 'Вывод'}
+          </p>
+          <p className={`text-xl font-bold ${showMinus ? 'text-red-500' : (isDeposit ? 'text-green-500' : 'text-red-500')}`}>
+            {showMinus ? '-' : (isDeposit ? '+' : '-')}{displayAmount}
+          </p>
         </div>
       </div>
 
