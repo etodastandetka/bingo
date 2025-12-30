@@ -69,25 +69,49 @@ export async function POST(request: NextRequest) {
     const requisiteLen = requisite.length.toString().padStart(2, '0')
     
     // Формируем дополнительное поле для комментария (под-тег 35)
-    // Структура: key, label, value, title, visible_state
+    // Согласно спецификации: формат строки с разделителем ":" - key:label:value:title:visible_state
     const commentValue = 'пополнение @bingokg_bot'
-    const commentData = JSON.stringify({
-      key: 'comment',
-      label: 'Комментарий',
-      value: commentValue,
-      title: commentValue,
-      visible_state: '11' // Отображается пользователю
-    })
-    const commentDataLen = commentData.length.toString().padStart(2, '0')
+    let commentData: string
+    try {
+      // Формат согласно спецификации: key:label:value:title:visible_state
+      commentData = `comment:Комментарий:${commentValue}:${commentValue}:11`
+      
+      // Проверяем длину комментария (должна быть <= 99 для 2-значного формата)
+      if (commentData.length > 99) {
+        console.warn(`⚠️ Comment data length (${commentData.length}) exceeds 99, truncating...`)
+        // Обрезаем value и title, сохраняя структуру
+        const maxValueLength = Math.floor((99 - 'comment:Комментарий::11'.length) / 2)
+        const truncatedValue = commentValue.substring(0, maxValueLength)
+        commentData = `comment:Комментарий:${truncatedValue}:${truncatedValue}:11`
+      }
+      
+      console.log(`📝 Comment data: ${commentData}, length: ${commentData.length}`)
+    } catch (error) {
+      console.error('❌ Error creating comment data:', error)
+      // Если ошибка при создании комментария, продолжаем без него
+      commentData = ''
+    }
     
-    const merchantAccountValue = (
+    // Формируем merchantAccountValue с комментарием (если он есть)
+    let merchantAccountValue = (
       `0015qr.demirbank.kg` +  // Под-тег 00: домен
       `01047001` +              // Под-тег 01: короткий тип (7001)
       `10${requisiteLen}${requisite}` +  // Под-тег 10: реквизит
-      `120212130212` +          // Под-теги 12, 13: дополнительные поля (12=12 запретить редактирование суммы, 13=12 запретить редактирование ID плательщика)
-      `35${commentDataLen}${commentData}`  // Под-тег 35: комментарий к платежу
+      `120212130212`            // Под-теги 12, 13: дополнительные поля (12=12 запретить редактирование суммы, 13=12 запретить редактирование ID плательщика)
     )
+    
+    // Добавляем комментарий только если он успешно создан
+    if (commentData && commentData.length > 0) {
+      const commentDataLen = commentData.length.toString().padStart(2, '0')
+      merchantAccountValue += `35${commentDataLen}${commentData}`  // Под-тег 35: комментарий к платежу
+      console.log(`✅ Added comment field (35) with length ${commentDataLen}`)
+    }
+    
+    // Форматируем длину merchantAccountValue (может быть 2 или 3 цифры)
     const merchantAccountLen = merchantAccountValue.length.toString().padStart(2, '0')
+    
+    console.log(`📊 merchantAccountValue length: ${merchantAccountValue.length}, formatted: ${merchantAccountLen}`)
+    console.log(`📊 merchantAccountValue preview: ${merchantAccountValue.substring(0, 50)}...`)
     
     // Payload БЕЗ контрольной суммы и без 6304
     const payload = (
