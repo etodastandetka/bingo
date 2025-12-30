@@ -112,6 +112,7 @@ export async function GET(
         photoFileUrl: requestData.photoFileUrl, // Фото чека (base64 или URL)
         withdrawalCode: requestData.withdrawalCode, // Код вывода
         userNote: userNote, // Заметка пользователя
+        processedBy: requestData.processedBy, // Кто обработал заявку (автопополнение или админ)
         createdAt: requestData.createdAt.toISOString(),
         updatedAt: requestData.updatedAt.toISOString(),
         processedAt: requestData.processedAt ? requestData.processedAt.toISOString() : null,

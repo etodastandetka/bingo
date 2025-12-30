@@ -19,6 +19,7 @@ interface RequestDetail {
   statusDetail: string | null
   status_detail: string | null
   processedByUsername: string | null
+  processedBy: string | null
   bank: string | null
   phone: string | null
   photoFileUrl: string | null
@@ -295,6 +296,45 @@ export default function RequestDetailPage() {
     const hours = date.getHours().toString().padStart(2, '0')
     const minutes = date.getMinutes().toString().padStart(2, '0')
     return `${day}.${month}.${year} • ${hours}:${minutes}`
+  }
+
+  // Форматирование времени обработки заявки
+  const formatProcessingTime = () => {
+    if (!request?.createdAt || !request?.processedAt) return null
+    
+    // Если автопополнение - всегда показываем 1s
+    if (request?.status === 'autodeposit_success' || request?.status === 'auto_completed' || 
+        request?.processedBy === 'автопополнение' || request?.processedBy === 'autodeposit') {
+      return '1s'
+    }
+    
+    // Вычисляем разницу во времени
+    const createdAt = new Date(request.createdAt)
+    const processedAt = new Date(request.processedAt)
+    const diffMs = processedAt.getTime() - createdAt.getTime()
+    
+    if (diffMs < 0) return '1s' // Если дата обработки раньше создания, показываем 1s
+    
+    const diffSeconds = Math.floor(diffMs / 1000)
+    const diffMinutes = Math.floor(diffSeconds / 60)
+    const diffHours = Math.floor(diffMinutes / 60)
+    
+    // Если больше часа - показываем в часах
+    if (diffHours > 0) {
+      return `${diffHours} Hour${diffHours > 1 ? 's' : ''}`
+    }
+    
+    // Если больше минуты - показываем минуты и секунды
+    if (diffMinutes > 0) {
+      const remainingSeconds = diffSeconds % 60
+      if (remainingSeconds > 0) {
+        return `${diffMinutes} Minute${diffMinutes > 1 ? 's' : ''} ${remainingSeconds}s`
+      }
+      return `${diffMinutes} Minute${diffMinutes > 1 ? 's' : ''}`
+    }
+    
+    // Меньше минуты - показываем секунды
+    return `${diffSeconds}s`
   }
 
   const getStatusColor = (status: string) => {
@@ -1025,18 +1065,43 @@ export default function RequestDetailPage() {
 
       {/* Сокращенная основная карточка с ID и суммой */}
       <div className="mx-4 mb-4 bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-4 border border-gray-700 shadow-lg">
-        <div className="flex items-center justify-between mb-2">
+        <div className="space-y-2">
+          {/* Время обработки */}
+          {request?.processedAt && (
+            <div className="flex items-center space-x-2">
+              <span className="text-white">✅</span>
+              <span className="text-white font-medium">{formatProcessingTime() || '1s'}</span>
+            </div>
+          )}
+          
+          {/* Сумма */}
           <div className="flex items-center space-x-2">
-            <span className="text-lg font-bold text-white">{request.accountId || request.id}</span>
-            <button
-              onClick={() => copyToClipboard(request.accountId || request.id.toString())}
-              className="p-1 hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </button>
+            <span className="text-white">💸</span>
+            <span className={`text-white font-medium ${showMinus ? 'text-red-500' : (isDeposit ? 'text-green-500' : 'text-red-500')}`}>
+              {displayAmount} KGS
+            </span>
           </div>
+          
+          {/* ID заявки */}
+          <div className="flex items-center space-x-2">
+            <span className="text-white">🆔</span>
+            <div className="flex items-center space-x-2">
+              <span className="text-white font-medium">{request.id}</span>
+              <button
+                onClick={() => copyToClipboard(request.id.toString())}
+                className="p-1 hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        {/* Статус и дата создания */}
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
+          <p className="text-xs text-gray-400">{formatDate(request.createdAt)}</p>
           <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
             <div className={`w-1.5 h-1.5 rounded-full ${
               getStatusLabel(request.status) === 'Успешно' ? 'bg-blue-600' :
@@ -1046,17 +1111,6 @@ export default function RequestDetailPage() {
             }`}></div>
             {getStatusLabel(request.status)}
           </div>
-        </div>
-
-        <p className="text-xs text-gray-400 mb-2">{formatDate(request.createdAt)}</p>
-
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-400">
-            {isDeposit ? 'Пополнение' : 'Вывод'}
-          </p>
-          <p className={`text-xl font-bold ${showMinus ? 'text-red-500' : (isDeposit ? 'text-green-500' : 'text-red-500')}`}>
-            {showMinus ? '-' : (isDeposit ? '+' : '-')}{displayAmount}
-          </p>
         </div>
       </div>
 
