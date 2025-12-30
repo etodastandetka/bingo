@@ -95,29 +95,23 @@ export async function POST(request: NextRequest) {
       commentData = ''
     }
     
-    // Формируем merchantAccountValue с комментарием (если он есть)
-    let merchantAccountValue = (
+    // Формируем merchantAccountValue БЕЗ комментария (комментарий будет на уровне корневого объекта)
+    const merchantAccountValue = (
       `0015qr.demirbank.kg` +  // Под-тег 00: домен
       `01047001` +              // Под-тег 01: короткий тип (7001)
       `10${requisiteLen}${requisite}` +  // Под-тег 10: реквизит
       `120212130212`            // Под-теги 12, 13: дополнительные поля (12=12 запретить редактирование суммы, 13=12 запретить редактирование ID плательщика)
     )
     
-    // Добавляем комментарий только если он успешно создан
-    if (commentData && commentData.length > 0) {
-      const commentDataLen = commentData.length.toString().padStart(2, '0')
-      merchantAccountValue += `35${commentDataLen}${commentData}`  // Под-тег 35: комментарий к платежу
-      console.log(`✅ Added comment field (35) with length ${commentDataLen}`)
-    }
-    
-    // Форматируем длину merchantAccountValue (может быть 2 или 3 цифры)
+    // Форматируем длину merchantAccountValue
     const merchantAccountLen = merchantAccountValue.length.toString().padStart(2, '0')
     
     console.log(`📊 merchantAccountValue length: ${merchantAccountValue.length}, formatted: ${merchantAccountLen}`)
-    console.log(`📊 merchantAccountValue preview: ${merchantAccountValue.substring(0, 50)}...`)
+    console.log(`📊 merchantAccountValue: ${merchantAccountValue}`)
     
-    // Payload БЕЗ контрольной суммы и без 6304
-    const payload = (
+    // Формируем payload БЕЗ контрольной суммы и без 6304
+    // Комментарий (ID 35) добавляется на уровне корневого объекта, а не внутри merchantAccountValue
+    let payload = (
       `000201` +  // 00 - Payload Format Indicator
       `010211` +  // 01 - Point of Initiation Method (статический QR)
       `32${merchantAccountLen}${merchantAccountValue}` +  // 32 - Merchant Account
@@ -127,14 +121,24 @@ export async function POST(request: NextRequest) {
       `5909DEMIRBANK`  // 59 - Merchant Name
     )
     
-    console.log(`📦 Payload structure:`)
+    // Добавляем комментарий как отдельное поле 35 на уровне корневого объекта (если он есть)
+    if (commentData && commentData.length > 0) {
+      const commentDataLen = commentData.length.toString().padStart(2, '0')
+      payload += `35${commentDataLen}${commentData}`  // 35 - Дополнительное поле (комментарий)
+      console.log(`✅ Added comment field (35) at root level with length ${commentDataLen}`)
+    }
+    
+    console.log(`📦 Payload structure (before checksum):`)
     console.log(`  00 (Version): 01`)
     console.log(`  01 (Type): 11 (static)`)
-    console.log(`  32 (Merchant Account): length=${merchantAccountLen}, value=${merchantAccountValue.substring(0, 30)}...`)
+    console.log(`  32 (Merchant Account): length=${merchantAccountLen}, value=${merchantAccountValue}`)
     console.log(`  52 (MCC): 4829`)
     console.log(`  53 (Currency): 417 (KGS)`)
-    console.log(`  54 (Amount): length=${amountLen}, value=${amountStr} (${amount} сом)`)
+    console.log(`  54 (Amount): length=${amountLen}, value=${amountStr} (${amount} сом = ${amountTyins} тыйнов)`)
     console.log(`  59 (Merchant Name): DEMIRBANK`)
+    if (commentData && commentData.length > 0) {
+      console.log(`  35 (Comment): length=${commentData.length.toString().padStart(2, '0')}, value=${commentData}`)
+    }
     
     // Вычисляем SHA256 контрольную сумму от payload (БЕЗ 6304)
     const checksumFull = createHash('sha256').update(payload).digest('hex')
