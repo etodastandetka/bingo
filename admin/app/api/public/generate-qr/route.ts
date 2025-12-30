@@ -60,10 +60,13 @@ export async function POST(request: NextRequest) {
       return errorResponse
     }
     
-    // Конвертируем сумму в центы и форматируем
-    const amountCents = Math.round(amount * 100)
-    const amountStr = amountCents.toString().padStart(5, '0')
+    // Конвертируем сумму в тыйны (1 сом = 100 тыйнов) согласно спецификации
+    const amountTyins = Math.round(amount * 100)
+    const amountStr = amountTyins.toString()
+    // Длина суммы может быть до 13 символов согласно спецификации
     const amountLen = amountStr.length.toString().padStart(2, '0')
+    
+    console.log(`💰 Amount: ${amount} сом = ${amountTyins} тыйнов, length: ${amountLen}, value: ${amountStr}`)
     
     // Формируем TLV структуру
     const requisiteLen = requisite.length.toString().padStart(2, '0')
