@@ -84,19 +84,30 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
 
     // Для каждой заявки ищем платежи по сумме
     for (const request of pendingRequests) {
-      if (!request.amount) continue
-      if (request.incomingPayments && request.incomingPayments.length > 0) continue
+      if (!request.amount) {
+        console.log(`⚠️ [Auto-Deposit Check] Request ${request.id} skipped: no amount`)
+        continue
+      }
+      if (request.incomingPayments && request.incomingPayments.length > 0) {
+        console.log(`⚠️ [Auto-Deposit Check] Request ${request.id} skipped: already has processed payment`)
+        continue
+      }
 
       const requestAmount = parseFloat(request.amount.toString())
+      const requestAge = Date.now() - request.createdAt.getTime()
+      const requestAgeSeconds = Math.floor(requestAge / 1000)
+      
+      console.log(`🔍 [Auto-Deposit Check] Checking request ${request.id}: amount=${requestAmount}, age=${requestAgeSeconds}s`)
 
       // Ищем необработанные платежи с такой же суммой
+      // Используем более широкий временной диапазон для поиска платежей
       const matchingPayments = await prisma.incomingPayment.findMany({
         where: {
           isProcessed: false,
           requestId: null,
           amount: requestAmount,
           paymentDate: {
-            gte: new Date(request.createdAt.getTime() - 5 * 60 * 1000), // Платежи после создания заявки (с запасом)
+            gte: new Date(request.createdAt.getTime() - 10 * 60 * 1000), // Платежи за 10 минут до создания заявки (на случай если платеж пришел раньше)
             lte: new Date(),
           },
         },
@@ -105,18 +116,32 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
         },
       })
 
+      console.log(`🔍 [Auto-Deposit Check] Found ${matchingPayments.length} potential matching payments for request ${request.id}`)
+
       if (matchingPayments.length > 0) {
-        // Берем первый платеж
+        // Берем первый платеж (самый старый)
         const payment = matchingPayments[0]
-        console.log(`🎯 [Auto-Deposit Check] Found matching payment ${payment.id} for request ${request.id}, processing...`)
+        const paymentAge = Date.now() - payment.paymentDate.getTime()
+        const paymentAgeSeconds = Math.floor(paymentAge / 1000)
+        
+        console.log(`🎯 [Auto-Deposit Check] Found matching payment ${payment.id} for request ${request.id}`)
+        console.log(`   Payment amount: ${payment.amount}, age: ${paymentAgeSeconds}s`)
+        console.log(`   Request amount: ${requestAmount}, age: ${requestAgeSeconds}s`)
+        console.log(`   Processing...`)
         
         // Обрабатываем платеж
-        const result = await matchAndProcessPayment(payment.id, requestAmount)
-        if (result.success) {
-          console.log(`✅ [Auto-Deposit Check] Successfully processed payment ${payment.id} for request ${request.id}`)
-        } else {
-          console.log(`⚠️ [Auto-Deposit Check] Failed to process payment ${payment.id} for request ${request.id}: ${result.message}`)
+        try {
+          const result = await matchAndProcessPayment(payment.id, requestAmount)
+          if (result.success) {
+            console.log(`✅ [Auto-Deposit Check] Successfully processed payment ${payment.id} for request ${request.id}`)
+          } else {
+            console.log(`⚠️ [Auto-Deposit Check] Failed to process payment ${payment.id} for request ${request.id}: ${result.message}`)
+          }
+        } catch (error: any) {
+          console.error(`❌ [Auto-Deposit Check] Exception processing payment ${payment.id} for request ${request.id}:`, error)
         }
+      } else {
+        console.log(`ℹ️ [Auto-Deposit Check] No matching payments found for request ${request.id} (amount: ${requestAmount})`)
       }
     }
   } catch (error: any) {
