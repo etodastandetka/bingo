@@ -132,6 +132,8 @@ export async function matchAndProcessPayment(
   paymentId: number,
   amount: number
 ): Promise<MatchResult> {
+  console.log(`🚀 [Auto-Deposit] matchAndProcessPayment called: paymentId=${paymentId}, amount=${amount}`)
+  
   // Проверяем, включено ли автопополнение
   // Сначала проверяем BotConfiguration (новый способ), затем BotSetting (старый способ для совместимости)
   let autodepositValue: string | null = null
@@ -174,11 +176,13 @@ export async function matchAndProcessPayment(
     }
   }
 
-  // Ищем заявки на пополнение со статусом pending за последние 30 минут (увеличено для надежности)
-  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
+  // Ищем заявки на пополнение со статусом pending МЛАДШЕ 5 минут
+  // Заявки старше 5 минут не обрабатываются автопополнением
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+  const now = new Date()
 
   console.log(
-    `🔍 Matching payment ${paymentId}: looking for requests with amount ${amount} created after ${thirtyMinutesAgo.toISOString()}`
+    `🔍 Matching payment ${paymentId}: looking for requests with amount ${amount} created between ${fiveMinutesAgo.toISOString()} and ${now.toISOString()} (younger than 5 minutes)`
   )
 
   const matchingRequests = await prisma.request.findMany({
@@ -186,7 +190,8 @@ export async function matchAndProcessPayment(
       requestType: 'deposit',
       status: 'pending',
       createdAt: {
-        gte: thirtyMinutesAgo,
+        gte: fiveMinutesAgo, // Не старше 5 минут (младше 5 минут)
+        lte: now,            // Но не в будущем
       },
       // Исключаем заявки, которые уже имеют связанный обработанный платеж
       incomingPayments: {
@@ -208,7 +213,7 @@ export async function matchAndProcessPayment(
   })
 
   console.log(
-    `📋 Found ${matchingRequests.length} pending deposit requests in the last 30 minutes (without processed payments)`
+    `📋 Found ${matchingRequests.length} pending deposit requests younger than 5 minutes (without processed payments)`
   )
 
   // Фильтруем вручную, т.к. Prisma может иметь проблемы с точным сравнением Decimal
@@ -227,11 +232,20 @@ export async function matchAndProcessPayment(
       return false
     }
     
+    // Дополнительная проверка: заявка должна быть младше 5 минут
+    const requestAge = Date.now() - req.createdAt.getTime()
+    const requestAgeMinutes = requestAge / (60 * 1000)
+    
+    if (requestAgeMinutes > 5) {
+      console.log(`[Auto-Deposit] Request ${req.id} skipped: too old (${requestAgeMinutes.toFixed(2)} minutes)`)
+      return false
+    }
+    
     const reqAmount = parseFloat(req.amount.toString())
     const diff = Math.abs(reqAmount - amount)
     const isMatch = diff < 0.01 // Точность до 1 копейки
     
-    console.log(`[Auto-Deposit] Request ${req.id}: amount=${reqAmount}, payment=${amount}, diff=${diff.toFixed(4)}, match=${isMatch}, createdAt=${req.createdAt.toISOString()}`)
+    console.log(`[Auto-Deposit] Request ${req.id}: amount=${reqAmount}, payment=${amount}, diff=${diff.toFixed(4)}, match=${isMatch}, age=${requestAgeMinutes.toFixed(2)}min, createdAt=${req.createdAt.toISOString()}`)
     
     return isMatch
   })
