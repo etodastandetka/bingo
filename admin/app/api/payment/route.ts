@@ -581,6 +581,49 @@ export async function POST(request: NextRequest) {
         addLog('success', `✅ Статус заявки исправлен на 'pending' (ID: ${verifyRequest.id})`)
       }
 
+      // Для заявок на пополнение сразу проверяем входящие платежи для автопополнения
+      if (validType === 'deposit' && amountNum > 0) {
+        try {
+          const { matchAndProcessPayment } = await import('@/lib/auto-deposit')
+          console.log(`🔍 [Payment API] Starting auto-match for new deposit request ${newRequest.id}, amount: ${amountNum}`)
+          
+          // Ищем необработанные входящие платежи за последние 10 минут с точным совпадением суммы
+          const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+          const matchingPayments = await prisma.incomingPayment.findMany({
+            where: {
+              amount: amountNum,
+              isProcessed: false,
+              requestId: null,
+              createdAt: {
+                gte: tenMinutesAgo,
+              },
+            },
+            orderBy: {
+              createdAt: 'asc', // Берем самый старый платеж
+            },
+          })
+
+          console.log(`🔍 [Payment API] Found ${matchingPayments.length} unprocessed payments matching amount ${amountNum}`)
+
+          if (matchingPayments.length > 0) {
+            // Пытаемся обработать первый подходящий платеж
+            const payment = matchingPayments[0]
+            const result = await matchAndProcessPayment(payment.id, amountNum)
+            
+            if (result && result.success) {
+              console.log(`✅ [Payment API] Auto-deposit completed instantly for request ${newRequest.id}, payment ${payment.id}`)
+            } else {
+              console.log(`ℹ️ [Payment API] Auto-deposit did not complete for request ${newRequest.id}: ${result?.message || 'unknown reason'}`)
+            }
+          } else {
+            console.log(`ℹ️ [Payment API] No matching unprocessed payments found for request ${newRequest.id} (amount: ${amountNum})`)
+          }
+        } catch (error: any) {
+          console.error(`❌ [Payment API] Auto-match failed for request ${newRequest.id}:`, error.message)
+          // Не возвращаем ошибку, т.к. заявка уже создана и может быть обработана вручную
+        }
+      }
+
       const response = NextResponse.json(
         createApiResponse({
           id: newRequest.id,

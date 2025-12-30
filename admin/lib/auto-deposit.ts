@@ -201,39 +201,32 @@ export async function matchAndProcessPayment(
     }
   }
 
-  // Ищем заявки на пополнение со статусом pending МЛАДШЕ 5 минут
-  // Заявки старше 5 минут не обрабатываются автопополнением
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+  // Ищем заявки на пополнение со статусом pending за последние 10 минут
+  // Расширяем окно поиска для более надежного сопоставления
+  // (платеж может прийти с задержкой, или заявка может быть создана раньше)
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
   const now = new Date()
 
   console.log(
-    `🔍 Matching payment ${paymentId}: looking for requests with amount ${amount} created between ${fiveMinutesAgo.toISOString()} and ${now.toISOString()} (younger than 5 minutes)`
+    `🔍 Matching payment ${paymentId}: looking for requests with amount ${amount} created between ${tenMinutesAgo.toISOString()} and ${now.toISOString()} (last 10 minutes)`
   )
 
+  // Сначала получаем все заявки без фильтрации по incomingPayments
+  // (Prisma может иметь проблемы с вложенными фильтрами)
   const matchingRequests = await prisma.request.findMany({
     where: {
       requestType: 'deposit',
       status: 'pending',
       createdAt: {
-        gte: fiveMinutesAgo, // Не старше 5 минут (младше 5 минут)
+        gte: tenMinutesAgo, // За последние 10 минут
         lte: now,            // Но не в будущем
-      },
-      // Исключаем заявки, которые уже имеют связанный обработанный платеж
-      incomingPayments: {
-        none: {
-          isProcessed: true,
-        },
       },
     },
     orderBy: {
       createdAt: 'asc', // Берем самую старую заявку (первую по времени)
     },
     include: {
-      incomingPayments: {
-        where: {
-          isProcessed: true,
-        },
-      },
+      incomingPayments: true, // Получаем все платежи для проверки
     },
   })
 
@@ -247,7 +240,8 @@ export async function matchAndProcessPayment(
   
   const exactMatches = matchingRequests.filter((req) => {
     // Пропускаем заявки, у которых уже есть обработанный платеж
-    if (req.incomingPayments && req.incomingPayments.length > 0) {
+    const hasProcessedPayment = req.incomingPayments && req.incomingPayments.some(p => p.isProcessed === true)
+    if (hasProcessedPayment) {
       console.log(`[Auto-Deposit] Request ${req.id} skipped: already has processed payment`)
       return false
     }
@@ -257,20 +251,21 @@ export async function matchAndProcessPayment(
       return false
     }
     
-    // Дополнительная проверка: заявка должна быть младше 5 минут
+    // Проверяем возраст заявки - должна быть не старше 10 минут
     const requestAge = Date.now() - req.createdAt.getTime()
     const requestAgeMinutes = requestAge / (60 * 1000)
     
-    if (requestAgeMinutes > 5) {
+    if (requestAgeMinutes > 10) {
       console.log(`[Auto-Deposit] Request ${req.id} skipped: too old (${requestAgeMinutes.toFixed(2)} minutes)`)
       return false
     }
     
+    // Точное сравнение суммы (до 1 копейки)
     const reqAmount = parseFloat(req.amount.toString())
     const diff = Math.abs(reqAmount - amount)
     const isMatch = diff < 0.01 // Точность до 1 копейки
     
-    console.log(`[Auto-Deposit] Request ${req.id}: amount=${reqAmount}, payment=${amount}, diff=${diff.toFixed(4)}, match=${isMatch}, age=${requestAgeMinutes.toFixed(2)}min, createdAt=${req.createdAt.toISOString()}`)
+    console.log(`[Auto-Deposit] Request ${req.id}: amount=${reqAmount}, payment=${amount}, diff=${diff.toFixed(4)}, match=${isMatch}, age=${requestAgeMinutes.toFixed(2)}min, createdAt=${req.createdAt.toISOString()}, hasProcessedPayment=${hasProcessedPayment}`)
     
     return isMatch
   })
