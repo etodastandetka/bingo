@@ -182,14 +182,13 @@ async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
 @router.message(F.photo)
 async def chat_message_photo(message: Message, state: FSMContext, bot: Bot):
     """Обработка фото в чате"""
-    # ВАЖНО: Этот обработчик должен срабатывать ТОЛЬКО когда пользователь НЕ в процессе депозита/вывода
-    # Обработчики с состояниями (deposit/w withdraw) имеют приоритет и регистрируются раньше
+    # Проверяем, что пользователь не находится в процессе депозита или вывода (где требуется фото)
     current_state = await state.get_state()
-    
-    # Если есть ЛЮБОЕ состояние - пропускаем обработку (специфичные обработчики обработают)
     if current_state:
-        # Пропускаем все состояния депозита и вывода
-        return
+        state_str = str(current_state).lower()
+        # Если пользователь в процессе депозита или вывода, не обрабатываем как сообщение чата
+        if 'withdraw' in state_str or 'deposit' in state_str:
+            return
     
     user_id = message.from_user.id
     
