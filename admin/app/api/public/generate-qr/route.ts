@@ -71,62 +71,41 @@ export async function POST(request: NextRequest) {
     // Формируем TLV структуру
     const requisiteLen = requisite.length.toString().padStart(2, '0')
     
-    // Формируем дополнительное поле для комментария (под-тег 35)
-    // Согласно спецификации: формат строки с разделителем ":" - key:label:value:title:visible_state
-    const commentValue = 'пополнение @bingokg_bot'
-    let commentData: string
-    try {
-      // Формат согласно спецификации: key:label:value:title:visible_state
-      commentData = `comment:Комментарий:${commentValue}:${commentValue}:11`
-      
-      // Проверяем длину комментария (должна быть <= 99 для 2-значного формата)
-      if (commentData.length > 99) {
-        console.warn(`⚠️ Comment data length (${commentData.length}) exceeds 99, truncating...`)
-        // Обрезаем value и title, сохраняя структуру
-        const maxValueLength = Math.floor((99 - 'comment:Комментарий::11'.length) / 2)
-        const truncatedValue = commentValue.substring(0, maxValueLength)
-        commentData = `comment:Комментарий:${truncatedValue}:${truncatedValue}:11`
-      }
-      
-      console.log(`📝 Comment data: ${commentData}, length: ${commentData.length}`)
-    } catch (error) {
-      console.error('❌ Error creating comment data:', error)
-      // Если ошибка при создании комментария, продолжаем без него
-      commentData = ''
-    }
-    
-    // Формируем merchantAccountValue БЕЗ комментария (комментарий будет на уровне корневого объекта)
+    // Формируем merchantAccountValue (ID 32)
+    // Структура: под-тег 00 (домен) + под-тег 01 (тип) + под-тег 10 (реквизит) + под-теги 12, 13 (настройки редактирования)
     const merchantAccountValue = (
-      `0015qr.demirbank.kg` +  // Под-тег 00: домен
-      `01047001` +              // Под-тег 01: короткий тип (7001)
-      `10${requisiteLen}${requisite}` +  // Под-тег 10: реквизит
-      `120212130212`            // Под-теги 12, 13: дополнительные поля (12=12 запретить редактирование суммы, 13=12 запретить редактирование ID плательщика)
+      `0015qr.demirbank.kg` +  // Под-тег 00: домен (длина 15)
+      `01047001` +              // Под-тег 01: короткий тип 7001 (длина 04)
+      `10${requisiteLen}${requisite}` +  // Под-тег 10: реквизит (длина = requisiteLen)
+      `120212130212`            // Под-теги 12, 13: 12=12 (запретить редактирование суммы), 13=12 (запретить редактирование ID плательщика)
     )
     
-    // Форматируем длину merchantAccountValue
+    // Проверяем длину merchantAccountValue
+    // Если длина > 99, нужно использовать 3-значный формат, но по спецификации максимум 99
+    if (merchantAccountValue.length > 99) {
+      console.error(`❌ merchantAccountValue length (${merchantAccountValue.length}) exceeds 99!`)
+      throw new Error(`Merchant account value too long: ${merchantAccountValue.length} characters`)
+    }
+    
+    // Форматируем длину merchantAccountValue (2 цифры)
     const merchantAccountLen = merchantAccountValue.length.toString().padStart(2, '0')
     
-    console.log(`📊 merchantAccountValue length: ${merchantAccountValue.length}, formatted: ${merchantAccountLen}`)
-    console.log(`📊 merchantAccountValue: ${merchantAccountValue}`)
+    console.log(`📊 merchantAccountValue:`)
+    console.log(`  Length: ${merchantAccountValue.length}, formatted: ${merchantAccountLen}`)
+    console.log(`  Value: ${merchantAccountValue}`)
+    console.log(`  Requisite: ${requisite} (length: ${requisiteLen})`)
     
     // Формируем payload БЕЗ контрольной суммы и без 6304
-    // Комментарий (ID 35) добавляется на уровне корневого объекта, а не внутри merchantAccountValue
-    let payload = (
-      `000201` +  // 00 - Payload Format Indicator
-      `010211` +  // 01 - Point of Initiation Method (статический QR)
+    // Временно убираем комментарий, чтобы проверить базовую структуру
+    const payload = (
+      `000201` +  // 00 - Payload Format Indicator (версия 01)
+      `010211` +  // 01 - Point of Initiation Method (11 = статический QR)
       `32${merchantAccountLen}${merchantAccountValue}` +  // 32 - Merchant Account
-      `52044829` +  // 52 - Merchant Category Code
-      `5303417` +   // 53 - Transaction Currency
+      `52044829` +  // 52 - Merchant Category Code (4829)
+      `5303417` +   // 53 - Transaction Currency (417 = KGS)
       `54${amountLen}${amountStr}` +  // 54 - Amount (в тыйнах)
-      `5909DEMIRBANK`  // 59 - Merchant Name
+      `5909DEMIRBANK`  // 59 - Merchant Name (DEMIRBANK, длина 9)
     )
-    
-    // Добавляем комментарий как отдельное поле 35 на уровне корневого объекта (если он есть)
-    if (commentData && commentData.length > 0) {
-      const commentDataLen = commentData.length.toString().padStart(2, '0')
-      payload += `35${commentDataLen}${commentData}`  // 35 - Дополнительное поле (комментарий)
-      console.log(`✅ Added comment field (35) at root level with length ${commentDataLen}`)
-    }
     
     console.log(`📦 Payload structure (before checksum):`)
     console.log(`  00 (Version): 01`)
@@ -136,9 +115,7 @@ export async function POST(request: NextRequest) {
     console.log(`  53 (Currency): 417 (KGS)`)
     console.log(`  54 (Amount): length=${amountLen}, value=${amountStr} (${amount} сом = ${amountTyins} тыйнов)`)
     console.log(`  59 (Merchant Name): DEMIRBANK`)
-    if (commentData && commentData.length > 0) {
-      console.log(`  35 (Comment): length=${commentData.length.toString().padStart(2, '0')}, value=${commentData}`)
-    }
+    console.log(`📦 Full payload (before checksum): ${payload}`)
     
     // Вычисляем SHA256 контрольную сумму от payload (БЕЗ 6304)
     const checksumFull = createHash('sha256').update(payload).digest('hex')
