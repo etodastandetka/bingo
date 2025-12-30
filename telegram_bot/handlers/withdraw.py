@@ -96,9 +96,6 @@ async def withdraw_start(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith('withdraw_casino_'), WithdrawStates.waiting_for_casino)
 async def withdraw_casino_selected(callback: CallbackQuery, state: FSMContext):
     """Казино выбрано, запрашиваем выбор банка"""
-    # Показываем анимацию загрузки при нажатии
-    await callback.answer()
-    
     lang = await get_lang_from_state(state)
     casino_id = callback.data.replace('withdraw_casino_', '')
     
@@ -113,22 +110,8 @@ async def withdraw_casino_selected(callback: CallbackQuery, state: FSMContext):
     
     await state.update_data(casino_id=casino_id, casino_name=casino_name)
     
-    # Плавная анимация: сначала изменяем сообщение, затем удаляем
+    # Удаляем сообщение с кнопками выбора букмекера
     try:
-        import asyncio
-        # Изменяем сообщение на "Выбрано..." для плавного перехода
-        try:
-            await callback.message.edit_text(
-                f"✅ {get_text(lang, 'withdraw', 'select_casino', default='Выберите казино')}\n\n🎰 {casino_name}",
-                reply_markup=None  # Убираем кнопки
-            )
-        except Exception:
-            pass  # Если не удалось изменить, просто удаляем
-        
-        # Небольшая задержка для плавности анимации
-        await asyncio.sleep(0.3)
-        
-        # Удаляем сообщение с кнопками выбора букмекера
         await callback.message.delete()
     except Exception:
         pass  # Игнорируем ошибки удаления (если сообщение уже удалено или нет прав)
@@ -184,9 +167,6 @@ async def withdraw_casino_selected(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith('withdraw_bank_'), WithdrawStates.waiting_for_bank)
 async def withdraw_bank_selected(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Банк выбран, запрашиваем номер телефона"""
-    # Показываем анимацию загрузки при нажатии
-    await callback.answer()
-    
     lang = await get_lang_from_state(state)
     bank_id = callback.data.replace('withdraw_bank_', '')
     
@@ -203,22 +183,8 @@ async def withdraw_bank_selected(callback: CallbackQuery, state: FSMContext, bot
     data = await state.get_data()
     casino_name = data.get('casino_name', '')
     
-    # Плавная анимация: сначала изменяем сообщение, затем удаляем
+    # Удаляем сообщение с кнопками выбора банка
     try:
-        import asyncio
-        # Изменяем сообщение на "Выбрано..." для плавного перехода
-        try:
-            await callback.message.edit_text(
-                f"✅ {get_text(lang, 'withdraw', 'select_bank', casino=casino_name, default='Выберите банк')}\n\n🏦 {bank_name}",
-                reply_markup=None  # Убираем кнопки
-            )
-        except Exception:
-            pass  # Если не удалось изменить, просто удаляем
-        
-        # Небольшая задержка для плавности анимации
-        await asyncio.sleep(0.3)
-        
-        # Удаляем сообщение с кнопками выбора банка
         await callback.message.delete()
     except Exception:
         pass  # Игнорируем ошибки удаления
