@@ -361,8 +361,8 @@ export async function POST(request: NextRequest) {
       })
 
       // Проверка на дубликаты: ищем существующую заявку с теми же параметрами
-      // Проверяем только для deposit, так как для withdraw могут быть разные суммы
       if (validType === 'deposit' && finalAccountId) {
+        // Для deposit проверяем по userId, accountId, amount, bookmaker
         const existingRequest = await prisma.request.findFirst({
           where: {
             userId: userIdBigInt,
@@ -378,11 +378,67 @@ export async function POST(request: NextRequest) {
         })
 
         if (existingRequest) {
-          console.log('⚠️ Payment API - Duplicate request detected, returning existing:', {
+          console.log('⚠️ Payment API - Duplicate deposit request detected, returning existing:', {
             existingId: existingRequest.id,
             userId: userIdBigInt.toString(),
             accountId: finalAccountId.toString(),
             amount: amountDecimal.toString(),
+          })
+          
+          // Возвращаем существующую заявку вместо создания новой
+          const existingData = {
+            id: existingRequest.id,
+            userId: existingRequest.userId.toString(),
+            type: existingRequest.requestType,
+            status: existingRequest.status,
+            amount: existingRequest.amount?.toString(),
+            bookmaker: existingRequest.bookmaker,
+            accountId: existingRequest.accountId,
+            has_photo: !!existingRequest.photoFileUrl,
+            createdAt: existingRequest.createdAt
+          }
+
+          const duplicateResponse = NextResponse.json(
+            createApiResponse(existingData, undefined, 'Request already exists'),
+            {
+              status: 200,
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+              }
+            }
+          )
+          return duplicateResponse
+        }
+      } else if (validType === 'withdraw' && finalAccountId) {
+        // Для withdraw проверяем по userId, accountId, bookmaker, withdrawalCode (если есть)
+        // withdrawalCode уникален для каждой заявки на вывод
+        const withdrawWhere: any = {
+          userId: userIdBigInt,
+          accountId: finalAccountId.toString(),
+          requestType: 'withdraw',
+          status: 'pending',
+          bookmaker: cleanString(bookmaker),
+        }
+        
+        // Если есть код вывода, проверяем и по нему (код уникален)
+        if (cleanString(withdrawal_code)) {
+          withdrawWhere.withdrawalCode = cleanString(withdrawal_code)
+        }
+        
+        const existingRequest = await prisma.request.findFirst({
+          where: withdrawWhere,
+          orderBy: {
+            createdAt: 'desc',
+          },
+        })
+
+        if (existingRequest) {
+          console.log('⚠️ Payment API - Duplicate withdraw request detected, returning existing:', {
+            existingId: existingRequest.id,
+            userId: userIdBigInt.toString(),
+            accountId: finalAccountId.toString(),
+            bookmaker: cleanString(bookmaker),
+            withdrawalCode: cleanString(withdrawal_code),
           })
           
           // Возвращаем существующую заявку вместо создания новой

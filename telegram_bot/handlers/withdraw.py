@@ -474,7 +474,15 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
             withdrawal_code=withdrawal_code,
         )
         
-        request_id = request_data.get('data', {}).get('id')
+        # Проверяем, не вернулась ли существующая заявка (дубликат)
+        if request_data.get('message') == 'Request already exists':
+            request_id = request_data.get('data', {}).get('id')
+            if request_id:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"[Withdraw] Duplicate request detected, using existing ID: {request_id}")
+        else:
+            request_id = request_data.get('data', {}).get('id')
         
         if request_id:
             # Формируем сообщение с суммой для всех казино
