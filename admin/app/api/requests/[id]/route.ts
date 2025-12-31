@@ -209,36 +209,46 @@ export async function PATCH(
           // Успешное пополнение или вывод
 
           if (currentRequest.requestType === 'deposit') {
-            // Для пополнения вычисляем время обработки
+            // Для пополнения: если автопополнение - всегда 1s, иначе вычисляем реальное время
             let processingTime: string | null = null
-            if (updatedRequest.createdAt && updatedRequest.processedAt) {
-              const createdAt = new Date(updatedRequest.createdAt)
-              const processedAt = new Date(updatedRequest.processedAt)
-              const diffMs = processedAt.getTime() - createdAt.getTime()
-              
-              if (diffMs > 0) {
-                const diffSeconds = Math.floor(diffMs / 1000)
-                const diffMinutes = Math.floor(diffSeconds / 60)
-                const diffHours = Math.floor(diffMinutes / 60)
+            
+            // Проверяем, было ли это автопополнение
+            const isAutodeposit = updatedRequest.processedBy === 'автопополнение' || updatedRequest.processedBy === 'autodeposit'
+            
+            if (isAutodeposit) {
+              // Для автопополнения всегда используем 1s
+              processingTime = '1s'
+            } else {
+              // Для ручного подтверждения админом вычисляем реальное время
+              if (updatedRequest.createdAt && updatedRequest.processedAt) {
+                const createdAt = new Date(updatedRequest.createdAt)
+                const processedAt = new Date(updatedRequest.processedAt)
+                const diffMs = processedAt.getTime() - createdAt.getTime()
                 
-                if (diffHours > 0) {
-                  processingTime = `${diffHours} Hour${diffHours > 1 ? 's' : ''}`
-                } else if (diffMinutes > 0) {
-                  const remainingSeconds = diffSeconds % 60
-                  if (remainingSeconds > 0) {
-                    processingTime = `${diffMinutes} Minute${diffMinutes > 1 ? 's' : ''} ${remainingSeconds}s`
+                if (diffMs > 0) {
+                  const diffSeconds = Math.floor(diffMs / 1000)
+                  const diffMinutes = Math.floor(diffSeconds / 60)
+                  const diffHours = Math.floor(diffMinutes / 60)
+                  
+                  if (diffHours > 0) {
+                    processingTime = `${diffHours} Hour${diffHours > 1 ? 's' : ''}`
+                  } else if (diffMinutes > 0) {
+                    const remainingSeconds = diffSeconds % 60
+                    if (remainingSeconds > 0) {
+                      processingTime = `${diffMinutes} Minute${diffMinutes > 1 ? 's' : ''} ${remainingSeconds}s`
+                    } else {
+                      processingTime = `${diffMinutes} Minute${diffMinutes > 1 ? 's' : ''}`
+                    }
                   } else {
-                    processingTime = `${diffMinutes} Minute${diffMinutes > 1 ? 's' : ''}`
+                    processingTime = `${diffSeconds}s`
                   }
-                } else {
-                  processingTime = `${diffSeconds}s`
                 }
               }
-            }
-            
-            // Если автопополнение или время не вычислено - используем 1s
-            if (!processingTime || updatedRequest.processedBy === 'автопополнение' || updatedRequest.processedBy === 'autodeposit') {
-              processingTime = '1s'
+              
+              // Если время не вычислено (fallback) - используем 1s
+              if (!processingTime) {
+                processingTime = '1s'
+              }
             }
             
             notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
