@@ -3,7 +3,7 @@
  */
 import { prisma } from './prisma'
 import { depositToCasino } from './deposit-balance'
-import { sendNotificationToUser, formatDepositMessage, getAdminUsername, sendMainMenuToUser } from './send-notification'
+import { formatDepositMessage, getAdminUsername, sendMessageWithMainMenuButton } from './send-notification'
 
 interface MatchResult {
   success: boolean
@@ -433,18 +433,15 @@ export async function matchAndProcessPayment(
       // Формируем сообщение (такое же, как при подтверждении админом)
       const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
       
-      console.log(`📨 [Auto-Deposit] Sending notification to user ${request.userId.toString()}, bookmaker: ${request.bookmaker}, requestId: ${request.id}`)
+      console.log(`📨 [Auto-Deposit] Sending notification with main menu button to user ${request.userId.toString()}, bookmaker: ${request.bookmaker}, requestId: ${request.id}`)
       
-      // Отправляем уведомление (такая же логика, как при подтверждении админом)
-      // Передаем bookmaker и requestId для правильной отправки уведомления
-      return sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, request.id)
+      // Отправляем сообщение с кнопкой "Главное меню" (такая же логика, как при подтверждении админом)
+      return sendMessageWithMainMenuButton(request.userId, notificationMessage, request.bookmaker)
         .then(() => {
-          console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
-          // После отправки уведомления отправляем главное меню (как при подтверждении админом)
-          return sendMainMenuToUser(request.userId, request.bookmaker)
+          console.log(`✅ [Auto-Deposit] Notification with main menu button sent successfully to user ${request.userId.toString()} for request ${request.id}`)
         })
         .catch((error) => {
-          console.error(`❌ [Auto-Deposit] Error sending notification or main menu for request ${request.id}:`, error)
+          console.error(`❌ [Auto-Deposit] Error sending notification with main menu button for request ${request.id}:`, error)
         })
     }).catch((error) => {
       console.error(`❌ [Auto-Deposit] Exception while preparing notification for request ${request.id}:`, error)

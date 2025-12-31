@@ -269,6 +269,18 @@ export async function getAdminUsername(): Promise<string> {
 }
 
 /**
+ * Форматирование суммы без лишних нулей
+ */
+function formatAmount(amount: number): string {
+  // Если число целое, убираем .00
+  if (amount % 1 === 0) {
+    return amount.toString()
+  }
+  // Иначе оставляем 2 знака после запятой
+  return amount.toFixed(2)
+}
+
+/**
  * Формирование сообщения о пополнении (новый формат)
  */
 export function formatDepositMessage(
@@ -285,14 +297,16 @@ export function formatDepositMessage(
     timeText = processingTime
   }
   
+  const amountFormatted = formatAmount(amount)
+  
   if (lang === 'ky') {
     return `✅   ${timeText}\n` +
-           `💸   ${amount.toFixed(2)} KGS\n` +
+           `💸   ${amountFormatted} KGS\n` +
            `🆔   ${accountId}`
   }
   
   return `✅   ${timeText}\n` +
-         `💸   ${amount.toFixed(2)} KGS\n` +
+         `💸   ${amountFormatted} KGS\n` +
          `🆔   ${accountId}`
 }
 
@@ -331,6 +345,28 @@ export function formatWithdrawInstruction(casino: string): string {
 }
 
 /**
+ * Получить название банка по ID
+ */
+function getBankName(bankId: string | null | undefined): string | null {
+  if (!bankId) return null
+  
+  const bankMap: Record<string, string> = {
+    'mbank': 'MBank',
+    'kompanion': 'Компаньон',
+    'odengi': 'O!Money',
+    'bakai': 'Bakai',
+    'balance': 'Balance.kg',
+    'megapay': 'MegaPay',
+    'omoney': 'О деньги',
+    'demir': 'DemirBank',
+    'demirbank': 'DemirBank',
+  }
+  
+  const normalized = bankId.toLowerCase().trim()
+  return bankMap[normalized] || bankId
+}
+
+/**
  * Формирование сообщения о выводе (новый формат)
  */
 export function formatWithdrawMessage(
@@ -348,20 +384,23 @@ export function formatWithdrawMessage(
     timeText = processingTime
   }
   
-  // Формируем банк
+  // Формируем банк (преобразуем ID в название)
   let bankText = ''
-  if (bank) {
-    bankText = `\n💳   ${bank}`
+  const bankName = getBankName(bank)
+  if (bankName) {
+    bankText = `\n💳   ${bankName}`
   }
+  
+  const amountFormatted = formatAmount(amount)
   
   if (lang === 'ky') {
     return `✅   ${timeText}\n` +
-           `💸   ${amount.toFixed(2)} KGS` +
+           `💸   ${amountFormatted} KGS` +
            bankText
   }
   
   return `✅   ${timeText}\n` +
-         `💸   ${amount.toFixed(2)} KGS` +
+         `💸   ${amountFormatted} KGS` +
          bankText
 }
 
