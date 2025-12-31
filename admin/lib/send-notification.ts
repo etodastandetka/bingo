@@ -300,8 +300,11 @@ export function formatDepositMessage(
  * Формирование инструкции для вывода (перед сообщением о выводе)
  */
 export function formatWithdrawInstruction(casino: string): string {
-  const casinoLower = casino.toLowerCase()
-  const is888starz = casinoLower.includes('888starz') || casinoLower.includes('888')
+  const casinoLower = casino.toLowerCase().trim()
+  // Проверяем точно 888starz (может быть написано как 888starz, 888Starz, 888 STARZ и т.д.)
+  const is888starz = casinoLower === '888starz' || 
+                     casinoLower.includes('888starz') ||
+                     (casinoLower.includes('888') && casinoLower.includes('starz'))
   
   if (is888starz) {
     return `📍 Заходим👇🏻\n` +
@@ -315,6 +318,7 @@ export function formatWithdrawInstruction(casino: string): string {
            `📍7. Отправить его нам`
   }
   
+  // Для всех остальных казино используется адрес Bingo KG
   return `📍 Заходим👇🏻\n` +
          `📍1. Настройки!\n` +
          `📍2. Вывести со счета!\n` +

@@ -287,7 +287,7 @@ export async function PATCH(
             )
           }
 
-          // Если это операторская заявка (была на проверке) - отправляем только в оператор-бот
+          // Если это операторская заявка (была на проверке) - отправляем в оператор-бот и в основной бот с кнопкой
           if (isOperatorRequest) {
             sendOperatorMessage(
               updatedRequest.userId,
@@ -299,6 +299,22 @@ export async function PATCH(
                 `⏱ Подтверждено: ${formatDateTime(new Date())}`,
               ].join('\n')
             )
+            
+            // Для операторских заявок на вывод также отправляем сообщение в основной бот с кнопкой "Главное меню"
+            if (currentRequest.requestType === 'withdraw' && notificationMessage) {
+              const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
+              sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
+                .catch((error) => {
+                  console.error('Failed to send withdrawal notification with main menu button for operator request:', error)
+                })
+            } else if (currentRequest.requestType === 'deposit' && notificationMessage) {
+              // Для пополнения тоже отправляем с кнопкой
+              const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
+              sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
+                .catch((error) => {
+                  console.error('Failed to send deposit notification with main menu button for operator request:', error)
+                })
+            }
           }
           // Для обычных заявок (не операторских) notificationMessage отправится в основной бот ниже
         } else if (['rejected', 'declined'].includes(body.status)) {

@@ -372,7 +372,10 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
         resize_keyboard=True
     )
     
-    amount_prompt = get_text(lang, 'deposit', 'enter_amount', min=str(Config.DEPOSIT_MIN), max=str(Config.DEPOSIT_MAX))
+    # Форматируем числа с пробелами для тысяч
+    min_formatted = f"{Config.DEPOSIT_MIN:,}".replace(',', ' ')
+    max_formatted = f"{Config.DEPOSIT_MAX:,}".replace(',', ' ')
+    amount_prompt = get_text(lang, 'deposit', 'enter_amount', min=min_formatted, max=max_formatted)
 
     await message.answer(
         amount_prompt,
@@ -420,8 +423,11 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         amount = float(amount_text)
         
         if amount < Config.DEPOSIT_MIN or amount > Config.DEPOSIT_MAX:
+            # Форматируем числа с пробелами для тысяч
+            min_formatted = f"{Config.DEPOSIT_MIN:,}".replace(',', ' ')
+            max_formatted = f"{Config.DEPOSIT_MAX:,}".replace(',', ' ')
             await message.answer(
-                get_text(lang, 'deposit', 'invalid_amount', min=Config.DEPOSIT_MIN, max=Config.DEPOSIT_MAX)
+                get_text(lang, 'deposit', 'invalid_amount', min=min_formatted, max=max_formatted)
             )
             return
         
@@ -652,7 +658,10 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         
     except ValueError:
         lang = await get_lang_from_state(state)
-        await message.answer(get_text(lang, 'deposit', 'invalid_amount', min=Config.DEPOSIT_MIN, max=Config.DEPOSIT_MAX))
+        # Форматируем числа с пробелами для тысяч
+        min_formatted = f"{Config.DEPOSIT_MIN:,}".replace(',', ' ')
+        max_formatted = f"{Config.DEPOSIT_MAX:,}".replace(',', ' ')
+        await message.answer(get_text(lang, 'deposit', 'invalid_amount', min=min_formatted, max=max_formatted))
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
