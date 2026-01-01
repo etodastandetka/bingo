@@ -321,17 +321,12 @@ export async function matchAndProcessPayment(
 
   // Проверяем еще раз, что заявка все еще pending и не обрабатывается
   // Это предотвращает race condition при одновременной обработке нескольких платежей
-  // Включаем botType в запрос, чтобы не делать дополнительный запрос позже
+  // Проверяем еще раз, что заявка все еще pending и не обрабатывается
+  // Это предотвращает race condition при одновременной обработке нескольких платежей
+  // Используем include для получения всех полей, включая botType и incomingPayments
   const currentRequest = await prisma.request.findUnique({
     where: { id: request.id },
-    select: {
-      id: true,
-      status: true,
-      botType: true,
-      bookmaker: true,
-      accountId: true,
-      amount: true,
-      userId: true,
+    include: {
       incomingPayments: {
         where: {
           isProcessed: true,
@@ -447,8 +442,9 @@ export async function matchAndProcessPayment(
     }
     
     // Отправляем сообщение СРАЗУ, не блокируя основной процесс
-    // Используем botType из объекта currentRequest (уже загружен, не делаем дополнительный запрос)
-    const botType = currentRequest?.botType || null
+    // Используем botType из объекта request (исходный объект из БД, который точно существует)
+    // currentRequest может быть null или устаревшим после обновления, поэтому используем request
+    const botType = (request as any).botType || null
     console.log(`📱 [Auto-Deposit] Using botType from request: ${botType} for request ${request.id}`)
     
     // Определяем bookmaker для fallback (если botType не указан)
