@@ -421,7 +421,7 @@ export async function matchAndProcessPayment(
         select: { language: true },
       }).catch(() => null),
       getAdminUsername()
-    ]).then(([user, adminUsername]) => {
+    ]).then(async ([user, adminUsername]) => {
       const lang = user?.language || 'ru'
       const amount = parseFloat(request.amount?.toString() || '0')
       const casino = request.bookmaker || 'Неизвестно'
@@ -433,16 +433,41 @@ export async function matchAndProcessPayment(
       // Формируем сообщение (такое же, как при подтверждении админом)
       const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
       
-      console.log(`📨 [Auto-Deposit] Sending notification with main menu button to user ${request.userId.toString()}, bookmaker: ${request.bookmaker}, requestId: ${request.id}`)
+      console.log(`📨 [Auto-Deposit] Preparing notification for user ${request.userId.toString()}`)
+      console.log(`📨 [Auto-Deposit] Bookmaker: ${request.bookmaker}, RequestId: ${request.id}`)
+      console.log(`📨 [Auto-Deposit] Message text: ${notificationMessage}`)
       
       // Отправляем сообщение с кнопкой "Главное меню" (такая же логика, как при подтверждении админом)
-      return sendMessageWithMainMenuButton(request.userId, notificationMessage, request.bookmaker)
-        .then(() => {
+      try {
+        const result = await sendMessageWithMainMenuButton(request.userId, notificationMessage, request.bookmaker)
+        if (result.success) {
           console.log(`✅ [Auto-Deposit] Notification with main menu button sent successfully to user ${request.userId.toString()} for request ${request.id}`)
-        })
-        .catch((error) => {
-          console.error(`❌ [Auto-Deposit] Error sending notification with main menu button for request ${request.id}:`, error)
-        })
+        } else {
+          console.error(`❌ [Auto-Deposit] Failed to send notification for request ${request.id}: ${result.error}`)
+          // Если отправка с кнопкой не удалась, пробуем отправить без кнопки
+          const { sendNotificationToUser } = await import('./send-notification')
+          const fallbackResult = await sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, null)
+          if (fallbackResult.success) {
+            console.log(`✅ [Auto-Deposit] Fallback notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
+          } else {
+            console.error(`❌ [Auto-Deposit] Fallback notification also failed for request ${request.id}: ${fallbackResult.error}`)
+          }
+        }
+      } catch (error: any) {
+        console.error(`❌ [Auto-Deposit] Exception sending notification for request ${request.id}:`, error)
+        // Пробуем отправить через sendNotificationToUser как запасной вариант
+        try {
+          const { sendNotificationToUser } = await import('./send-notification')
+          const fallbackResult = await sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, null)
+          if (fallbackResult.success) {
+            console.log(`✅ [Auto-Deposit] Fallback notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
+          } else {
+            console.error(`❌ [Auto-Deposit] Fallback notification also failed for request ${request.id}: ${fallbackResult.error}`)
+          }
+        } catch (fallbackError: any) {
+          console.error(`❌ [Auto-Deposit] Fallback notification exception for request ${request.id}:`, fallbackError)
+        }
+      }
     }).catch((error) => {
       console.error(`❌ [Auto-Deposit] Exception while preparing notification for request ${request.id}:`, error)
     })

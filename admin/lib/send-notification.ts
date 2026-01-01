@@ -447,7 +447,12 @@ export async function sendMessageWithMainMenuButton(
   bookmaker?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log(`📤 [sendMessageWithMainMenuButton] Starting: userId=${userId.toString()}, bookmaker=${bookmaker || 'null'}`)
+    console.log(`📤 [sendMessageWithMainMenuButton] Message preview: ${message.substring(0, 100)}...`)
+    
     const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
+    
+    console.log(`📤 [sendMessageWithMainMenuButton] Bot token: ${botToken ? 'configured (' + botToken.substring(0, 10) + '...)' : 'NOT configured'}, bookmaker: ${bookmaker || 'main'}`)
     
     if (!botToken) {
       const errorMsg = `BOT_TOKEN not configured for bookmaker: ${bookmaker || 'main'}`
@@ -456,36 +461,44 @@ export async function sendMessageWithMainMenuButton(
     }
 
     const sendMessageUrl = `https://api.telegram.org/bot${botToken}/sendMessage`
+    const requestBody = {
+      chat_id: userId.toString(),
+      text: message,
+      // Не используем parse_mode, т.к. сообщение содержит только эмодзи и текст
+      reply_markup: {
+        inline_keyboard: [[
+          {
+            text: '← Главное меню',
+            callback_data: 'main_menu'
+          }
+        ]]
+      }
+    }
+    
+    console.log(`📤 [sendMessageWithMainMenuButton] Sending to Telegram API...`)
+    
     const response = await fetch(sendMessageUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        chat_id: userId.toString(),
-        text: message,
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [[
-            {
-              text: '← Главное меню',
-              callback_data: 'main_menu'
-            }
-          ]]
-        }
-      })
+      body: JSON.stringify(requestBody)
     })
 
     const data = await response.json()
+    console.log(`📤 [sendMessageWithMainMenuButton] Telegram API response: ok=${data.ok}, description=${data.description || 'none'}`)
+    
     if (data.ok) {
-      console.log(`✅ [sendMessageWithMainMenuButton] Message sent with main menu button to user ${userId.toString()}`)
+      console.log(`✅ [sendMessageWithMainMenuButton] Message sent with main menu button to user ${userId.toString()}, message_id: ${data.result?.message_id || 'unknown'}`)
       return { success: true }
     } else {
       console.error(`❌ [sendMessageWithMainMenuButton] Failed to send message: ${data.description}`)
+      console.error(`❌ [sendMessageWithMainMenuButton] Full error response:`, JSON.stringify(data, null, 2))
       return { success: false, error: data.description }
     }
   } catch (error: any) {
-    console.error('❌ [sendMessageWithMainMenuButton] Error:', error)
+    console.error('❌ [sendMessageWithMainMenuButton] Exception:', error)
+    console.error('❌ [sendMessageWithMainMenuButton] Error stack:', error.stack)
     return { success: false, error: error.message }
   }
 }
