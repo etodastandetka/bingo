@@ -439,6 +439,35 @@ class APIClient:
                 json=data
             ) as response:
                 return await response.json()
+    
+    @staticmethod
+    async def check_active_deposit(telegram_user_id: str) -> Dict[str, Any]:
+        """Проверить, есть ли у пользователя активная заявка на пополнение"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            data = {
+                'userId': str(telegram_user_id),
+            }
+            
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/public/check-active-deposit',
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.post(
+                f'{api_url}/public/check-active-deposit',
+                json=data
+            ) as response:
+                return await response.json()
 
 
 

@@ -166,6 +166,28 @@ async def deposit_start(message: Message, state: FSMContext):
     # Восстанавливаем язык
     await state.update_data(language=lang)
     
+    # Проверяем активные заявки на пополнение СРАЗУ, до начала процесса
+    try:
+        active_check = await APIClient.check_active_deposit(str(message.from_user.id))
+        if active_check.get('success') and active_check.get('data', {}).get('hasActive'):
+            active_data = active_check.get('data', {})
+            request_id = active_data.get('requestId')
+            time_ago = active_data.get('timeAgoMinutes', 0)
+            
+            # Формируем сообщение об ошибке
+            if lang == 'ru':
+                error_message = f"⚠️ У вас уже есть активная заявка на пополнение (ID: #{request_id}, создана {time_ago} мин. назад).\n\nПожалуйста, дождитесь обработки первой заявки перед созданием новой."
+            else:
+                error_message = f"⚠️ Сизде буга чейин активдүү толтуруу өтүнүчү бар (ID: #{request_id}, {time_ago} мүн. мурун түзүлгөн).\n\nБиринчи өтүнүчтү иштетүүнү күтүңүз."
+            
+            await message.answer(error_message)
+            return
+    except Exception as e:
+        # Если проверка не удалась, продолжаем процесс (не блокируем пользователя)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to check active deposit: {e}, continuing with deposit process")
+    
     # Получаем настройки из админки
     settings = await APIClient.get_payment_settings()
     
