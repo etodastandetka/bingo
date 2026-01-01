@@ -217,8 +217,8 @@ async def deposit_start(message: Message, state: FSMContext):
     )
     
     # Отправляем фото казино с текстом
-    # Фото находятся в корневой папке проекта
-    photo_path = Path(__file__).parent.parent.parent / f"{casino_id}.jpg"
+    # Фото находятся в папке telegram_bot/images
+    photo_path = Path(__file__).parent.parent.parent / "telegram_bot" / "images" / f"{casino_id}.jpg"
     if photo_path.exists():
         photo = FSInputFile(str(photo_path))
         await message.answer_photo(
