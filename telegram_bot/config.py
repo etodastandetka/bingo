@@ -26,6 +26,7 @@ domains_config = load_domains_config()
 class Config:
     BOT_TOKEN = os.getenv('BOT_TOKEN', '8413027203:AAHhXadiHxW8WUSGp8tzxPqOF7iLHf8lI_s')
     OPERATOR_BOT_TOKEN = os.getenv('OPERATOR_BOT_TOKEN', '8279477654:AAHZHyx5Ez_qeOYx610ayISgHhtz9Uy7F_0')
+    BOT_TYPE = 'main'  # Тип бота для определения правильного токена при отправке уведомлений
     
     # Для API: используем конфиг из domains.json или .env, иначе localhost
     if domains_config and 'domains' in domains_config:

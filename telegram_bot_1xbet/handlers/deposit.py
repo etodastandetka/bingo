@@ -735,6 +735,7 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
             return
         
         # Создаем заявку через API (конвертирует несозданную заявку если есть uncreated_request_id)
+        # Передаем botType из конфига, чтобы API знал, из какого бота была создана заявка
         result = await APIClient.create_request(
             telegram_user_id=str(message.from_user.id),
             request_type='deposit',
@@ -746,7 +747,8 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
             telegram_first_name=message.from_user.first_name,
             telegram_last_name=message.from_user.last_name,
             receipt_photo=photo_base64_with_prefix,
-            uncreated_request_id=uncreated_request_id
+            uncreated_request_id=uncreated_request_id,
+            bot_type=Config.BOT_TYPE
         )
         
         if result.get('success') and result.get('data'):

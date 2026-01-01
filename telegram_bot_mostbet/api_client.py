@@ -24,6 +24,7 @@ class APIClient:
         receipt_photo: Optional[str] = None,
         withdrawal_code: Optional[str] = None,
         uncreated_request_id: Optional[str] = None,
+        bot_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Создать заявку на пополнение или вывод"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)
@@ -54,6 +55,8 @@ class APIClient:
                 data['withdrawal_code'] = withdrawal_code
             if uncreated_request_id:
                 data['uncreated_request_id'] = uncreated_request_id
+            if bot_type:
+                data['bot_type'] = bot_type
             
             # Пробуем сначала локальный API, если не доступен - используем продакшн
             api_url = Config.API_BASE_URL

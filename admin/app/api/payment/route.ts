@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
       receipt_photo, // base64 строка фото чека
       withdrawal_code, // код подтверждения вывода
       uncreated_request_id,
+      bot_type, // тип бота (main, mostbet, 1xbet) - передается напрямую из бота
     } = body
     
     // Вспомогательная функция для обработки пустых строк
@@ -360,12 +361,20 @@ export async function POST(request: NextRequest) {
         lastName: cleanLastName,
       })
 
-      // Определяем botType из последнего сообщения пользователя
-      // Это позволяет определить, из какого бота была создана заявка
-      const { getBotTypeByUserLastMessage } = await import('@/lib/send-notification')
-      const requestCreatedAt = new Date()
-      const botType = await getBotTypeByUserLastMessage(userIdBigInt, requestCreatedAt)
-      console.log(`📱 Payment API - Determined botType: ${botType} for user ${userIdBigInt.toString()}`)
+      // Определяем botType: сначала используем переданный bot_type, если нет - определяем из последнего сообщения
+      let finalBotType: string | null = null
+      
+      if (bot_type) {
+        // Используем переданный bot_type напрямую из бота (наиболее надежный способ)
+        finalBotType = bot_type
+        console.log(`📱 Payment API - Using botType from request: ${finalBotType} for user ${userIdBigInt.toString()}`)
+      } else {
+        // Fallback: определяем botType из последнего сообщения пользователя
+        const { getBotTypeByUserLastMessage } = await import('@/lib/send-notification')
+        const requestCreatedAt = new Date()
+        finalBotType = await getBotTypeByUserLastMessage(userIdBigInt, requestCreatedAt)
+        console.log(`📱 Payment API - Determined botType from last message: ${finalBotType} for user ${userIdBigInt.toString()}`)
+      }
 
       // Проверка активных заявок на пополнение для этого пользователя
       if (validType === 'deposit') {
@@ -532,7 +541,7 @@ export async function POST(request: NextRequest) {
           status: 'pending',
           photoFileUrl: processedPhoto, // Сохраняем base64 фото чека (с префиксом data:image если нужно)
           withdrawalCode: cleanString(withdrawal_code), // Сохраняем код подтверждения вывода
-          botType: botType || 'main', // Сохраняем botType для определения, из какого бота была создана заявка
+          botType: finalBotType || 'main', // Сохраняем botType для определения, из какого бота была создана заявка
         },
       })
 
