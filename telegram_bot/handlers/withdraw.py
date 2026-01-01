@@ -17,6 +17,35 @@ async def get_lang_from_state(state: FSMContext) -> str:
     data = await state.get_data()
     return data.get('language', 'ru')
 
+def get_withdrawal_instructions(casino_id: str, lang: str = 'ru') -> str:
+    """Получить инструкции по выводу средств с учетом казино"""
+    # Для 888starz используем другой адрес
+    if casino_id and casino_id.lower() in ['888starz', '888', 'starz']:
+        address = '📍(Город Бишкек, улица Киевская)'
+    else:
+        address = '📍(Город Бишкек, улица Bingo kg)'
+    
+    if lang == 'ky':
+        return f'''📍 Кайрылыңыз👇🏻
+📍1. Жөндөөлөр!
+📍2. Эсептен чыгаруу!
+📍3. Касса
+📍4. Чыгаруу суммасы!
+{address}
+📍5. Тастыктоо
+📍6. Кодду алуу!
+📍7. Бизге жөнөтүңүз'''
+    else:
+        return f'''📍 Заходим👇🏻
+📍1. Настройки!
+📍2. Вывести со счета!
+📍3. Касса
+📍4. Сумму для Вывода!
+{address}
+📍5. Подтвердить
+📍6. Получить Код!
+📍7. Отправить его нам'''
+
 @router.message(F.text.in_(['💸 Вывести', '💸 Чыгаруу']))
 async def withdraw_start(message: Message, state: FSMContext):
     """Начало процесса вывода - выбор казино"""
@@ -353,13 +382,19 @@ async def withdraw_account_id_received(message: Message, state: FSMContext, bot:
     
     await state.update_data(account_id=account_id)
     
+    # Получаем casino_id для определения адреса
+    casino_id = data.get('casino_id', '')
+    
     keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=get_text(lang, 'withdraw', 'cancel'))]],
         resize_keyboard=True
     )
     
+    # Используем новую функцию для формирования инструкций
+    instructions = get_withdrawal_instructions(casino_id, lang)
+    
     await message.answer(
-        get_text(lang, 'withdraw', 'enter_code'),
+        instructions,
         reply_markup=keyboard,
     )
     await state.set_state(WithdrawStates.waiting_for_withdrawal_code)
