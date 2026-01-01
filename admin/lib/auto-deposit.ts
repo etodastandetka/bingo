@@ -321,9 +321,17 @@ export async function matchAndProcessPayment(
 
   // Проверяем еще раз, что заявка все еще pending и не обрабатывается
   // Это предотвращает race condition при одновременной обработке нескольких платежей
+  // Включаем botType в запрос, чтобы не делать дополнительный запрос позже
   const currentRequest = await prisma.request.findUnique({
     where: { id: request.id },
-    include: {
+    select: {
+      id: true,
+      status: true,
+      botType: true,
+      bookmaker: true,
+      accountId: true,
+      amount: true,
+      userId: true,
       incomingPayments: {
         where: {
           isProcessed: true,
@@ -439,18 +447,15 @@ export async function matchAndProcessPayment(
     }
     
     // Отправляем сообщение СРАЗУ, не блокируя основной процесс
-    // Используем botType из заявки для определения бота (из какого бота была создана заявка)
-    // Если botType не указан, используем bookmaker как fallback
-    const requestWithBotType = await prisma.request.findUnique({
-      where: { id: request.id },
-      select: { botType: true }
-    })
-    const botType = requestWithBotType?.botType || null
+    // Используем botType из объекта currentRequest (уже загружен, не делаем дополнительный запрос)
+    const botType = currentRequest?.botType || null
     console.log(`📱 [Auto-Deposit] Using botType from request: ${botType} for request ${request.id}`)
     
     // Определяем bookmaker для fallback (если botType не указан)
     const bookmakerForFallback = botType ? null : request.bookmaker
     
+    // Отправляем уведомление асинхронно, не ждем результата (fire-and-forget)
+    // Это позволяет автопополнению завершиться мгновенно, уведомление отправится в фоне
     sendMessageWithMainMenuButton(request.userId, notificationMessage, bookmakerForFallback, botType)
       .then((result) => {
         if (result.success) {
