@@ -219,17 +219,35 @@ async def withdraw_qr_photo_received(message: Message, state: FSMContext):
     await state.update_data(qr_photo=photo_base64)
     
     lang = await get_lang_from_state(state)
+    
+    # Получаем сохраненный ID казино для этого пользователя
+    data = await state.get_data()
+    casino_id = data.get('casino_id', '')
+    casino_name = data.get('casino_name', '')
+    
+    saved_account_id = None
+    if casino_id:
+        try:
+            saved_id_result = await APIClient.get_saved_casino_account_id(str(message.from_user.id), casino_id)
+            if saved_id_result.get('success') and saved_id_result.get('data', {}).get('accountId'):
+                saved_account_id = saved_id_result.get('data', {}).get('accountId')
+        except Exception:
+            pass  # Игнорируем ошибки получения сохраненного ID
+    
+    # Формируем клавиатуру: если есть сохраненный ID, добавляем его как кнопку
+    keyboard_buttons = []
+    if saved_account_id:
+        keyboard_buttons.append([KeyboardButton(text=saved_account_id)])
+    keyboard_buttons.append([KeyboardButton(text=get_text(lang, 'withdraw', 'cancel'))])
+    
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=get_text(lang, 'withdraw', 'cancel'))]],
+        keyboard=keyboard_buttons,
         resize_keyboard=True
     )
     
     # Отправляем фото казино с текстом
-    data = await state.get_data()
-    casino_id = data.get('casino_id', '')
-    casino_name = data.get('casino_name', '')
-    # Фото находятся в корневой папке проекта
-    photo_path = Path(__file__).parent.parent.parent / f"{casino_id}.jpg"
+    # Фото находятся в папке telegram_bot/images (используем путь из основного бота)
+    photo_path = Path(__file__).parent.parent.parent / "telegram_bot" / "images" / f"{casino_id}.jpg"
     if photo_path.exists():
         photo = FSInputFile(str(photo_path))
         await message.answer_photo(
