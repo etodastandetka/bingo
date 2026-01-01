@@ -362,16 +362,32 @@ export async function PATCH(
         // Отправляем уведомление в основной бот только если это не операторская заявка
         // и есть сообщение для отправки
         if (notificationMessage && !isOperatorRequest) {
-          // Для отклоненных заявок используем sendNotificationToUser с requestId, чтобы отредактировать/удалить старое сообщение
+          // Для отклоненных заявок удаляем старое сообщение и отправляем новое с кнопкой "Главное меню"
           if (['rejected', 'declined'].includes(body.status)) {
-            // Используем sendNotificationToUser с requestId для редактирования старого сообщения
-            console.log(`📨 [Rejection] Sending rejection notification to user ${currentRequest.userId.toString()}, requestId: ${updatedRequest.id}, bookmaker: ${updatedRequest.bookmaker}`)
-            sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, updatedRequest.id)
+            const { deleteRequestCreatedMessage, sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
+            
+            // Сначала удаляем старое сообщение "Ваша заявка отправлена" если оно есть
+            const request = await prisma.request.findUnique({
+              where: { id: updatedRequest.id },
+              select: { requestCreatedMessageId: true },
+            })
+            
+            if (request?.requestCreatedMessageId) {
+              await deleteRequestCreatedMessage(currentRequest.userId, request.requestCreatedMessageId, updatedRequest.bookmaker)
+              await prisma.request.update({
+                where: { id: updatedRequest.id },
+                data: { requestCreatedMessageId: null },
+              })
+            }
+            
+            // Отправляем сообщение об отклонении с инлайн кнопкой "Главное меню"
+            console.log(`📨 [Rejection] Sending rejection notification with main menu button to user ${currentRequest.userId.toString()}, requestId: ${updatedRequest.id}, bookmaker: ${updatedRequest.bookmaker}`)
+            sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
               .then((result) => {
                 if (!result.success) {
                   console.error(`❌ [Rejection] Failed to send rejection notification: ${result.error}`)
                 } else {
-                  console.log(`✅ [Rejection] Rejection notification sent successfully to user ${currentRequest.userId.toString()}`)
+                  console.log(`✅ [Rejection] Rejection notification with main menu button sent successfully to user ${currentRequest.userId.toString()}`)
                 }
               })
               .catch((error) => {
