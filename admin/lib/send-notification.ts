@@ -1,7 +1,75 @@
 import { prisma } from './prisma'
 
 /**
- * Определяет токен бота по bookmaker
+ * Определяет botType на основе последнего сообщения пользователя перед созданием заявки
+ * Это позволяет определить, из какого бота была создана заявка
+ */
+export async function getBotTypeByUserLastMessage(
+  userId: bigint,
+  requestCreatedAt: Date
+): Promise<string | null> {
+  try {
+    // Ищем последнее сообщение пользователя, которое было создано до или в момент создания заявки
+    const lastMessage = await prisma.chatMessage.findFirst({
+      where: {
+        userId,
+        createdAt: {
+          lte: requestCreatedAt
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      select: {
+        botType: true,
+        createdAt: true
+      }
+    })
+
+    if (lastMessage && lastMessage.botType) {
+      console.log(`[getBotTypeByUserLastMessage] Found last message with botType: ${lastMessage.botType} for user ${userId.toString()}`)
+      return lastMessage.botType
+    }
+
+    console.log(`[getBotTypeByUserLastMessage] No last message found for user ${userId.toString()}, using default 'main'`)
+    return 'main' // По умолчанию основной бот
+  } catch (error) {
+    console.error(`[getBotTypeByUserLastMessage] Error getting botType:`, error)
+    return 'main' // В случае ошибки используем основной бот
+  }
+}
+
+/**
+ * Определяет токен бота по botType
+ * main -> BOT_TOKEN
+ * mostbet -> BOT_TOKEN_MOSTBET
+ * 1xbet -> BOT_TOKEN_1XBET
+ */
+export function getBotTokenByBotType(botType: string | null | undefined): string | null {
+  if (botType) {
+    const normalized = botType.toLowerCase()
+    console.log(`[getBotTokenByBotType] BotType: "${botType}", normalized: "${normalized}"`)
+
+    if (normalized === 'mostbet') {
+      const token = process.env.BOT_TOKEN_MOSTBET || process.env.BOT_TOKEN || null
+      console.log(`[getBotTokenByBotType] Matched Mostbet, using BOT_TOKEN_MOSTBET: ${token ? 'configured' : 'NOT configured'}`)
+      return token
+    }
+
+    if (normalized === '1xbet') {
+      const token = process.env.BOT_TOKEN_1XBET || process.env.BOT_TOKEN || null
+      console.log(`[getBotTokenByBotType] Matched 1xbet, using BOT_TOKEN_1XBET: ${token ? 'configured' : 'NOT configured'}`)
+      return token
+    }
+  }
+
+  // Для основного бота или если botType не указан
+  console.log(`[getBotTokenByBotType] Using main BOT_TOKEN`)
+  return process.env.BOT_TOKEN || null
+}
+
+/**
+ * Определяет токен бота по bookmaker (старый способ, для обратной совместимости)
  * mostbet -> BOT_TOKEN_MOSTBET
  * 1xbet -> BOT_TOKEN_1XBET
  * остальные -> BOT_TOKEN (основной бот)
@@ -118,12 +186,24 @@ export async function sendNotificationToUser(
   userId: bigint,
   message: string,
   bookmaker?: string | null,
-  requestId?: number | null
+  requestId?: number | null,
+  botType?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    console.log(`[sendNotificationToUser] userId: ${userId.toString()}, bookmaker: ${bookmaker || 'null'}, requestId: ${requestId || 'null'}`)
+    console.log(`[sendNotificationToUser] userId: ${userId.toString()}, bookmaker: ${bookmaker || 'null'}, requestId: ${requestId || 'null'}, botType: ${botType || 'null'}`)
     
-    const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
+    // Приоритет: botType > bookmaker > основной бот
+    let botToken: string | null = null
+    if (botType) {
+      botToken = getBotTokenByBotType(botType)
+      console.log(`[sendNotificationToUser] Using botType: ${botType}`)
+    } else if (bookmaker) {
+      botToken = getBotTokenByBookmaker(bookmaker)
+      console.log(`[sendNotificationToUser] Using bookmaker: ${bookmaker}`)
+    } else {
+      botToken = process.env.BOT_TOKEN || null
+      console.log(`[sendNotificationToUser] Using default main bot`)
+    }
 
     console.log(`[sendNotificationToUser] botToken: ${botToken ? 'configured' : 'NOT configured'}, bookmaker: ${bookmaker}`)
 
@@ -153,13 +233,14 @@ export async function sendNotificationToUser(
             })
             // Сохраняем сообщение в БД
             try {
-              let botType = 'main'
-              if (bookmaker) {
+              // Используем переданный botType или определяем из bookmaker
+              let messageBotType = (botType as string) || 'main'
+              if (!botType && bookmaker) {
                 const normalized = bookmaker.toLowerCase()
                 if (normalized.includes('mostbet')) {
-                  botType = 'mostbet'
+                  messageBotType = 'mostbet'
                 } else if (normalized.includes('1xbet') || normalized.includes('xbet')) {
-                  botType = '1xbet'
+                  messageBotType = '1xbet'
                 }
               }
               // Получаем message_id из отредактированного сообщения (оно то же самое)
@@ -169,7 +250,7 @@ export async function sendNotificationToUser(
                   messageText: message,
                   messageType: 'text',
                   direction: 'out',
-                  botType,
+                  botType: messageBotType,
                   telegramMessageId: request.requestCreatedMessageId,
                 },
               })
@@ -218,14 +299,14 @@ export async function sendNotificationToUser(
 
     // Сохраняем сообщение в БД
     try {
-      // Определяем botType на основе bookmaker
-      let botType = 'main'
-      if (bookmaker) {
+      // Используем переданный botType или определяем из bookmaker
+      let messageBotType = (botType as string) || 'main'
+      if (!botType && bookmaker) {
         const normalized = bookmaker.toLowerCase()
         if (normalized.includes('mostbet')) {
-          botType = 'mostbet'
+          messageBotType = 'mostbet'
         } else if (normalized.includes('1xbet') || normalized.includes('xbet')) {
-          botType = '1xbet'
+          messageBotType = '1xbet'
         }
       }
 
@@ -235,7 +316,7 @@ export async function sendNotificationToUser(
           messageText: message,
           messageType: 'text',
           direction: 'out',
-          botType,
+          botType: messageBotType,
           telegramMessageId: BigInt(telegramData.result.message_id),
         },
       })
@@ -453,18 +534,30 @@ export function formatRejectMessage(requestType: string, adminUsername: string, 
 export async function sendMessageWithMainMenuButton(
   userId: bigint,
   message: string,
-  bookmaker?: string | null
+  bookmaker?: string | null,
+  botType?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    console.log(`📤 [sendMessageWithMainMenuButton] Starting: userId=${userId.toString()}, bookmaker=${bookmaker || 'null'}`)
+    console.log(`📤 [sendMessageWithMainMenuButton] Starting: userId=${userId.toString()}, bookmaker=${bookmaker || 'null'}, botType=${botType || 'null'}`)
     console.log(`📤 [sendMessageWithMainMenuButton] Message preview: ${message.substring(0, 100)}...`)
     
-    const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
+    // Приоритет: botType > bookmaker > основной бот
+    let botToken: string | null = null
+    if (botType) {
+      botToken = getBotTokenByBotType(botType)
+      console.log(`📤 [sendMessageWithMainMenuButton] Using botType: ${botType}`)
+    } else if (bookmaker) {
+      botToken = getBotTokenByBookmaker(bookmaker)
+      console.log(`📤 [sendMessageWithMainMenuButton] Using bookmaker: ${bookmaker}`)
+    } else {
+      botToken = process.env.BOT_TOKEN || null
+      console.log(`📤 [sendMessageWithMainMenuButton] Using default main bot`)
+    }
     
-    console.log(`📤 [sendMessageWithMainMenuButton] Bot token: ${botToken ? 'configured (' + botToken.substring(0, 10) + '...)' : 'NOT configured'}, bookmaker: ${bookmaker || 'main'}`)
+    console.log(`📤 [sendMessageWithMainMenuButton] Bot token: ${botToken ? 'configured (' + botToken.substring(0, 10) + '...)' : 'NOT configured'}`)
     
     if (!botToken) {
-      const errorMsg = `BOT_TOKEN not configured for bookmaker: ${bookmaker || 'main'}`
+      const errorMsg = `BOT_TOKEN not configured for botType: ${botType || 'null'}, bookmaker: ${bookmaker || 'null'}`
       console.error(`❌ [sendMessageWithMainMenuButton] ${errorMsg}`)
       return { success: false, error: errorMsg }
     }

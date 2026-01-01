@@ -360,6 +360,13 @@ export async function POST(request: NextRequest) {
         lastName: cleanLastName,
       })
 
+      // Определяем botType из последнего сообщения пользователя
+      // Это позволяет определить, из какого бота была создана заявка
+      const { getBotTypeByUserLastMessage } = await import('@/lib/send-notification')
+      const requestCreatedAt = new Date()
+      const botType = await getBotTypeByUserLastMessage(userIdBigInt, requestCreatedAt)
+      console.log(`📱 Payment API - Determined botType: ${botType} for user ${userIdBigInt.toString()}`)
+
       // Проверка активных заявок на пополнение для этого пользователя
       if (validType === 'deposit') {
         const activeDepositRequest = await prisma.request.findFirst({
@@ -520,6 +527,7 @@ export async function POST(request: NextRequest) {
           status: 'pending',
           photoFileUrl: processedPhoto, // Сохраняем base64 фото чека (с префиксом data:image если нужно)
           withdrawalCode: cleanString(withdrawal_code), // Сохраняем код подтверждения вывода
+          botType: botType || 'main', // Сохраняем botType для определения, из какого бота была создана заявка
         },
       })
 

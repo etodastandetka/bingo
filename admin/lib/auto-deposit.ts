@@ -439,11 +439,19 @@ export async function matchAndProcessPayment(
     }
     
     // Отправляем сообщение СРАЗУ, не блокируя основной процесс
-    // Используем bookmaker для определения бота:
-    // - Если bookmaker содержит "1xbet" -> отправляется через бота 1xbet (BOT_TOKEN_1XBET)
-    // - Если bookmaker содержит "mostbet" -> отправляется через бота Mostbet (BOT_TOKEN_MOSTBET)
-    // - Для остальных -> отправляется через основной бот (BOT_TOKEN)
-    sendMessageWithMainMenuButton(request.userId, notificationMessage, request.bookmaker)
+    // Используем botType из заявки для определения бота (из какого бота была создана заявка)
+    // Если botType не указан, используем bookmaker как fallback
+    const requestWithBotType = await prisma.request.findUnique({
+      where: { id: request.id },
+      select: { botType: true }
+    })
+    const botType = requestWithBotType?.botType || null
+    console.log(`📱 [Auto-Deposit] Using botType from request: ${botType} for request ${request.id}`)
+    
+    // Определяем bookmaker для fallback (если botType не указан)
+    const bookmakerForFallback = botType ? null : request.bookmaker
+    
+    sendMessageWithMainMenuButton(request.userId, notificationMessage, bookmakerForFallback, botType)
       .then((result) => {
         if (result.success) {
           console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
@@ -451,7 +459,7 @@ export async function matchAndProcessPayment(
           console.error(`❌ [Auto-Deposit] Failed to send notification for request ${request.id}: ${result.error}`)
           // Если отправка с кнопкой не удалась, пробуем отправить без кнопки
           import('./send-notification')
-            .then(({ sendNotificationToUser }) => sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, null))
+            .then(({ sendNotificationToUser }) => sendNotificationToUser(request.userId, notificationMessage, bookmakerForFallback, null, botType))
             .then((fallbackResult) => {
               if (fallbackResult.success) {
                 console.log(`✅ [Auto-Deposit] Fallback notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
@@ -468,7 +476,7 @@ export async function matchAndProcessPayment(
         console.error(`❌ [Auto-Deposit] Exception sending notification for request ${request.id}:`, error)
         // Пробуем отправить через sendNotificationToUser как запасной вариант
         import('./send-notification')
-          .then(({ sendNotificationToUser }) => sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, null))
+          .then(({ sendNotificationToUser }) => sendNotificationToUser(request.userId, notificationMessage, bookmakerForFallback, null, botType))
           .then((fallbackResult) => {
             if (fallbackResult.success) {
               console.log(`✅ [Auto-Deposit] Fallback notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
