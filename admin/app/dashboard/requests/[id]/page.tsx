@@ -288,19 +288,39 @@ export default function RequestDetailPage() {
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return '—'
+    
+    // Парсим ISO строку напрямую, извлекая UTC компоненты
+    // Формат: "2026-01-01T10:02:32.000Z" (UTC время)
+    const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
+    if (match) {
+      const [, year, month, day, hour, minute] = match
+      // Создаем дату в UTC, добавляем 6 часов для Кыргызстана
+      const utcDate = new Date(Date.UTC(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hour),
+        parseInt(minute)
+      ))
+      const kyrgyzstanTime = utcDate.getTime() + (6 * 60 * 60 * 1000) // +6 часов
+      const kyrgyzstanDate = new Date(kyrgyzstanTime)
+      
+      const dayStr = kyrgyzstanDate.getUTCDate().toString().padStart(2, '0')
+      const monthStr = (kyrgyzstanDate.getUTCMonth() + 1).toString().padStart(2, '0')
+      const yearStr = kyrgyzstanDate.getUTCFullYear()
+      const hoursStr = kyrgyzstanDate.getUTCHours().toString().padStart(2, '0')
+      const minutesStr = kyrgyzstanDate.getUTCMinutes().toString().padStart(2, '0')
+      return `${dayStr}.${monthStr}.${yearStr} • ${hoursStr}:${minutesStr}`
+    }
+    
+    // Fallback на старый способ, если формат не ISO
     const date = new Date(dateString)
     if (isNaN(date.getTime())) return '—'
-    
-    // Дата в БД хранится в UTC (после парсинга с +06:00)
-    // При отображении нужно добавить 6 часов обратно, чтобы показать время Кыргызстана
-    const kyrgyzstanOffset = 6 * 60 * 60 * 1000 // 6 часов в миллисекундах
-    const kyrgyzstanDate = new Date(date.getTime() + kyrgyzstanOffset)
-    
-    const day = kyrgyzstanDate.getUTCDate().toString().padStart(2, '0')
-    const month = (kyrgyzstanDate.getUTCMonth() + 1).toString().padStart(2, '0')
-    const year = kyrgyzstanDate.getUTCFullYear()
-    const hours = kyrgyzstanDate.getUTCHours().toString().padStart(2, '0')
-    const minutes = kyrgyzstanDate.getUTCMinutes().toString().padStart(2, '0')
+    const day = date.getDate().toString().padStart(2, '0')
+    const month = (date.getMonth() + 1).toString().padStart(2, '0')
+    const year = date.getFullYear()
+    const hours = date.getHours().toString().padStart(2, '0')
+    const minutes = date.getMinutes().toString().padStart(2, '0')
     return `${day}.${month}.${year} • ${hours}:${minutes}`
   }
 
