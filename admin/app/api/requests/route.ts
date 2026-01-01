@@ -152,10 +152,13 @@ export async function POST(request: NextRequest) {
       })
 
       if (activeDepositRequest) {
+        const timeAgo = Math.floor((Date.now() - activeDepositRequest.createdAt.getTime()) / 1000 / 60) // минуты назад
+        const errorMessage = `У вас уже есть активная заявка на пополнение (ID: #${activeDepositRequest.id}, создана ${timeAgo} мин. назад). Пожалуйста, дождитесь обработки первой заявки перед созданием новой.`
+        
         return NextResponse.json(
           createApiResponse(
             null,
-            'У вас уже есть активная заявка на пополнение. Пожалуйста, дождитесь обработки первой заявки перед созданием новой.'
+            errorMessage
           ),
           { status: 400 }
         )

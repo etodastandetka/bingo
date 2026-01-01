@@ -383,16 +383,21 @@ export async function POST(request: NextRequest) {
         })
 
         if (activeDepositRequest) {
+          const timeAgo = Math.floor((Date.now() - activeDepositRequest.createdAt.getTime()) / 1000 / 60) // минуты назад
           console.log('⚠️ Payment API - Active deposit request exists, blocking new request:', {
             activeRequestId: activeDepositRequest.id,
             userId: userIdBigInt.toString(),
-            createdAt: activeDepositRequest.createdAt
+            createdAt: activeDepositRequest.createdAt,
+            status: activeDepositRequest.status,
+            timeAgoMinutes: timeAgo
           })
+          
+          const errorMessage = `У вас уже есть активная заявка на пополнение (ID: #${activeDepositRequest.id}, создана ${timeAgo} мин. назад). Пожалуйста, дождитесь обработки первой заявки перед созданием новой.`
           
           const errorResponse = NextResponse.json(
             createApiResponse(
               null,
-              'У вас уже есть активная заявка на пополнение. Пожалуйста, дождитесь обработки первой заявки перед созданием новой.'
+              errorMessage
             ),
             { 
               status: 400,
