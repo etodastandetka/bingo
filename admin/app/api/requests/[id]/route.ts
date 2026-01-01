@@ -310,12 +310,13 @@ export async function PATCH(
               ].join('\n')
             )
             
-            // Для операторских заявок на вывод отправляем сообщение в правильный бот БЕЗ кнопки "Главное меню"
+            // Для операторских заявок на вывод отправляем сообщение в правильный бот С кнопкой "Главное меню"
             // Используем updatedRequest.bookmaker для определения бота (1xbet/Mostbet/основной)
             if (currentRequest.requestType === 'withdraw' && notificationMessage) {
-              sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, null)
+              const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
+              sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
                 .catch((error) => {
-                  console.error('Failed to send withdrawal notification for operator request:', error)
+                  console.error('Failed to send withdrawal notification with main menu button for operator request:', error)
                 })
             } else if (currentRequest.requestType === 'deposit' && notificationMessage) {
               // Для пополнения отправляем с кнопкой в правильный бот
@@ -398,9 +399,9 @@ export async function PATCH(
                 console.error('❌ [Rejection] Exception sending rejection notification:', error)
               })
           } else if (currentRequest.requestType === 'withdraw') {
-            // Для вывода отправляем несколько сообщений: инструкцию, сообщение о принятии, и финальное сообщение БЕЗ кнопки
+            // Для вывода отправляем несколько сообщений: инструкцию, сообщение о принятии, и финальное сообщение С кнопкой
             // Используем updatedRequest.bookmaker для определения бота (1xbet/Mostbet/основной)
-            const { formatWithdrawInstruction, formatWithdrawRequestMessage } = await import('@/lib/send-notification')
+            const { formatWithdrawInstruction, formatWithdrawRequestMessage, sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
             
             // 1. Отправляем инструкцию
             const instruction = formatWithdrawInstruction(casino)
@@ -411,8 +412,8 @@ export async function PATCH(
                 return sendNotificationToUser(currentRequest.userId, requestMessage, updatedRequest.bookmaker, null)
               })
               .then(() => {
-                // 3. Отправляем финальное сообщение БЕЗ инлайн кнопки "Главное меню"
-                return sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, null)
+                // 3. Отправляем финальное сообщение С инлайн кнопкой "Главное меню"
+                return sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
               })
               .catch((error) => {
                 console.error('Failed to send withdrawal notifications:', error)
