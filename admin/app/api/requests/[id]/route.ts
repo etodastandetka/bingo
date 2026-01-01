@@ -159,7 +159,7 @@ export async function PATCH(
       updateData.processedAt = body.processedAt ? new Date(body.processedAt) : null
     }
 
-    // Получаем текущую заявку для сравнения статуса
+    // Получаем текущую заявку для сравнения статуса (включая botType)
     const currentRequest = await prisma.request.findUnique({
       where: { id },
     })
@@ -311,18 +311,19 @@ export async function PATCH(
             )
             
             // Для операторских заявок на вывод отправляем сообщение в правильный бот С кнопкой "Главное меню"
-            // Используем updatedRequest.bookmaker для определения бота (1xbet/Mostbet/основной)
+            // Используем botType из заявки для определения правильного бота
+            const botType = (updatedRequest as any).botType || (currentRequest as any).botType || null
             if (currentRequest.requestType === 'withdraw' && notificationMessage) {
               const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
-              sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
+              sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
                 .catch((error) => {
                   console.error('Failed to send withdrawal notification with main menu button for operator request:', error)
                 })
             } else if (currentRequest.requestType === 'deposit' && notificationMessage) {
               // Для пополнения отправляем с кнопкой в правильный бот
-              // Используем updatedRequest.bookmaker для определения бота (1xbet/Mostbet/основной)
+              // Используем botType из заявки для определения правильного бота
               const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
-              sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
+              sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
                 .catch((error) => {
                   console.error('Failed to send deposit notification with main menu button for operator request:', error)
                 })
@@ -364,8 +365,11 @@ export async function PATCH(
 
         // Отправляем уведомление в правильный бот только если это не операторская заявка
         // и есть сообщение для отправки
-        // Бот определяется на основе updatedRequest.bookmaker (1xbet/Mostbet/основной)
+        // Бот определяется на основе botType из заявки (приоритет) или bookmaker (fallback)
         if (notificationMessage && !isOperatorRequest) {
+          // Получаем botType из заявки для правильной отправки уведомлений
+          const botType = (updatedRequest as any).botType || (currentRequest as any).botType || null
+          
           // Для отклоненных заявок удаляем старое сообщение и отправляем новое с кнопкой "Главное меню"
           if (['rejected', 'declined'].includes(body.status)) {
             const { deleteRequestCreatedMessage, sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
@@ -385,9 +389,9 @@ export async function PATCH(
             }
             
             // Отправляем сообщение об отклонении с инлайн кнопкой "Главное меню"
-            // Используем updatedRequest.bookmaker для определения бота (1xbet/Mostbet/основной)
-            console.log(`📨 [Rejection] Sending rejection notification with main menu button to user ${currentRequest.userId.toString()}, requestId: ${updatedRequest.id}, bookmaker: ${updatedRequest.bookmaker}`)
-            sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
+            // Используем botType из заявки для определения правильного бота
+            console.log(`📨 [Rejection] Sending rejection notification with main menu button to user ${currentRequest.userId.toString()}, requestId: ${updatedRequest.id}, botType: ${botType || 'null'}, bookmaker: ${updatedRequest.bookmaker}`)
+            sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
               .then((result) => {
                 if (!result.success) {
                   console.error(`❌ [Rejection] Failed to send rejection notification: ${result.error}`)
@@ -400,29 +404,29 @@ export async function PATCH(
               })
           } else if (currentRequest.requestType === 'withdraw') {
             // Для вывода отправляем несколько сообщений: инструкцию, сообщение о принятии, и финальное сообщение С кнопкой
-            // Используем updatedRequest.bookmaker для определения бота (1xbet/Mostbet/основной)
+            // Используем botType из заявки для определения правильного бота
             const { formatWithdrawInstruction, formatWithdrawRequestMessage, sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
             
             // 1. Отправляем инструкцию
             const instruction = formatWithdrawInstruction(casino)
-            sendNotificationToUser(currentRequest.userId, instruction, updatedRequest.bookmaker, null)
+            sendNotificationToUser(currentRequest.userId, instruction, updatedRequest.bookmaker, null, botType)
               .then(() => {
                 // 2. Отправляем сообщение о принятии заявки
                 const requestMessage = formatWithdrawRequestMessage(amount, accountId, adminUsername, lang)
-                return sendNotificationToUser(currentRequest.userId, requestMessage, updatedRequest.bookmaker, null)
+                return sendNotificationToUser(currentRequest.userId, requestMessage, updatedRequest.bookmaker, null, botType)
               })
               .then(() => {
                 // 3. Отправляем финальное сообщение С инлайн кнопкой "Главное меню"
-                return sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
+                return sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
               })
               .catch((error) => {
                 console.error('Failed to send withdrawal notifications:', error)
               })
           } else {
             // Для пополнения отправляем сообщение с инлайн кнопкой "Главное меню"
-            // Используем updatedRequest.bookmaker для определения бота (1xbet/Mostbet/основной)
+            // Используем botType из заявки для определения правильного бота
             const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
-            sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker)
+            sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
               .catch((error) => {
                 console.error('Failed to send deposit notification with main menu button:', error)
               })
