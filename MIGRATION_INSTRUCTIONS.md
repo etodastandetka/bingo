@@ -39,12 +39,23 @@ cd /var/www/bingo_bot
 psql -h 92.51.38.85 -U ваш_пользователь -d default_db -f admin/prisma/migrations/add_bot_type_to_request.sql
 ```
 
-### Способ 3: Через Prisma (если есть доступ)
+### Способ 3: Через Prisma migrate deploy (рекомендуется для продакшн)
+
+```bash
+cd /var/www/bingo_bot/admin
+npx prisma migrate deploy
+```
+
+Эта команда применит все неприменённые миграции из папки `prisma/migrations/`, включая миграцию `20250101120000_add_bot_type_to_request`.
+
+### Способ 3.1: Через Prisma db push (альтернатива)
 
 ```bash
 cd /var/www/bingo_bot/admin
 npx prisma db push
 ```
+
+Эта команда синхронизирует схему Prisma с базой данных напрямую (без создания миграции).
 
 ### Способ 4: Вручную через psql
 
