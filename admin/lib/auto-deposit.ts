@@ -420,28 +420,12 @@ export async function matchAndProcessPayment(
       throw new Error(depositResult.message || 'Deposit failed')
     }
 
-    // Успешное пополнение - обновляем статус заявки
-    // processedBy = "автопополнение" означает что заявка закрыта автоматически
-    // Очищаем ошибку казино при успешном пополнении
-    await prisma.request.update({
-      where: { id: request.id },
-      data: {
-        status: 'autodeposit_success',
-        statusDetail: null,
-        processedBy: 'автопополнение' as any,
-        casinoError: null,
-        processedAt: new Date(),
-        updatedAt: new Date(),
-      } as any,
-    })
-
     console.log(
       `✅ Auto-deposit successful: Request ${request.id}, Account ${request.accountId}`
     )
 
-    // Отправляем уведомление пользователю СРАЗУ ЖЕ, не дожидаясь запросов к БД
-    // Используем дефолтные значения для мгновенной отправки
-    // Это обеспечивает отправку уведомления в ту же секунду, как автопополнение сработало
+    // ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ СРАЗУ ПОСЛЕ УСПЕШНОГО ПОПОЛНЕНИЯ, ДО ОБНОВЛЕНИЯ СТАТУСА В БД
+    // Это гарантирует, что пользователь получит уведомление в ту же секунду
     const amount = parseFloat(request.amount?.toString() || '0')
     const casino = request.bookmaker || 'Неизвестно'
     const accountId = request.accountId || ''
@@ -452,21 +436,10 @@ export async function matchAndProcessPayment(
     // Формируем сообщение сразу, без ожидания запросов к БД
     const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
     
-    console.log(`📨 [Auto-Deposit] Sending notification immediately for user ${request.userId.toString()}, requestId: ${request.id}`)
+    console.log(`📨 [Auto-Deposit] Sending notification IMMEDIATELY (before DB update) for user ${request.userId.toString()}, requestId: ${request.id}`)
     console.log(`📨 [Auto-Deposit] Bookmaker: ${request.bookmaker}`)
     
-    if (!notificationMessage || notificationMessage.trim().length === 0) {
-      console.error(`❌ [Auto-Deposit] Notification message is empty for request ${request.id}`)
-      return {
-        success: true,
-        requestId: request.id,
-        message: 'Auto-deposit completed successfully',
-      }
-    }
-    
-    // Отправляем сообщение СРАЗУ, не блокируя основной процесс
-    // Используем botType из объекта request (исходный объект из БД, который точно существует)
-    // currentRequest может быть null или устаревшим после обновления, поэтому используем request
+    // Определяем botType ДО отправки уведомления
     let botType = (request as any).botType || currentRequest?.botType || null
     
     // Если botType не указан, пытаемся определить из bookmaker
@@ -486,9 +459,28 @@ export async function matchAndProcessPayment(
     // Определяем bookmaker для fallback (если botType все еще не указан)
     const bookmakerForFallback = botType ? null : request.bookmaker
     
-    // Отправляем уведомление асинхронно, не ждем результата (fire-and-forget)
-    // Это позволяет автопополнению завершиться мгновенно, уведомление отправится в фоне
-    sendMessageWithMainMenuButton(request.userId, notificationMessage, bookmakerForFallback, botType)
+    // ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ СРАЗУ, НЕ ЖДЕМ ОБНОВЛЕНИЯ БД
+    // Это критично важно для мгновенной доставки уведомления
+    const notificationPromise = sendMessageWithMainMenuButton(request.userId, notificationMessage, bookmakerForFallback, botType)
+    
+    // Обновляем статус заявки ПАРАЛЛЕЛЬНО с отправкой уведомления
+    // processedBy = "автопополнение" означает что заявка закрыта автоматически
+    // Очищаем ошибку казино при успешном пополнении
+    const dbUpdatePromise = prisma.request.update({
+      where: { id: request.id },
+      data: {
+        status: 'autodeposit_success',
+        statusDetail: null,
+        processedBy: 'автопополнение' as any,
+        casinoError: null,
+        processedAt: new Date(),
+        updatedAt: new Date(),
+      } as any,
+    })
+    
+    // Запускаем оба процесса параллельно, но не ждем их завершения
+    // Уведомление отправится мгновенно, обновление БД произойдет в фоне
+    notificationPromise
       .then((result) => {
         if (result.success) {
           console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
@@ -525,6 +517,11 @@ export async function matchAndProcessPayment(
             console.error(`❌ [Auto-Deposit] Fallback notification exception for request ${request.id}:`, fallbackError)
           })
       })
+    
+    // Обновляем БД в фоне, не блокируя возврат функции
+    dbUpdatePromise.catch((error) => {
+      console.error(`❌ [Auto-Deposit] Failed to update request status in DB for request ${request.id}:`, error)
+    })
 
     return {
       success: true,
