@@ -362,8 +362,23 @@ export async function PATCH(
         // Отправляем уведомление в основной бот только если это не операторская заявка
         // и есть сообщение для отправки
         if (notificationMessage && !isOperatorRequest) {
-          // Для вывода отправляем несколько сообщений: инструкцию, сообщение о принятии, и финальное сообщение с кнопкой
-          if (currentRequest.requestType === 'withdraw') {
+          // Для отклоненных заявок используем sendNotificationToUser с requestId, чтобы отредактировать/удалить старое сообщение
+          if (['rejected', 'declined'].includes(body.status)) {
+            // Используем sendNotificationToUser с requestId для редактирования старого сообщения
+            console.log(`📨 [Rejection] Sending rejection notification to user ${currentRequest.userId.toString()}, requestId: ${updatedRequest.id}, bookmaker: ${updatedRequest.bookmaker}`)
+            sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, updatedRequest.id)
+              .then((result) => {
+                if (!result.success) {
+                  console.error(`❌ [Rejection] Failed to send rejection notification: ${result.error}`)
+                } else {
+                  console.log(`✅ [Rejection] Rejection notification sent successfully to user ${currentRequest.userId.toString()}`)
+                }
+              })
+              .catch((error) => {
+                console.error('❌ [Rejection] Exception sending rejection notification:', error)
+              })
+          } else if (currentRequest.requestType === 'withdraw') {
+            // Для вывода отправляем несколько сообщений: инструкцию, сообщение о принятии, и финальное сообщение с кнопкой
             const { formatWithdrawInstruction, formatWithdrawRequestMessage, sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
             
             // 1. Отправляем инструкцию
