@@ -91,9 +91,13 @@ export function getBotTokenByBookmaker(bookmaker: string | null | undefined): st
   }
 
   // Проверяем 1xbet (включая варианты с xbet)
-  if (normalized.includes('1xbet') || normalized.includes('xbet')) {
+  // Улучшенная проверка для различных вариантов написания
+  if (normalized.includes('1xbet') || normalized === 'xbet' || normalized.startsWith('1x') || normalized.includes('1xbet')) {
     const token = process.env.BOT_TOKEN_1XBET || process.env.BOT_TOKEN || null
     console.log(`[getBotTokenByBookmaker] Matched 1xbet, using BOT_TOKEN_1XBET: ${token ? 'configured' : 'NOT configured'}`)
+    if (!token) {
+      console.error(`❌ [getBotTokenByBookmaker] BOT_TOKEN_1XBET is NOT configured in environment variables!`)
+    }
     return token
   }
 

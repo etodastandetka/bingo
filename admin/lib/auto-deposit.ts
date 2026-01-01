@@ -444,10 +444,23 @@ export async function matchAndProcessPayment(
     // Отправляем сообщение СРАЗУ, не блокируя основной процесс
     // Используем botType из объекта request (исходный объект из БД, который точно существует)
     // currentRequest может быть null или устаревшим после обновления, поэтому используем request
-    const botType = (request as any).botType || null
-    console.log(`📱 [Auto-Deposit] Using botType from request: ${botType} for request ${request.id}`)
+    let botType = (request as any).botType || currentRequest?.botType || null
     
-    // Определяем bookmaker для fallback (если botType не указан)
+    // Если botType не указан, пытаемся определить из bookmaker
+    if (!botType && request.bookmaker) {
+      const bookmakerLower = request.bookmaker.toLowerCase()
+      if (bookmakerLower.includes('mostbet')) {
+        botType = 'mostbet'
+      } else if (bookmakerLower.includes('1xbet') || bookmakerLower.includes('xbet')) {
+        botType = '1xbet'
+      }
+    }
+    
+    console.log(`📱 [Auto-Deposit] Using botType from request: ${botType} for request ${request.id}`)
+    console.log(`📱 [Auto-Deposit] Request botType: ${(request as any).botType}, currentRequest botType: ${currentRequest?.botType}, final: ${botType}`)
+    console.log(`📱 [Auto-Deposit] Request bookmaker: ${request.bookmaker}`)
+    
+    // Определяем bookmaker для fallback (если botType все еще не указан)
     const bookmakerForFallback = botType ? null : request.bookmaker
     
     // Отправляем уведомление асинхронно, не ждем результата (fire-and-forget)
