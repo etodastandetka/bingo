@@ -453,13 +453,14 @@ class APIClient:
             }
             
             # Пробуем сначала локальный API, если не доступен - используем продакшн
+            # Уменьшаем таймаут для быстрого ответа
             api_url = Config.API_BASE_URL
             if api_url.startswith('http://localhost'):
                 try:
                     async with session.post(
                         f'{api_url}/public/check-active-deposit',
                         json=data,
-                        timeout=aiohttp.ClientTimeout(total=2)
+                        timeout=aiohttp.ClientTimeout(total=1)  # Уменьшен таймаут до 1 секунды
                     ) as response:
                         return await response.json()
                 except:
@@ -468,7 +469,8 @@ class APIClient:
             
             async with session.post(
                 f'{api_url}/public/check-active-deposit',
-                json=data
+                json=data,
+                timeout=aiohttp.ClientTimeout(total=1)  # Уменьшен таймаут до 1 секунды
             ) as response:
                 return await response.json()
 

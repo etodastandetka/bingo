@@ -165,8 +165,14 @@ async def deposit_start(message: Message, state: FSMContext):
     await state.update_data(language=lang)
     
     # Проверяем активные заявки на пополнение СРАЗУ, до начала процесса
+    # Используем короткий таймаут, чтобы не блокировать пользователя
     try:
-        active_check = await APIClient.check_active_deposit(str(message.from_user.id))
+        # Используем asyncio.wait_for для ограничения времени ожидания
+        import asyncio
+        active_check = await asyncio.wait_for(
+            APIClient.check_active_deposit(str(message.from_user.id)),
+            timeout=1.0  # Максимум 1 секунда на проверку
+        )
         if active_check.get('success') and active_check.get('data', {}).get('hasActive'):
             active_data = active_check.get('data', {})
             request_id = active_data.get('requestId')
@@ -180,6 +186,11 @@ async def deposit_start(message: Message, state: FSMContext):
             
             await message.answer(error_message)
             return
+    except asyncio.TimeoutError:
+        # Если проверка заняла слишком много времени, продолжаем процесс
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Active deposit check timeout, continuing with deposit process")
     except Exception as e:
         # Если проверка не удалась, продолжаем процесс (не блокируем пользователя)
         import logging

@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Проверяем активные заявки на пополнение
+    // Проверяем активные заявки на пополнение (оптимизированный запрос без сортировки)
+    // Используем findFirst без orderBy для максимальной скорости
     const activeDepositRequest = await prisma.request.findFirst({
       where: {
         userId: userIdBigInt,
@@ -35,14 +36,14 @@ export async function POST(request: NextRequest) {
           in: ['pending', 'pending_check']
         }
       },
-      orderBy: {
-        createdAt: 'desc'
-      },
+      // Убираем orderBy для ускорения - нам нужна любая активная заявка
       select: {
         id: true,
         createdAt: true,
         status: true,
-      }
+      },
+      // Используем индекс для быстрого поиска
+      take: 1, // Ограничиваем результат одной записью
     })
 
     if (activeDepositRequest) {
