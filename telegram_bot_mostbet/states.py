@@ -3,6 +3,7 @@ from aiogram.fsm.state import State, StatesGroup
 class DepositStates(StatesGroup):
     waiting_for_account_id = State()
     waiting_for_amount = State()
+    waiting_for_receipt = State()
 
 class WithdrawStates(StatesGroup):
     waiting_for_bank = State()

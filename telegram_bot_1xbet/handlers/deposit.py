@@ -1,16 +1,151 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, FSInputFile
+from aiogram.types import Message, CallbackQuery, FSInputFile, BufferedInputFile
 from aiogram.fsm.context import FSMContext
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from states import DepositStates
 from config import Config
 from api_client import APIClient
 from translations import get_text
 import re
 import os
+import base64
+import asyncio
+import time
 from pathlib import Path
 
 router = Router()
+
+# Словарь для отслеживания активных таймеров (чтобы можно было их остановить)
+active_timers = {}
+
+async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: int, duration: int, lang: str, amount: float, casino: str, account_id: str, keyboard, state: FSMContext = None):
+    """Фоновая задача для обновления таймера в сообщении с QR кодом"""
+    timer_key = f"{chat_id}_{message_id}"
+    active_timers[timer_key] = True
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"[Timer] Started for message {message_id}, created_at={created_at}, duration={duration}")
+    
+    try:
+        while active_timers.get(timer_key, False):
+            current_time = int(time.time())
+            elapsed = current_time - created_at
+            remaining = max(0, duration - elapsed)
+            
+            if remaining <= 0:
+                # Таймер истек
+                logger.info(f"[Timer] Expired for message {message_id}, deleting message and returning to main menu")
+                
+                # Удаляем сообщение с QR-кодом
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=message_id)
+                    logger.info(f"[Timer] Deleted QR message {message_id}")
+                except Exception as e:
+                    logger.warning(f"[Timer] Could not delete message {message_id}: {e}")
+                
+                # Отправляем главное меню
+                try:
+                    from handlers.start import cmd_start
+                    from aiogram.fsm.context import FSMContext
+                    from aiogram.types import Message as TelegramMessage
+                    
+                    # Создаем объект Message для отправки главного меню
+                    # Но для этого нужен реальный объект message, создадим через bot.send_message
+                    from config import Config
+                    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+                    
+                    first_name = "пользователь" if lang == 'ru' else "колдонуучу"
+                    text = f"""{get_text(lang, 'start', 'greeting', name=first_name)}
+
+{get_text(lang, 'start', 'auto_deposit')}
+{get_text(lang, 'start', 'auto_withdraw')}
+{get_text(lang, 'start', 'working')}
+
+{get_text(lang, 'start', 'support', support=Config.SUPPORT)}"""
+                    
+                    keyboard_main = ReplyKeyboardMarkup(
+                        keyboard=[
+                            [
+                                KeyboardButton(text=get_text(lang, 'menu', 'deposit')),
+                                KeyboardButton(text=get_text(lang, 'menu', 'withdraw'))
+                            ],
+                            [
+                                KeyboardButton(text=get_text(lang, 'menu', 'instruction')),
+                                KeyboardButton(text=get_text(lang, 'menu', 'language'))
+                            ]
+                        ],
+                        resize_keyboard=True
+                    )
+                    
+                    # Отправляем сообщение с главным меню
+                    timeout_message = get_text(lang, 'deposit', 'timer_expired', default='⏰ Время на оплату истекло. Вы возвращены в главное меню.')
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=f"{timeout_message}\n\n{text}",
+                        reply_markup=keyboard_main
+                    )
+                    logger.info(f"[Timer] Sent main menu to chat {chat_id}")
+                    
+                    # Очищаем состояние FSM
+                    if state:
+                        try:
+                            await state.clear()
+                            logger.info(f"[Timer] Cleared FSM state for chat {chat_id}")
+                        except Exception as e:
+                            logger.warning(f"[Timer] Could not clear state: {e}")
+                except Exception as e:
+                    logger.error(f"[Timer] Error sending main menu: {e}")
+                
+                break
+            
+            # Форматируем оставшееся время
+            minutes = remaining // 60
+            seconds = remaining % 60
+            timer_text = f"{minutes}:{seconds:02d}"
+            
+            # Обновляем текст сообщения
+            payment_text = get_text(lang, 'deposit', 'qr_payment_info',
+                                   amount=amount,
+                                   casino=casino,
+                                   account_id=account_id,
+                                   timer=timer_text)
+            
+            try:
+                # Обновляем текст и сохраняем клавиатуру
+                await bot.edit_message_caption(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    caption=payment_text,
+                    reply_markup=keyboard if keyboard else None
+                )
+                logger.debug(f"[Timer] Updated message {message_id} to {timer_text}")
+            except Exception as e:
+                error_str = str(e).lower()
+                # Если сообщение было удалено или не найдено, останавливаем таймер
+                if 'not found' in error_str or 'message to edit not found' in error_str or 'message can\'t be edited' in error_str:
+                    logger.info(f"[Timer] Message {message_id} not found or can't be edited, stopping timer: {e}")
+                    active_timers[timer_key] = False
+                    break
+                else:
+                    # Для других ошибок логируем предупреждение и продолжаем
+                    logger.warning(f"[Timer] Could not update message {message_id}: {e}")
+                    await asyncio.sleep(1)
+                    continue
+            
+            # Ждем 1 секунду до следующего обновления
+            await asyncio.sleep(1)
+            
+    except asyncio.CancelledError:
+        logger.info(f"[Timer] Cancelled for message {message_id}")
+        pass
+    except Exception as e:
+        logger.error(f"[Timer] Error in timer for message {message_id}: {e}")
+    finally:
+        # Удаляем таймер из активных
+        active_timers.pop(timer_key, None)
+        logger.info(f"[Timer] Stopped for message {message_id}")
 
 async def get_lang_from_state(state: FSMContext) -> str:
     """Получить язык из состояния"""
@@ -20,7 +155,14 @@ async def get_lang_from_state(state: FSMContext) -> str:
 @router.message(F.text.in_(['💰 Пополнить', '💰 Толтуруу']))
 async def deposit_start(message: Message, state: FSMContext):
     """Начало процесса пополнения - автоматически выбираем 1xbet"""
+    # Сохраняем язык перед очисткой состояния
     lang = await get_lang_from_state(state)
+    
+    # Очищаем предыдущее состояние (если была незавершенная операция)
+    await state.clear()
+    
+    # Восстанавливаем язык
+    await state.update_data(language=lang)
     
     # Получаем настройки из админки
     settings = await APIClient.get_payment_settings()
@@ -54,8 +196,23 @@ async def deposit_start(message: Message, state: FSMContext):
     
     await state.update_data(casino_id=casino_id, casino_name=casino_name)
     
+    # Получаем сохраненный ID казино для этого пользователя
+    saved_account_id = None
+    try:
+        saved_id_result = await APIClient.get_saved_casino_account_id(str(message.from_user.id), casino_id)
+        if saved_id_result.get('success') and saved_id_result.get('data', {}).get('accountId'):
+            saved_account_id = saved_id_result.get('data', {}).get('accountId')
+    except Exception:
+        pass  # Игнорируем ошибки получения сохраненного ID
+    
+    # Формируем клавиатуру: если есть сохраненный ID, добавляем его как кнопку
+    keyboard_buttons = []
+    if saved_account_id:
+        keyboard_buttons.append([KeyboardButton(text=saved_account_id)])
+    keyboard_buttons.append([KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))])
+    
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))]],
+        keyboard=keyboard_buttons,
         resize_keyboard=True
     )
     
@@ -81,6 +238,9 @@ async def deposit_start(message: Message, state: FSMContext):
 @router.message(DepositStates.waiting_for_account_id)
 async def deposit_account_id_received(message: Message, state: FSMContext, bot: Bot):
     """ID счета получен, запрашиваем сумму"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     lang = await get_lang_from_state(state)
     
     if message.text == get_text(lang, 'deposit', 'cancel'):
@@ -96,45 +256,80 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
         await message.answer(get_text(lang, 'deposit', 'invalid_account_id'))
         return
 
-    # Проверяем игрока через API
+    # Получаем casino_id из state для сохранения
     data = await state.get_data()
     casino_id = data.get('casino_id')
+    
+    # Сохраняем ID казино для этого пользователя
+    if casino_id:
+        try:
+            await APIClient.save_casino_account_id(str(message.from_user.id), casino_id, account_id)
+        except Exception:
+            pass  # Игнорируем ошибки сохранения
+
+    # Проверяем игрока через API (1xbet проверяется)
     player_info = None
 
     if casino_id:
         checking_msg = await message.answer("🔍 Проверяю ID игрока...")
         try:
             check_result = await APIClient.check_player(casino_id, account_id)
+            
+            check_success = check_result.get('success')
+            check_data = check_result.get('data') or {}
+            player_exists = check_data.get('exists')
+            player_info = check_data.get('player') or {}
+            
+            # Если проверка явно показала что игрок не существует - отклоняем
+            if check_success and player_exists is False:
+                try:
+                    await checking_msg.delete()
+                except:
+                    pass
+                await message.answer(get_text(lang, 'deposit', 'player_not_found'))
+                return
+                
+            # Если проверка успешна и игрок существует - используем данные
+            if check_success and (player_exists is True or player_info):
+                player_info = check_data.get('player') or {}
+            # Если проверка не удалась (ошибка API, таймаут и т.д.) - пропускаем проверку
+            # и продолжаем процесс пополнения
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error checking player: {e}, continuing with deposit")
+            # Продолжаем процесс пополнения даже если проверка не удалась
         finally:
             try:
                 await checking_msg.delete()
             except:
                 pass
 
-        check_success = check_result.get('success')
-        check_data = check_result.get('data') or {}
-        player_exists = check_data.get('exists')
-        player_info = check_data.get('player') or {}
-
-        if (not check_success) or (player_exists is False) or (not player_info and player_exists is not True):
-            await message.answer(get_text(lang, 'deposit', 'player_not_found'))
-            return
-
     await state.update_data(account_id=account_id, player_info=player_info)
     
+    # Клавиатура с быстрыми кнопками сумм
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))]],
+        keyboard=[
+            [
+                KeyboardButton(text='100'),
+                KeyboardButton(text='500'),
+                KeyboardButton(text='1000')
+            ],
+            [
+                KeyboardButton(text='5000'),
+                KeyboardButton(text='10000')
+            ],
+            [
+                KeyboardButton(text=get_text(lang, 'deposit', 'cancel'))
+            ]
+        ],
         resize_keyboard=True
     )
     
-    amount_prompt = get_text(lang, 'deposit', 'enter_amount', min=str(Config.DEPOSIT_MIN), max=str(Config.DEPOSIT_MAX))
-    if player_info:
-        player_name = player_info.get('name') or player_info.get('Name') or ''
-        player_id_resp = player_info.get('userId') or player_info.get('UserId') or account_id
-        extra = f"\n\nНайден игрок:\nID: {player_id_resp}"
-        if player_name:
-            extra += f"\nИмя: {player_name}"
-        amount_prompt += extra
+    # Форматируем числа с пробелами для тысяч
+    min_formatted = f"{Config.DEPOSIT_MIN:,}".replace(',', ' ')
+    max_formatted = f"{Config.DEPOSIT_MAX:,}".replace(',', ' ')
+    amount_prompt = get_text(lang, 'deposit', 'enter_amount', min=min_formatted, max=max_formatted)
 
     await message.answer(
         amount_prompt,
@@ -144,11 +339,33 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
 
 @router.message(DepositStates.waiting_for_amount)
 async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot):
-    """Сумма получена, создаем заявку и отправляем ссылку на оплату"""
+    """Сумма получена, генерируем QR код и показываем кнопки банков"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     lang = await get_lang_from_state(state)
     
-    # Проверяем отмену
-    if message.text == get_text(lang, 'deposit', 'cancel'):
+    # Игнорируем невидимые символы (например, неразрывный пробел)
+    if not message.text or not message.text.strip() or message.text.strip() == '\u200B':
+        return
+    
+    # Проверяем отмену (только если текст сообщения точно совпадает с текстом кнопки отмены)
+    cancel_text = get_text(lang, 'deposit', 'cancel')
+    if message.text and message.text.strip() == cancel_text.strip():
+        # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
+        data = await state.get_data()
+        qr_message_id = data.get('qr_message_id')
+        
+        if qr_message_id:
+            # Останавливаем таймер
+            timer_key = f"{message.chat.id}_{qr_message_id}"
+            active_timers.pop(timer_key, None)
+            
+            try:
+                await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
+            except Exception:
+                pass
+                
         await state.clear()
         # Показываем главное меню
         from handlers.start import cmd_start
@@ -160,8 +377,11 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         amount = float(amount_text)
         
         if amount < Config.DEPOSIT_MIN or amount > Config.DEPOSIT_MAX:
+            # Форматируем числа с пробелами для тысяч
+            min_formatted = f"{Config.DEPOSIT_MIN:,}".replace(',', ' ')
+            max_formatted = f"{Config.DEPOSIT_MAX:,}".replace(',', ' ')
             await message.answer(
-                get_text(lang, 'deposit', 'invalid_amount', min=Config.DEPOSIT_MIN, max=Config.DEPOSIT_MAX)
+                get_text(lang, 'deposit', 'invalid_amount', min=min_formatted, max=max_formatted)
             )
             return
         
@@ -181,69 +401,224 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         import random
         amount_with_cents = amount + (random.randint(1, 99) / 100)
         
-        # НЕ создаем заявку здесь - она будет создана на форме оплаты при нажатии "Я оплатил"
-        # Формируем URL для оплаты с передачей всех необходимых данных
-        from urllib.parse import urlencode
+        # Сохраняем сумму в состояние
+        await state.update_data(amount=amount_with_cents)
         
-        params = {
-            'amount': str(amount_with_cents),
-            'user_id': str(message.from_user.id),
-            'casino_id': casino_id,
-            'account_id': account_id,
-        }
-        
-        # Добавляем опциональные параметры с правильным кодированием
-        if message.from_user.username:
-            params['username'] = message.from_user.username
-        if message.from_user.first_name:
-            params['first_name'] = message.from_user.first_name
-        if message.from_user.last_name:
-            params['last_name'] = message.from_user.last_name
-        
-        # Добавляем timestamp для отслеживания времени создания заявки
-        import time
-        params['created_at'] = str(int(time.time() * 1000))
-        
-        # Формируем URL с правильно закодированными параметрами
-        payment_url = f"{Config.PAYMENT_SITE_URL}/pay?{urlencode(params)}"
-        
-        # Для кнопки используем продакшн URL (Telegram не принимает localhost)
-        # Для текста используем localhost если он указан в конфиге
-        button_url = payment_url
-        text_url = payment_url
-        
-        # Если в конфиге localhost, используем fallback URL для кнопки
-        if 'localhost' in Config.PAYMENT_SITE_URL.lower():
-            # Для кнопки используем fallback URL из конфига
-            button_url = f"{Config.PAYMENT_FALLBACK_URL}/pay?{urlencode(params)}"
-            # Для текста оставляем localhost
-            text_url = payment_url
-        
-        # Отправляем ссылку в тексте и обычную кнопку с URL
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='💳 Перейти к оплате', url=button_url)]
-        ])
-        
-        # Формируем текст с ссылкой (используем localhost для текста)
-        payment_text = get_text(lang, 'deposit', 'go_to_payment', 
-                               amount=amount_with_cents, 
-                               casino=data.get("casino_name"), 
-                               account_id=account_id)
-        payment_text += f"\n\n🔗 {text_url}"
-        
-        await message.answer(
-            payment_text,
-            reply_markup=keyboard
+        # Показываем сообщение о генерации QR и очищаем клавиатуру
+        generating_msg = await message.answer(
+            get_text(lang, 'deposit', 'generating_qr'),
+            reply_markup=ReplyKeyboardRemove()
         )
         
-        # НЕ очищаем состояние и НЕ возвращаем в главное меню
-        # Пользователь останется в боте, форма оплаты откроется в WebApp
-        # Возврат в главное меню произойдет только при закрытии формы (успех/отмена/таймер)
+        try:
+            # Генерируем QR hash и получаем ссылки банков
+            logger.info(f"[Deposit] Generating QR hash for amount: {amount_with_cents}, casino: {casino_id}")
+            qr_result = await APIClient.generate_qr(amount_with_cents, 'omoney')
+            
+            logger.info(f"[Deposit] QR hash result: success={qr_result.get('success')}, error={qr_result.get('error')}")
+            
+            if not qr_result.get('success'):
+                error_msg = qr_result.get('error', 'Unknown error')
+                logger.error(f"[Deposit] QR hash generation failed: {error_msg}")
+                await generating_msg.delete()
+                # Более детальное сообщение об ошибке
+                if 'No active wallet' in error_msg or 'requisite' in error_msg.lower():
+                    await message.answer("❌ Ошибка: не настроен активный кошелек для приема платежей. Обратитесь к администратору.")
+                else:
+                    await message.answer(get_text(lang, 'deposit', 'qr_error'))
+                return
+            
+            qr_hash = qr_result.get('qr_hash')
+            all_bank_urls = qr_result.get('all_bank_urls', {})
+            
+            if not qr_hash:
+                logger.error(f"[Deposit] QR hash is empty in response: {qr_result}")
+                await generating_msg.delete()
+                await message.answer(get_text(lang, 'deposit', 'qr_error'))
+                return
+            
+            logger.info(f"[Deposit] QR hash generated successfully: {qr_hash[:20]}...")
+            
+            # Генерируем QR изображение через payment_site API
+            logger.info(f"[Deposit] Generating QR image for amount: {amount_with_cents}")
+            qr_image_result = await APIClient.generate_qr_image(amount_with_cents, 'omoney')
+            qr_image_base64 = qr_image_result.get('qr_image', '')
+            
+            logger.info(f"[Deposit] QR image result: has_image={bool(qr_image_base64)}, error={qr_image_result.get('error')}")
+            
+            if not qr_image_base64:
+                error_msg = qr_image_result.get('error', 'Unknown error')
+                logger.error(f"[Deposit] QR image generation failed: {error_msg}")
+                await generating_msg.delete()
+                # Более детальное сообщение об ошибке
+                if 'timeout' in error_msg.lower() or 'connection' in error_msg.lower():
+                    await message.answer("❌ Ошибка: не удалось подключиться к серверу генерации QR кода. Попробуйте позже.")
+                else:
+                    await message.answer(get_text(lang, 'deposit', 'qr_error'))
+                return
+            
+            # Удаляем сообщение о генерации
+            try:
+                await generating_msg.delete()
+            except:
+                pass
+            
+            # Конвертируем base64 в bytes для отправки фото
+            # Убираем префикс data:image если есть
+            if qr_image_base64.startswith('data:image'):
+                qr_image_base64 = qr_image_base64.split(',', 1)[1]
+            
+            qr_image_bytes = base64.b64decode(qr_image_base64)
+            
+            # Создаем inline кнопки банков со ссылками (URL кнопки)
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            
+            # Получаем список банков из настроек или используем дефолтный
+            settings = await APIClient.get_payment_settings()
+            deposit_settings = settings.get('deposits', {})
+            enabled_banks = deposit_settings.get('banks', ['mbank', 'omoney', 'bakai', 'megapay', 'demir', 'balance']) if isinstance(deposit_settings, dict) else ['mbank', 'omoney', 'bakai', 'megapay', 'demir', 'balance']
+            
+            # Маппинг ID банков на названия в all_bank_urls
+            bank_name_map = {
+                'mbank': 'MBank',
+                'omoney': 'O!Money',
+                'bakai': 'Bakai',
+                'megapay': 'MegaPay',
+                'demir': 'DemirBank',
+                'balance': 'Balance.kg'
+            }
+            
+            # Фильтруем банки по включенным и создаем URL кнопки
+            bank_buttons = []
+            for bank in Config.DEPOSIT_BANKS:
+                if bank['id'] in enabled_banks:
+                    bank_name_key = bank_name_map.get(bank['id'], bank['name'])
+                    bank_url = all_bank_urls.get(bank_name_key) or all_bank_urls.get(bank['id'])
+                    if bank_url:
+                        bank_buttons.append(InlineKeyboardButton(
+                            text=bank['name'],
+                            url=bank_url
+                        ))
+            
+            # Разбиваем кнопки по 2 в ряд
+            keyboard_rows = []
+            for i in range(0, len(bank_buttons), 2):
+                row = bank_buttons[i:i+2]
+                keyboard_rows.append(row)
+            
+            # Добавляем кнопку "Отмена" в последний ряд
+            if keyboard_rows:
+                # Если последний ряд неполный, добавляем отмену туда, иначе создаем новый ряд
+                if len(keyboard_rows[-1]) == 1:
+                    keyboard_rows[-1].append(InlineKeyboardButton(
+                        text=get_text(lang, 'deposit', 'cancel'),
+                        callback_data='deposit_cancel'
+                    ))
+                else:
+                    keyboard_rows.append([InlineKeyboardButton(
+                        text=get_text(lang, 'deposit', 'cancel'),
+                        callback_data='deposit_cancel'
+                    )])
+            else:
+                # Если нет кнопок банков, создаем только кнопку отмены
+                keyboard_rows.append([InlineKeyboardButton(
+                    text=get_text(lang, 'deposit', 'cancel'),
+                    callback_data='deposit_cancel'
+                )])
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows) if keyboard_rows else None
+            
+            # Сохраняем время создания QR кода для таймера (5 минут = 300 секунд)
+            qr_created_at = int(time.time())
+            timer_duration = 300  # 5 минут в секундах
+            await state.update_data(qr_created_at=qr_created_at, timer_duration=timer_duration)
+            
+            # Форматируем начальный таймер
+            def format_timer(remaining_seconds):
+                """Форматирует секунды в MM:SS"""
+                minutes = remaining_seconds // 60
+                seconds = remaining_seconds % 60
+                return f"{minutes}:{seconds:02d}"
+            
+            remaining_seconds = timer_duration
+            payment_text = get_text(lang, 'deposit', 'qr_payment_info',
+                                   amount=amount_with_cents,
+                                   casino=data.get("casino_name"),
+                                   account_id=account_id,
+                                   timer=format_timer(remaining_seconds))
+            
+            # Отправляем фото QR кода с inline кнопками банков и кнопкой "Отмена"
+            # Используем BufferedInputFile для работы с bytes напрямую
+            photo = BufferedInputFile(qr_image_bytes, filename='qr_code.png')
+            qr_message = await message.answer_photo(
+                photo=photo,
+                caption=payment_text,
+                reply_markup=keyboard if keyboard else None  # Inline клавиатура с банками и отменой
+            )
+            
+            # Сохраняем ID сообщения с QR-кодом для возможности удаления и обновления
+            await state.update_data(qr_message_id=qr_message.message_id)
+            
+            # Запускаем фоновую задачу для обновления таймера
+            import logging
+            logger = logging.getLogger(__name__)
+            # Таймер обновляет только текст, без клавиатуры
+            timer_task = asyncio.create_task(update_qr_timer(bot, message.chat.id, qr_message.message_id, qr_created_at, timer_duration, lang, amount_with_cents, data.get("casino_name"), account_id, keyboard, state))
+            logger.info(f"[Timer] Created timer task for message {qr_message.message_id}, chat {message.chat.id}")
+            
+            # Добавляем обработку ошибок для задачи
+            def timer_task_done(task):
+                try:
+                    task.result()
+                except Exception as e:
+                    logger.error(f"[Timer] Timer task failed for message {qr_message.message_id}: {e}")
+            
+            timer_task.add_done_callback(timer_task_done)
+            
+            # Создаем несозданную заявку при показе QR-кода
+            try:
+                uncreated_result = await APIClient.create_uncreated_request(
+                    telegram_user_id=str(message.from_user.id),
+                    bookmaker=casino_id,
+                    account_id=account_id,
+                    amount=amount_with_cents,
+                    telegram_username=message.from_user.username,
+                    telegram_first_name=message.from_user.first_name,
+                    telegram_last_name=message.from_user.last_name,
+                )
+                if uncreated_result.get('success') and uncreated_result.get('data', {}).get('id'):
+                    uncreated_id = uncreated_result.get('data', {}).get('id')
+                    await state.update_data(uncreated_request_id=str(uncreated_id))
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to create uncreated request: {e}")
+                # Продолжаем работу даже если не удалось создать несозданную заявку
+            
+            # Сразу переходим в состояние ожидания чека (без выбора банка)
+            # Текст про отправку чека уже есть в caption сообщения с QR
+            await state.set_state(DepositStates.waiting_for_receipt)
+            
+        except Exception as qr_error:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error generating QR code: {qr_error}", exc_info=True)
+            try:
+                await generating_msg.delete()
+            except:
+                pass
+            await message.answer(get_text(lang, 'deposit', 'qr_error'))
+            await state.clear()
+            from handlers.start import cmd_start
+            await cmd_start(message, state, bot)
+            return
         
     except ValueError:
         lang = await get_lang_from_state(state)
-        await message.answer(get_text(lang, 'deposit', 'invalid_amount', min=Config.DEPOSIT_MIN, max=Config.DEPOSIT_MAX))
+        # Форматируем числа с пробелами для тысяч
+        min_formatted = f"{Config.DEPOSIT_MIN:,}".replace(',', ' ')
+        max_formatted = f"{Config.DEPOSIT_MAX:,}".replace(',', ' ')
+        await message.answer(get_text(lang, 'deposit', 'invalid_amount', min=min_formatted, max=max_formatted))
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
@@ -263,11 +638,173 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         await cmd_start(message, state, bot)
         return
 
-@router.message(F.text.in_(['❌ Операция отменена', '❌ Аракет жокко чыгарылды']))
-async def cancel_deposit(message: Message, state: FSMContext, bot: Bot):
-    """Отмена операции пополнения"""
+
+@router.callback_query(F.data == 'deposit_cancel')
+async def deposit_cancel_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Обработка нажатия на кнопку "Отмена" в процессе депозита"""
+    lang = await get_lang_from_state(state)
+    
+    # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
+    data = await state.get_data()
+    qr_message_id = data.get('qr_message_id')
+    
+    if qr_message_id:
+        # Останавливаем таймер
+        timer_key = f"{callback.message.chat.id}_{qr_message_id}"
+        active_timers.pop(timer_key, None)
+        
+        try:
+            await bot.delete_message(chat_id=callback.message.chat.id, message_id=qr_message_id)
+        except Exception:
+            pass
+    
     await state.clear()
+    
     # Показываем главное меню
     from handlers.start import cmd_start
-    await cmd_start(message, state, bot)
+    await cmd_start(callback.message, state, bot)
+    await callback.answer()
 
+@router.message(DepositStates.waiting_for_receipt, F.photo)
+async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot):
+    """Фото чека получено, создаем заявку"""
+    lang = await get_lang_from_state(state)
+    
+    # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
+    data = await state.get_data()
+    qr_message_id = data.get('qr_message_id')
+    if qr_message_id:
+        # Останавливаем таймер
+        timer_key = f"{message.chat.id}_{qr_message_id}"
+        active_timers.pop(timer_key, None)
+        
+        try:
+            await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
+        except Exception:
+            pass
+    
+    try:
+        # Получаем самое большое фото
+        photo = message.photo[-1]
+        
+        # Скачиваем фото
+        file = await bot.get_file(photo.file_id)
+        file_bytes = await bot.download_file(file.file_path)
+        
+        # Конвертируем в base64
+        photo_bytes = file_bytes.read()
+        photo_base64 = base64.b64encode(photo_bytes).decode('utf-8')
+        # Добавляем префикс для base64 изображения
+        photo_base64_with_prefix = f'data:image/jpeg;base64,{photo_base64}'
+        
+        # Получаем данные из состояния
+        data = await state.get_data()
+        casino_id = data.get('casino_id')
+        account_id = data.get('account_id')
+        amount = data.get('amount')
+        bank_id = data.get('bank_id', 'omoney')  # По умолчанию omoney
+        uncreated_request_id = data.get('uncreated_request_id')
+        
+        if not all([casino_id, account_id, amount]):
+            await message.answer(get_text(lang, 'deposit', 'error'))
+            await state.clear()
+            from handlers.start import cmd_start
+            await cmd_start(message, state, bot)
+            return
+        
+        # Создаем заявку через API (конвертирует несозданную заявку если есть uncreated_request_id)
+        result = await APIClient.create_request(
+            telegram_user_id=str(message.from_user.id),
+            request_type='deposit',
+            amount=amount,
+            bookmaker=casino_id,
+            bank=bank_id,
+            account_id=account_id,
+            telegram_username=message.from_user.username,
+            telegram_first_name=message.from_user.first_name,
+            telegram_last_name=message.from_user.last_name,
+            receipt_photo=photo_base64_with_prefix,
+            uncreated_request_id=uncreated_request_id
+        )
+        
+        if result.get('success') and result.get('data'):
+            # Заявка создана успешно
+            request_id = result.get('data', {}).get('id')
+            # Сохраняем request_id в state для возможных уведомлений
+            await state.update_data(request_id=request_id)
+            
+            # Отправляем сообщение о создании заявки и сохраняем его ID
+            casino_name = data.get('casino_name', casino_id)  # Получаем название букмекера
+            request_created_msg = await message.answer(
+                get_text(lang, 'deposit', 'request_created',
+                        amount=amount,
+                        account_id=account_id,
+                        casino=casino_name)
+            )
+            
+            # Сохраняем ID сообщения в заявке через API
+            if request_id and request_created_msg.message_id:
+                try:
+                    await APIClient.update_request_message_id(request_id, request_created_msg.message_id)
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Failed to save request message ID: {e}")
+            # НЕ возвращаем главное меню и НЕ очищаем state
+            # Главное меню вернется только когда деньги зачислятся или заявка отменится
+        else:
+            error_msg = result.get('message', get_text(lang, 'deposit', 'error'))
+            await message.answer(error_msg)
+            
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in deposit_receipt_received: {e}", exc_info=True)
+        await message.answer(get_text(lang, 'deposit', 'error'))
+        await state.clear()
+        from handlers.start import cmd_start
+        await cmd_start(message, state, bot)
+
+@router.message(DepositStates.waiting_for_receipt)
+async def deposit_invalid_receipt(message: Message, state: FSMContext, bot: Bot):
+    """Некорректное сообщение вместо фото чека"""
+    lang = await get_lang_from_state(state)
+    
+    # Игнорируем невидимые символы (например, неразрывный пробел)
+    if not message.text or not message.text.strip() or message.text.strip() == '\u200B':
+        return
+    
+    # Игнорируем кнопки меню - они обрабатываются другими обработчиками
+    menu_buttons = [
+        '💰 Пополнить', '💰 Толтуруу',
+        '💸 Вывести', '💸 Чыгаруу',
+        '📖 Инструкция', '📖 Көрсөтмө',
+        '🌐 Язык', '🌐 Тил',
+        '❌ Операция отменена', '❌ Аракет жокко чыгарылды'
+    ]
+    if message.text in menu_buttons:
+        # Если это кнопка меню, очищаем состояние и позволяем другому обработчику обработать
+        await state.clear()
+        return
+    
+    # Проверяем отмену (только если текст сообщения точно совпадает с текстом кнопки отмены)
+    cancel_text = get_text(lang, 'deposit', 'cancel')
+    if message.text and message.text.strip() == cancel_text.strip():
+        # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
+        data = await state.get_data()
+        qr_message_id = data.get('qr_message_id')
+        if qr_message_id:
+            # Останавливаем таймер
+            timer_key = f"{message.chat.id}_{qr_message_id}"
+            active_timers.pop(timer_key, None)
+            
+            try:
+                await bot.delete_message(chat_id=message.chat.id, message_id=qr_message_id)
+            except Exception:
+                pass
+        await state.clear()
+        from handlers.start import cmd_start
+        await cmd_start(message, state, bot)
+        return
+    
+    await message.answer(get_text(lang, 'deposit', 'invalid_receipt'))

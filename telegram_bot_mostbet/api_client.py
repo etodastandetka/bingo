@@ -23,6 +23,7 @@ class APIClient:
         telegram_last_name: Optional[str] = None,
         receipt_photo: Optional[str] = None,
         withdrawal_code: Optional[str] = None,
+        uncreated_request_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Создать заявку на пополнение или вывод"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)
@@ -51,6 +52,8 @@ class APIClient:
                 data['receipt_photo'] = receipt_photo
             if withdrawal_code:
                 data['withdrawal_code'] = withdrawal_code
+            if uncreated_request_id:
+                data['uncreated_request_id'] = uncreated_request_id
             
             # Пробуем сначала локальный API, если не доступен - используем продакшн
             api_url = Config.API_BASE_URL
@@ -73,12 +76,26 @@ class APIClient:
                 return await response.json()
     
     @staticmethod
-    async def generate_qr(amount: float, bank: str) -> Dict[str, Any]:
-        """Генерировать QR код для оплаты"""
+    async def generate_qr(amount: float, bank: str = 'omoney') -> Dict[str, Any]:
+        """Генерировать QR hash и ссылки на банки"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/public/generate-qr',
+                        json={'amount': amount, 'bank': bank},
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = Config.API_FALLBACK_URL
+            
             async with session.post(
-                f'{Config.API_BASE_URL}/public/generate-qr',
+                f'{api_url}/public/generate-qr',
                 json={'amount': amount, 'bank': bank}
             ) as response:
                 return await response.json()
@@ -102,12 +119,12 @@ class APIClient:
                                 data = await response.json()
                                 return data if data.get('success') else {}
                     except:
-                        # Если локальный недоступен, используем продакшн
-                        api_url = 'https://gdsfafdsdf.me/api'
+                        # Если локальный недоступен, используем fallback из конфига
+                        api_url = Config.API_FALLBACK_URL
                 
                 async with session.get(
                     f'{api_url}/public/payment-settings',
-                    timeout=aiohttp.ClientTimeout(total=2)
+                    timeout=aiohttp.ClientTimeout(total=10)
                 ) as response:
                     data = await response.json()
                     return data if data.get('success') else {}
@@ -212,6 +229,192 @@ class APIClient:
                 f'{api_url}/check-withdraw-amount',
                 json=data,
                 timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
+    async def create_uncreated_request(
+        telegram_user_id: str,
+        bookmaker: str,
+        account_id: str,
+        amount: float,
+        telegram_username: Optional[str] = None,
+        telegram_first_name: Optional[str] = None,
+        telegram_last_name: Optional[str] = None,
+        bank: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Создать несозданную заявку (при показе QR кода)"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            data = {
+                'userId': str(telegram_user_id),
+                'bookmaker': bookmaker,
+                'accountId': account_id,
+                'amount': amount,
+                'requestType': 'deposit',
+            }
+            
+            if bank:
+                data['bank'] = bank
+            if telegram_username:
+                data['username'] = telegram_username
+            if telegram_first_name:
+                data['firstName'] = telegram_first_name
+            if telegram_last_name:
+                data['lastName'] = telegram_last_name
+            
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/public/uncreated-requests',
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.post(
+                f'{api_url}/public/uncreated-requests',
+                json=data
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
+    async def generate_qr_image(amount: float, bank: str = 'omoney') -> Dict[str, Any]:
+        """Генерировать QR код и получить изображение (base64)"""
+        import logging
+        import asyncio
+        logger = logging.getLogger(__name__)
+        
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            # Используем payment_site API который возвращает готовое изображение
+            payment_site_url = Config.PAYMENT_SITE_URL
+            logger.info(f"[QR Image] Using payment site URL: {payment_site_url}")
+            
+            if 'localhost' in payment_site_url.lower():
+                # Для localhost пробуем сначала локальный, потом fallback
+                try:
+                    async with session.post(
+                        f'{payment_site_url}/api/generate-qr',
+                        json={'amount': amount, 'bank': bank},
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            logger.info(f"[QR Image] Success from localhost: {payment_site_url}")
+                            return result
+                        else:
+                            error_text = await response.text()
+                            logger.error(f"[QR Image] Error from localhost ({response.status}): {error_text}")
+                            return {'success': False, 'error': f'Server error: {response.status}'}
+                except asyncio.TimeoutError:
+                    logger.error(f"[QR Image] Timeout connecting to localhost: {payment_site_url}")
+                    payment_site_url = Config.PAYMENT_FALLBACK_URL
+                except Exception as e:
+                    logger.error(f"[QR Image] Error connecting to localhost: {e}")
+                    payment_site_url = Config.PAYMENT_FALLBACK_URL
+            
+            try:
+                async with session.post(
+                    f'{payment_site_url}/api/generate-qr',
+                    json={'amount': amount, 'bank': bank},
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        logger.info(f"[QR Image] Success from payment site: {payment_site_url}")
+                        return result
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"[QR Image] Error from payment site ({response.status}): {error_text}")
+                        return {'success': False, 'error': f'Server error: {response.status} - {error_text[:100]}'}
+            except asyncio.TimeoutError:
+                logger.error(f"[QR Image] Timeout connecting to payment site: {payment_site_url}")
+                return {'success': False, 'error': 'Connection timeout'}
+            except Exception as e:
+                logger.error(f"[QR Image] Error connecting to payment site: {e}")
+                return {'success': False, 'error': str(e)}
+    
+    @staticmethod
+    async def update_request_message_id(request_id: int, message_id: int) -> Dict[str, Any]:
+        """Обновить ID сообщения о создании заявки"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.patch(
+                        f'{api_url}/api/requests/{request_id}/message-id',
+                        json={'message_id': message_id},
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.patch(
+                f'{api_url}/api/requests/{request_id}/message-id',
+                json={'message_id': message_id},
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
+    async def get_saved_casino_account_id(telegram_user_id: str, casino_id: str) -> Dict[str, Any]:
+        """Получить сохраненный ID казино для пользователя"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.get(
+                        f'{api_url}/public/user-casino-ids?userId={telegram_user_id}&casinoId={casino_id}',
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
+                        return await response.json()
+                except:
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.get(
+                f'{api_url}/public/user-casino-ids?userId={telegram_user_id}&casinoId={casino_id}'
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
+    async def save_casino_account_id(telegram_user_id: str, casino_id: str, account_id: str) -> Dict[str, Any]:
+        """Сохранить ID казино для пользователя"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            data = {
+                'userId': str(telegram_user_id),
+                'casinoId': casino_id,
+                'accountId': account_id,
+            }
+            
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/public/user-casino-ids',
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
+                        return await response.json()
+                except:
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.post(
+                f'{api_url}/public/user-casino-ids',
+                json=data
             ) as response:
                 return await response.json()
 
