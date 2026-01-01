@@ -291,13 +291,16 @@ export default function RequestDetailPage() {
     const date = new Date(dateString)
     if (isNaN(date.getTime())) return '—'
     
-    // Время уже в правильном часовом поясе (как было сохранено из письма)
-    // Отображаем как есть, без дополнительных конвертаций
-    const day = date.getDate().toString().padStart(2, '0')
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    const year = date.getFullYear()
-    const hours = date.getHours().toString().padStart(2, '0')
-    const minutes = date.getMinutes().toString().padStart(2, '0')
+    // Дата в БД хранится в UTC (после парсинга с +06:00)
+    // При отображении нужно добавить 6 часов обратно, чтобы показать время Кыргызстана
+    const kyrgyzstanOffset = 6 * 60 * 60 * 1000 // 6 часов в миллисекундах
+    const kyrgyzstanDate = new Date(date.getTime() + kyrgyzstanOffset)
+    
+    const day = kyrgyzstanDate.getUTCDate().toString().padStart(2, '0')
+    const month = (kyrgyzstanDate.getUTCMonth() + 1).toString().padStart(2, '0')
+    const year = kyrgyzstanDate.getUTCFullYear()
+    const hours = kyrgyzstanDate.getUTCHours().toString().padStart(2, '0')
+    const minutes = kyrgyzstanDate.getUTCMinutes().toString().padStart(2, '0')
     return `${day}.${month}.${year} • ${hours}:${minutes}`
   }
 

@@ -154,9 +154,10 @@ function parseDemirBankEmail(text: string): PaymentData | null {
         if (dateStr.includes('-')) {
           // Формат: "2024-12-07 10:30:00"
           // Время в письме в часовом поясе Кыргызстана (UTC+6)
-          // Парсим как UTC, вычитая 6 часов, чтобы компенсировать добавление при отображении
-          const tempDate = new Date(dateStr.replace(' ', 'T') + 'Z')
-          date = new Date(tempDate.getTime() - 6 * 60 * 60 * 1000)
+          // Сохраняем как UTC, вычитая 6 часов из времени
+          const tempDate = new Date(dateStr.replace(' ', 'T') + '+06:00')
+          // Конвертируем в UTC для хранения в БД
+          date = tempDate
         } else if (dateStr.includes('.')) {
           // Формат: "07.12.2025 10:14:42" или "07.12.2024 10:30"
           // Время в письме в часовом поясе Кыргызстана (UTC+6)
@@ -166,16 +167,14 @@ function parseDemirBankEmail(text: string): PaymentData | null {
           const timeWithSeconds = timePart.includes(':') && timePart.split(':').length === 3 
             ? timePart 
             : timePart + ':00'
-          // Парсим как UTC, вычитая 6 часов
-          const tempDate = new Date(`${year}-${month}-${day}T${timeWithSeconds}Z`)
-          date = new Date(tempDate.getTime() - 6 * 60 * 60 * 1000)
+          // Создаем дату с явным указанием часового пояса UTC+6
+          date = new Date(`${year}-${month}-${day}T${timeWithSeconds}+06:00`)
         } else if (dateStr.includes('/')) {
           // Формат: "07/12/2024 10:30"
           // Время в письме в часовом поясе Кыргызстана (UTC+6)
           const [datePart, timePart] = dateStr.split(' ')
           const [day, month, year] = datePart.split('/')
-          const tempDate = new Date(`${year}-${month}-${day}T${timePart}:00Z`)
-          date = new Date(tempDate.getTime() - 6 * 60 * 60 * 1000)
+          date = new Date(`${year}-${month}-${day}T${timePart}:00+06:00`)
         } else {
           continue
         }
