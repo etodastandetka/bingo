@@ -360,6 +360,44 @@ export async function POST(request: NextRequest) {
         lastName: cleanLastName,
       })
 
+      // Проверка активных заявок на пополнение для этого пользователя
+      if (validType === 'deposit') {
+        const activeDepositRequest = await prisma.request.findFirst({
+          where: {
+            userId: userIdBigInt,
+            requestType: 'deposit',
+            status: {
+              in: ['pending', 'pending_check']
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        })
+
+        if (activeDepositRequest) {
+          console.log('⚠️ Payment API - Active deposit request exists, blocking new request:', {
+            activeRequestId: activeDepositRequest.id,
+            userId: userIdBigInt.toString(),
+            createdAt: activeDepositRequest.createdAt
+          })
+          
+          const errorResponse = NextResponse.json(
+            createApiResponse(
+              null,
+              'У вас уже есть активная заявка на пополнение. Пожалуйста, дождитесь обработки первой заявки перед созданием новой.'
+            ),
+            { 
+              status: 400,
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+              }
+            }
+          )
+          return errorResponse
+        }
+      }
+
       // Проверка на дубликаты: ищем существующую заявку с теми же параметрами
       if (validType === 'deposit' && finalAccountId) {
         // Для deposit проверяем по userId, accountId, amount, bookmaker

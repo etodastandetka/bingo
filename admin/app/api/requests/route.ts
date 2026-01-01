@@ -136,6 +136,32 @@ export async function POST(request: NextRequest) {
       lastName: lastName || null,
     })
 
+    // Проверяем активные заявки на пополнение для этого пользователя
+    if (validRequestType === 'deposit') {
+      const activeDepositRequest = await prisma.request.findFirst({
+        where: {
+          userId: userIdBigInt,
+          requestType: 'deposit',
+          status: {
+            in: ['pending', 'pending_check']
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      })
+
+      if (activeDepositRequest) {
+        return NextResponse.json(
+          createApiResponse(
+            null,
+            'У вас уже есть активная заявка на пополнение. Пожалуйста, дождитесь обработки первой заявки перед созданием новой.'
+          ),
+          { status: 400 }
+        )
+      }
+    }
+
     const newRequest = await prisma.request.create({
       data: {
         userId: userIdBigInt,
