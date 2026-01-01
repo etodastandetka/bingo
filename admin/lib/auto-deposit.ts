@@ -98,14 +98,30 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
       const requestAgeSeconds = Math.floor(requestAge / 1000)
       
       console.log(`🔍 [Auto-Deposit Check] Checking request ${request.id}: amount=${requestAmount}, age=${requestAgeSeconds}s`)
+      
+      // Проверяем, есть ли вообще необработанные платежи в БД
+      const totalUnprocessedPayments = await prisma.incomingPayment.count({
+        where: {
+          isProcessed: false,
+          requestId: null,
+        },
+      })
+      console.log(`📊 [Auto-Deposit Check] Total unprocessed payments in DB: ${totalUnprocessedPayments}`)
 
       // Ищем необработанные платежи с такой же суммой
       // Используем более широкий временной диапазон для поиска платежей
+      // Используем диапазон для суммы (до 1 копейки разницы) из-за проблем с точностью Decimal
+      const amountMin = requestAmount - 0.01
+      const amountMax = requestAmount + 0.01
+      
       const matchingPayments = await prisma.incomingPayment.findMany({
         where: {
           isProcessed: false,
           requestId: null,
-          amount: requestAmount,
+          amount: {
+            gte: amountMin,
+            lte: amountMax,
+          },
           paymentDate: {
             gte: new Date(request.createdAt.getTime() - 10 * 60 * 1000), // Платежи за 10 минут до создания заявки (на случай если платеж пришел раньше)
             lte: new Date(),
@@ -115,12 +131,19 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
           paymentDate: 'asc',
         },
       })
+      
+      // Фильтруем вручную для точного сравнения (до 1 копейки)
+      const exactMatchingPayments = matchingPayments.filter((payment) => {
+        const paymentAmount = parseFloat(payment.amount.toString())
+        const diff = Math.abs(paymentAmount - requestAmount)
+        return diff < 0.01 // Точность до 1 копейки
+      })
 
-      console.log(`🔍 [Auto-Deposit Check] Found ${matchingPayments.length} potential matching payments for request ${request.id}`)
+      console.log(`🔍 [Auto-Deposit Check] Found ${matchingPayments.length} potential matching payments (before exact filter), ${exactMatchingPayments.length} exact matches for request ${request.id}`)
 
-      if (matchingPayments.length > 0) {
+      if (exactMatchingPayments.length > 0) {
         // Берем первый платеж (самый старый)
-        const payment = matchingPayments[0]
+        const payment = exactMatchingPayments[0]
         const paymentAge = Date.now() - payment.paymentDate.getTime()
         const paymentAgeSeconds = Math.floor(paymentAge / 1000)
         
