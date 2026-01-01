@@ -1,7 +1,7 @@
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, FSInputFile, BufferedInputFile
 from aiogram.fsm.context import FSMContext
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from states import DepositStates
 from config import Config
 from api_client import APIClient
@@ -450,8 +450,11 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         # Сохраняем сумму в состояние
         await state.update_data(amount=amount_with_cents)
         
-        # Показываем сообщение о генерации QR
-        generating_msg = await message.answer(get_text(lang, 'deposit', 'generating_qr'))
+        # Показываем сообщение о генерации QR и очищаем клавиатуру
+        generating_msg = await message.answer(
+            get_text(lang, 'deposit', 'generating_qr'),
+            reply_markup=ReplyKeyboardRemove()
+        )
         
         try:
             # Генерируем QR hash и получаем ссылки банков
