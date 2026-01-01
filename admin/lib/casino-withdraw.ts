@@ -229,31 +229,23 @@ export async function checkWithdrawAmountMostbet(
 
     console.log(`[Mostbet Check Withdraw] List response:`, listData)
 
-    // Ищем вывод с нужным кодом или берем первый NEW
+    // Список заявок не содержит поле status - оно есть только в истории транзакций
+    // Берем первую заявку из списка (список уже отфильтрован по playerId)
     const withdrawals = listData.items || []
-    let withdrawal = withdrawals.find((w: any) => w.status === 'NEW')
+    const withdrawal = withdrawals.length > 0 ? withdrawals[0] : null
 
     if (!withdrawal) {
-      // Более детальное сообщение об ошибке
-      const hasWithdrawals = withdrawals.length > 0
-      if (hasWithdrawals) {
-        const statuses = withdrawals.map((w: any) => w.status).join(', ')
-        return {
-          success: false,
-          message: `У этого игрока нет активной заявки на вывод в казино Mostbet. Текущие статусы заявок: ${statuses}. Пожалуйста, создайте новую заявку на вывод в казино.`,
-        }
-      } else {
+      console.log(`[Mostbet Check Withdraw] ❌ Заявка не найдена. Всего заявок в списке: ${withdrawals.length}`)
       return {
         success: false,
-          message: 'У этого игрока нет активной заявки на вывод в казино Mostbet. Пожалуйста, создайте новую заявку на вывод в казино.',
-        }
+        message: 'У этого игрока нет активной заявки на вывод в казино Mostbet. Пожалуйста, создайте новую заявку на вывод в казино.',
       }
     }
 
     const transactionId = withdrawal.transactionId
     // Явно преобразуем amount в число (может прийти как строка или число)
     const amount = withdrawal.amount != null ? parseFloat(String(withdrawal.amount)) : 0
-    console.log(`[Mostbet Check Withdraw] Extracted amount from list: ${withdrawal.amount} (type: ${typeof withdrawal.amount}), parsed: ${amount}`)
+    console.log(`[Mostbet Check Withdraw] ✅ Найдена заявка на вывод. TransactionId: ${transactionId}, Amount: ${amount}. Переходим к подтверждению и списанию денег со счета игрока.`)
 
     // Шаг 2: Подтверждаем вывод кодом
     // Генерируем новый timestamp для запроса подтверждения (каждый запрос должен иметь свой timestamp)
@@ -327,9 +319,9 @@ export async function checkWithdrawAmountMostbet(
       const finalAmount = confirmData.amount != null 
         ? parseFloat(String(confirmData.amount))
         : (amount || 0)
-      console.log(`[Mostbet Check Withdraw] Final amount: confirmData.amount=${confirmData.amount}, list amount=${amount}, final=${finalAmount}`)
+      console.log(`[Mostbet Check Withdraw] ✅ Вывод подтвержден и деньги списаны со счета игрока. TransactionId: ${transactionId}, Amount: ${finalAmount}, Status: ${confirmData.status || 'N/A'}`)
       // Статус может быть NEW, COMPLETED, PROCESSING и т.д.
-      // Любой статус при успешном ответе означает, что транзакция подтверждена
+      // Любой статус при успешном ответе означает, что транзакция подтверждена и деньги списаны
       return {
         success: true,
         amount: finalAmount,
@@ -337,6 +329,9 @@ export async function checkWithdrawAmountMostbet(
         message: 'Withdrawal confirmed successfully',
       }
     }
+
+    // Если ответ не успешный, логируем детали ошибки
+    console.error(`[Mostbet Check Withdraw] ❌ Ошибка подтверждения вывода. Status: ${confirmResponse.status}, Response:`, confirmData)
 
     // Улучшаем сообщения об ошибках
     let errorMessage = confirmData.message || confirmData.error || 'Не удалось подтвердить вывод'
