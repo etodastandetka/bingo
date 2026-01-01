@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 
 interface CasinoStats {
@@ -64,7 +64,7 @@ export default function StatisticsPage() {
   const calendarContainerRef = useRef<HTMLDivElement | null>(null)
   const fpInstanceRef = useRef<any>(null)
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     setLoading(true)
     try {
       const date = searchParams.get('date')
@@ -98,12 +98,11 @@ export default function StatisticsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [searchParams])
 
   useEffect(() => {
     fetchStats()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams])
+  }, [fetchStats])
 
   useEffect(() => {
     // Auto-refresh every 30 seconds if today is selected
@@ -119,7 +118,7 @@ export default function StatisticsPage() {
 
       return () => clearInterval(interval)
     }
-  }, [searchParams])
+  }, [searchParams, fetchStats])
 
   useEffect(() => {
     // Initialize flatpickr when calendar is shown

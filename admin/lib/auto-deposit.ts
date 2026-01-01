@@ -479,8 +479,6 @@ export async function matchAndProcessPayment(
         } catch (fallbackError: any) {
           console.error(`❌ [Auto-Deposit] Fallback notification exception for request ${request.id}:`, fallbackError)
         }
-      } catch (innerError: any) {
-        console.error(`❌ [Auto-Deposit] Exception in notification handler for request ${request.id}:`, innerError)
       }
     }).catch((error) => {
       console.error(`❌ [Auto-Deposit] Exception while preparing notification for request ${request.id}:`, error)
