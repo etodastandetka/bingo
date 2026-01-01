@@ -413,85 +413,73 @@ export async function matchAndProcessPayment(
       `✅ Auto-deposit successful: Request ${request.id}, Account ${request.accountId}`
     )
 
-    // Отправляем уведомление пользователю асинхронно (не блокируем ответ)
-    // Используем Promise.all для параллельного получения данных
-    // Добавляем явную обработку ошибок с логированием
-    // Важно: используем .catch() в конце, чтобы не потерять ошибки
-    Promise.all([
-      prisma.botUser.findUnique({ 
-        where: { userId: request.userId },
-        select: { language: true },
-      }).catch((err) => {
-        console.warn(`⚠️ [Auto-Deposit] Failed to get user language for ${request.userId}:`, err)
-        return null
-      }),
-      getAdminUsername().catch((err) => {
-        console.warn(`⚠️ [Auto-Deposit] Failed to get admin username:`, err)
-        return '@bingokg_boss' // Fallback значение
-      })
-    ]).then(async ([user, adminUsername]) => {
-      const lang = user?.language || 'ru'
-      const amount = parseFloat(request.amount?.toString() || '0')
-      const casino = request.bookmaker || 'Неизвестно'
-      const accountId = request.accountId || ''
+    // Отправляем уведомление пользователю СРАЗУ ЖЕ, не дожидаясь запросов к БД
+    // Используем дефолтные значения для мгновенной отправки
+    // Это обеспечивает отправку уведомления в ту же секунду, как автопополнение сработало
+    const amount = parseFloat(request.amount?.toString() || '0')
+    const casino = request.bookmaker || 'Неизвестно'
+    const accountId = request.accountId || ''
+    const processingTime = '1s' // Для автопополнения всегда используем 1s
+    const lang = 'ru' // Дефолтный язык для мгновенной отправки
+    const adminUsername = '@bingokg_boss' // Дефолтный username для мгновенной отправки
 
-      // Для автопополнения всегда используем 1s
-      const processingTime = '1s'
-
-      // Формируем сообщение (такое же, как при подтверждении админом)
-      const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername || '@bingokg_boss', lang, processingTime)
-      
-      console.log(`📨 [Auto-Deposit] Preparing notification for user ${request.userId.toString()}`)
-      console.log(`📨 [Auto-Deposit] Bookmaker: ${request.bookmaker}, RequestId: ${request.id}`)
-      console.log(`📨 [Auto-Deposit] Message text: ${notificationMessage}`)
-      console.log(`📨 [Auto-Deposit] About to call sendMessageWithMainMenuButton with bookmaker: "${request.bookmaker}"`)
-      
-      if (!notificationMessage || notificationMessage.trim().length === 0) {
-        console.error(`❌ [Auto-Deposit] Notification message is empty for request ${request.id}`)
-        return
+    // Формируем сообщение сразу, без ожидания запросов к БД
+    const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
+    
+    console.log(`📨 [Auto-Deposit] Sending notification immediately for user ${request.userId.toString()}, requestId: ${request.id}`)
+    console.log(`📨 [Auto-Deposit] Bookmaker: ${request.bookmaker}`)
+    
+    if (!notificationMessage || notificationMessage.trim().length === 0) {
+      console.error(`❌ [Auto-Deposit] Notification message is empty for request ${request.id}`)
+      return {
+        success: true,
+        requestId: request.id,
+        message: 'Auto-deposit completed successfully',
       }
-      
-      // Отправляем сообщение с кнопкой "Главное меню" (такая же логика, как при подтверждении админом)
-      // Используем bookmaker для определения бота:
-      // - Если bookmaker содержит "1xbet" -> отправляется через бота 1xbet (BOT_TOKEN_1XBET)
-      // - Если bookmaker содержит "mostbet" -> отправляется через бота Mostbet (BOT_TOKEN_MOSTBET)
-      // - Для остальных -> отправляется через основной бот (BOT_TOKEN)
-      try {
-        console.log(`📨 [Auto-Deposit] Calling sendMessageWithMainMenuButton...`)
-        const result = await sendMessageWithMainMenuButton(request.userId, notificationMessage, request.bookmaker)
-        console.log(`📨 [Auto-Deposit] sendMessageWithMainMenuButton returned: success=${result.success}, error=${result.error || 'none'}`)
+    }
+    
+    // Отправляем сообщение СРАЗУ, не блокируя основной процесс
+    // Используем bookmaker для определения бота:
+    // - Если bookmaker содержит "1xbet" -> отправляется через бота 1xbet (BOT_TOKEN_1XBET)
+    // - Если bookmaker содержит "mostbet" -> отправляется через бота Mostbet (BOT_TOKEN_MOSTBET)
+    // - Для остальных -> отправляется через основной бот (BOT_TOKEN)
+    sendMessageWithMainMenuButton(request.userId, notificationMessage, request.bookmaker)
+      .then((result) => {
         if (result.success) {
-          console.log(`✅ [Auto-Deposit] Notification with main menu button sent successfully to user ${request.userId.toString()} for request ${request.id}`)
+          console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
         } else {
           console.error(`❌ [Auto-Deposit] Failed to send notification for request ${request.id}: ${result.error}`)
           // Если отправка с кнопкой не удалась, пробуем отправить без кнопки
-          const { sendNotificationToUser } = await import('./send-notification')
-          const fallbackResult = await sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, null)
-          if (fallbackResult.success) {
-            console.log(`✅ [Auto-Deposit] Fallback notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
-          } else {
-            console.error(`❌ [Auto-Deposit] Fallback notification also failed for request ${request.id}: ${fallbackResult.error}`)
-          }
+          import('./send-notification')
+            .then(({ sendNotificationToUser }) => sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, null))
+            .then((fallbackResult) => {
+              if (fallbackResult.success) {
+                console.log(`✅ [Auto-Deposit] Fallback notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
+              } else {
+                console.error(`❌ [Auto-Deposit] Fallback notification also failed for request ${request.id}: ${fallbackResult.error}`)
+              }
+            })
+            .catch((fallbackError) => {
+              console.error(`❌ [Auto-Deposit] Fallback notification exception for request ${request.id}:`, fallbackError)
+            })
         }
-      } catch (error: any) {
+      })
+      .catch((error) => {
         console.error(`❌ [Auto-Deposit] Exception sending notification for request ${request.id}:`, error)
         // Пробуем отправить через sendNotificationToUser как запасной вариант
-        try {
-          const { sendNotificationToUser } = await import('./send-notification')
-          const fallbackResult = await sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, null)
-          if (fallbackResult.success) {
-            console.log(`✅ [Auto-Deposit] Fallback notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
-          } else {
-            console.error(`❌ [Auto-Deposit] Fallback notification also failed for request ${request.id}: ${fallbackResult.error}`)
-          }
-        } catch (fallbackError: any) {
-          console.error(`❌ [Auto-Deposit] Fallback notification exception for request ${request.id}:`, fallbackError)
-        }
-      }
-    }).catch((error) => {
-      console.error(`❌ [Auto-Deposit] Exception while preparing notification for request ${request.id}:`, error)
-      console.error(`❌ [Auto-Deposit] Error stack:`, error?.stack)
-    })
+        import('./send-notification')
+          .then(({ sendNotificationToUser }) => sendNotificationToUser(request.userId, notificationMessage, request.bookmaker, null))
+          .then((fallbackResult) => {
+            if (fallbackResult.success) {
+              console.log(`✅ [Auto-Deposit] Fallback notification sent successfully to user ${request.userId.toString()} for request ${request.id}`)
+            } else {
+              console.error(`❌ [Auto-Deposit] Fallback notification also failed for request ${request.id}: ${fallbackResult.error}`)
+            }
+          })
+          .catch((fallbackError) => {
+            console.error(`❌ [Auto-Deposit] Fallback notification exception for request ${request.id}:`, fallbackError)
+          })
+      })
 
     return {
       success: true,
