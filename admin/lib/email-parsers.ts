@@ -153,28 +153,36 @@ function parseDemirBankEmail(text: string): PaymentData | null {
 
         if (dateStr.includes('-')) {
           // Формат: "2024-12-07 10:30:00"
-          date = new Date(dateStr)
+          // Время в письме в часовом поясе Кыргызстана (UTC+6)
+          // Парсим как UTC, вычитая 6 часов, чтобы компенсировать добавление при отображении
+          const tempDate = new Date(dateStr.replace(' ', 'T') + 'Z')
+          date = new Date(tempDate.getTime() - 6 * 60 * 60 * 1000)
         } else if (dateStr.includes('.')) {
           // Формат: "07.12.2025 10:14:42" или "07.12.2024 10:30"
+          // Время в письме в часовом поясе Кыргызстана (UTC+6)
           const [datePart, timePart] = dateStr.split(' ')
           const [day, month, year] = datePart.split('.')
           // Если время с секундами: "10:14:42", иначе добавляем ":00"
           const timeWithSeconds = timePart.includes(':') && timePart.split(':').length === 3 
             ? timePart 
             : timePart + ':00'
-          date = new Date(`${year}-${month}-${day}T${timeWithSeconds}`)
+          // Парсим как UTC, вычитая 6 часов
+          const tempDate = new Date(`${year}-${month}-${day}T${timeWithSeconds}Z`)
+          date = new Date(tempDate.getTime() - 6 * 60 * 60 * 1000)
         } else if (dateStr.includes('/')) {
           // Формат: "07/12/2024 10:30"
+          // Время в письме в часовом поясе Кыргызстана (UTC+6)
           const [datePart, timePart] = dateStr.split(' ')
           const [day, month, year] = datePart.split('/')
-          date = new Date(`${year}-${month}-${day}T${timePart}:00`)
+          const tempDate = new Date(`${year}-${month}-${day}T${timePart}:00Z`)
+          date = new Date(tempDate.getTime() - 6 * 60 * 60 * 1000)
         } else {
           continue
         }
 
         if (!isNaN(date.getTime())) {
           isoDatetime = date.toISOString()
-          console.log(`✅ Parsed date: ${isoDatetime} from: ${dateStr}`)
+          console.log(`✅ Parsed date: ${isoDatetime} from: ${dateStr} (original timezone: UTC+6)`)
           break
         }
       } catch (e) {

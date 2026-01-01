@@ -290,6 +290,9 @@ export default function RequestDetailPage() {
     if (!dateString) return '—'
     const date = new Date(dateString)
     if (isNaN(date.getTime())) return '—'
+    
+    // Время уже в правильном часовом поясе (как было сохранено из письма)
+    // Отображаем как есть, без дополнительных конвертаций
     const day = date.getDate().toString().padStart(2, '0')
     const month = (date.getMonth() + 1).toString().padStart(2, '0')
     const year = date.getFullYear()
