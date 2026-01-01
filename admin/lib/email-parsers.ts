@@ -154,9 +154,9 @@ function parseDemirBankEmail(text: string): PaymentData | null {
         if (dateStr.includes('-')) {
           // Формат: "2024-12-07 10:30:00"
           // Время в письме в часовом поясе Кыргызстана (UTC+6)
-          // Сохраняем как UTC, вычитая 6 часов из времени
+          // Сохраняем как UTC, вычитая 6 часов
           const tempDate = new Date(dateStr.replace(' ', 'T') + '+06:00')
-          // Конвертируем в UTC для хранения в БД
+          // Конвертируем в UTC для хранения в БД (toISOString() уже делает это)
           date = tempDate
         } else if (dateStr.includes('.')) {
           // Формат: "07.12.2025 10:14:42" или "07.12.2024 10:30"
@@ -168,6 +168,7 @@ function parseDemirBankEmail(text: string): PaymentData | null {
             ? timePart 
             : timePart + ':00'
           // Создаем дату с явным указанием часового пояса UTC+6
+          // JavaScript автоматически конвертирует это в UTC при вызове toISOString()
           date = new Date(`${year}-${month}-${day}T${timeWithSeconds}+06:00`)
         } else if (dateStr.includes('/')) {
           // Формат: "07/12/2024 10:30"
@@ -180,8 +181,10 @@ function parseDemirBankEmail(text: string): PaymentData | null {
         }
 
         if (!isNaN(date.getTime())) {
+          // toISOString() конвертирует время из UTC+6 в UTC (вычитает 6 часов)
+          // Например: 16:43 UTC+6 -> 10:43 UTC
           isoDatetime = date.toISOString()
-          console.log(`✅ Parsed date: ${isoDatetime} from: ${dateStr} (original timezone: UTC+6)`)
+          console.log(`✅ Parsed date: ${isoDatetime} from: ${dateStr} (original: UTC+6, stored as: UTC)`)
           break
         }
       } catch (e) {

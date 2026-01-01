@@ -290,26 +290,43 @@ export default function RequestDetailPage() {
     if (!dateString) return '—'
     
     // Парсим ISO строку напрямую, извлекая UTC компоненты
-    // Формат: "2026-01-01T10:02:32.000Z" (UTC время)
+    // Формат: "2026-01-01T10:43:00.000Z" (UTC время, где 10:43 = 16:43 UTC+6 - 6 часов)
     const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
     if (match) {
       const [, year, month, day, hour, minute] = match
-      // Создаем дату в UTC, добавляем 6 часов для Кыргызстана
-      const utcDate = new Date(Date.UTC(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-        parseInt(hour),
-        parseInt(minute)
-      ))
-      const kyrgyzstanTime = utcDate.getTime() + (6 * 60 * 60 * 1000) // +6 часов
-      const kyrgyzstanDate = new Date(kyrgyzstanTime)
       
-      const dayStr = kyrgyzstanDate.getUTCDate().toString().padStart(2, '0')
-      const monthStr = (kyrgyzstanDate.getUTCMonth() + 1).toString().padStart(2, '0')
-      const yearStr = kyrgyzstanDate.getUTCFullYear()
-      const hoursStr = kyrgyzstanDate.getUTCHours().toString().padStart(2, '0')
-      const minutesStr = kyrgyzstanDate.getUTCMinutes().toString().padStart(2, '0')
+      // Время в БД сохранено как UTC (например, 10:43 для 16:43 КГ)
+      // Добавляем 6 часов обратно, чтобы получить время Кыргызстана
+      const utcHour = parseInt(hour)
+      const utcMinute = parseInt(minute)
+      
+      // Добавляем 6 часов
+      let kyrgyzstanHour = utcHour + 6
+      let kyrgyzstanDay = parseInt(day)
+      let kyrgyzstanMonth = parseInt(month)
+      let kyrgyzstanYear = parseInt(year)
+      
+      // Обработка перехода через полночь
+      if (kyrgyzstanHour >= 24) {
+        kyrgyzstanHour -= 24
+        kyrgyzstanDay += 1
+        // Обработка перехода через месяц (упрощенная версия)
+        const daysInMonth = new Date(kyrgyzstanYear, kyrgyzstanMonth, 0).getDate()
+        if (kyrgyzstanDay > daysInMonth) {
+          kyrgyzstanDay = 1
+          kyrgyzstanMonth += 1
+          if (kyrgyzstanMonth > 12) {
+            kyrgyzstanMonth = 1
+            kyrgyzstanYear += 1
+          }
+        }
+      }
+      
+      const dayStr = kyrgyzstanDay.toString().padStart(2, '0')
+      const monthStr = kyrgyzstanMonth.toString().padStart(2, '0')
+      const yearStr = kyrgyzstanYear.toString()
+      const hoursStr = kyrgyzstanHour.toString().padStart(2, '0')
+      const minutesStr = utcMinute.toString().padStart(2, '0')
       return `${dayStr}.${monthStr}.${yearStr} • ${hoursStr}:${minutesStr}`
     }
     
