@@ -6,7 +6,17 @@ import { ensureUserExists } from '@/lib/sync-user'
 // Получение списка пользователей с сообщениями от оператора
 export async function GET(request: NextRequest) {
   try {
-    requireAuth(request)
+    try {
+      requireAuth(request)
+    } catch (authError: any) {
+      if (authError.message === 'Unauthorized') {
+        return NextResponse.json(
+          createApiResponse(null, 'Unauthorized'),
+          { status: 401 }
+        )
+      }
+      throw authError
+    }
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'open' // 'open' или 'closed'
@@ -238,7 +248,17 @@ export async function GET(request: NextRequest) {
 // Закрытие/открытие чата
 export async function PATCH(request: NextRequest) {
   try {
-    requireAuth(request)
+    try {
+      requireAuth(request)
+    } catch (authError: any) {
+      if (authError.message === 'Unauthorized') {
+        return NextResponse.json(
+          createApiResponse(null, 'Unauthorized'),
+          { status: 401 }
+        )
+      }
+      throw authError
+    }
 
     const body = await request.json()
     const { userId, isClosed } = body
