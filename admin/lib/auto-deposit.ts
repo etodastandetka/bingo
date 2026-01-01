@@ -415,12 +415,19 @@ export async function matchAndProcessPayment(
 
     // Отправляем уведомление пользователю асинхронно (не блокируем ответ)
     // Используем Promise.all для параллельного получения данных
+    // Добавляем явную обработку ошибок с логированием
     Promise.all([
       prisma.botUser.findUnique({ 
         where: { userId: request.userId },
         select: { language: true },
-      }).catch(() => null),
-      getAdminUsername()
+      }).catch((err) => {
+        console.warn(`⚠️ [Auto-Deposit] Failed to get user language for ${request.userId}:`, err)
+        return null
+      }),
+      getAdminUsername().catch((err) => {
+        console.warn(`⚠️ [Auto-Deposit] Failed to get admin username:`, err)
+        return '@bingokg_boss' // Fallback значение
+      })
     ]).then(async ([user, adminUsername]) => {
       const lang = user?.language || 'ru'
       const amount = parseFloat(request.amount?.toString() || '0')
@@ -431,11 +438,16 @@ export async function matchAndProcessPayment(
       const processingTime = '1s'
 
       // Формируем сообщение (такое же, как при подтверждении админом)
-      const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
+      const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername || '@bingokg_boss', lang, processingTime)
       
       console.log(`📨 [Auto-Deposit] Preparing notification for user ${request.userId.toString()}`)
       console.log(`📨 [Auto-Deposit] Bookmaker: ${request.bookmaker}, RequestId: ${request.id}`)
       console.log(`📨 [Auto-Deposit] Message text: ${notificationMessage}`)
+      
+      if (!notificationMessage || notificationMessage.trim().length === 0) {
+        console.error(`❌ [Auto-Deposit] Notification message is empty for request ${request.id}`)
+        return
+      }
       
       // Отправляем сообщение с кнопкой "Главное меню" (такая же логика, как при подтверждении админом)
       try {
@@ -467,9 +479,12 @@ export async function matchAndProcessPayment(
         } catch (fallbackError: any) {
           console.error(`❌ [Auto-Deposit] Fallback notification exception for request ${request.id}:`, fallbackError)
         }
+      } catch (innerError: any) {
+        console.error(`❌ [Auto-Deposit] Exception in notification handler for request ${request.id}:`, innerError)
       }
     }).catch((error) => {
       console.error(`❌ [Auto-Deposit] Exception while preparing notification for request ${request.id}:`, error)
+      console.error(`❌ [Auto-Deposit] Error stack:`, error?.stack)
     })
 
     return {
