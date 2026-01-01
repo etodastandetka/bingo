@@ -383,26 +383,36 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
         if request_id:
             # Формируем сообщение с суммой
             if withdraw_amount > 0:
+                # Форматируем сумму без лишних нулей
+                amount_str = f"{withdraw_amount:.2f}".rstrip('0').rstrip('.')
+                casino_name = data.get('casino_name', 'Казино')
+                
                 if lang == 'ky':
-                    success_message = f"✅ Ваша заявка на вывод {withdraw_amount:.2f} KGS была отправлена!\n\n"
-                    success_message += f"🎰 Казино: {data.get('casino_name')}\n"
-                    success_message += f"🏦 Банк: {data.get('bank_name')}\n"
-                    success_message += f"📱 Телефон: {data.get('phone')}\n"
-                    success_message += f"🆔 ID: {account_id}\n\n"
-                    success_message += f"Ваша заявка будет обработана в ближайшее время."
+                    success_message = f"🎰 {casino_name}\n"
+                    success_message += f"✅ Чыгаруу {amount_str} сом\n"
+                    success_message += f"🆔 {account_id}\n"
+                    success_message += f"⏳ Акчаңыз 5 мүнөттүн ичинде капчыңызга келет.\n\n"
+                    success_message += f"👨‍💻 Оператор:  @bingokg_boss"
                 else:
-                    success_message = f"✅ Ваша заявка на вывод {withdraw_amount:.2f} KGS была отправлена!\n\n"
-                    success_message += f"🎰 Казино: {data.get('casino_name')}\n"
-                    success_message += f"🏦 Банк: {data.get('bank_name')}\n"
-                    success_message += f"📱 Телефон: {data.get('phone')}\n"
-                    success_message += f"🆔 ID: {account_id}\n\n"
-                    success_message += f"Ваша заявка будет обработана в ближайшее время."
+                    success_message = f"🎰 {casino_name}\n"
+                    success_message += f"✅ Вывод {amount_str} сом\n"
+                    success_message += f"🆔 {account_id}\n"
+                    success_message += f"⏳ Ваши деньги поступят на ваш кошелёк в течение 5 минут.\n\n"
+                    success_message += f"👨‍💻 Оператор:  @bingokg_boss"
             else:
-                success_message = get_text(lang, 'withdraw', 'request_created',
-                        casino=data.get("casino_name"),
-                        bank=data.get("bank_name"),
-                        phone=data.get("phone"),
-                        account_id=account_id)
+                casino_name = data.get('casino_name', 'Казино')
+                if lang == 'ky':
+                    success_message = f"🎰 {casino_name}\n"
+                    success_message += f"✅ Чыгаруу өтүнүчү түзүлдү\n"
+                    success_message += f"🆔 {account_id}\n"
+                    success_message += f"⏳ Акчаңыз 5 мүнөттүн ичинде капчыңызга келет.\n\n"
+                    success_message += f"👨‍💻 Оператор:  @bingokg_boss"
+                else:
+                    success_message = f"🎰 {casino_name}\n"
+                    success_message += f"✅ Заявка на вывод создана\n"
+                    success_message += f"🆔 {account_id}\n"
+                    success_message += f"⏳ Ваши деньги поступят на ваш кошелёк в течение 5 минут.\n\n"
+                    success_message += f"👨‍💻 Оператор:  @bingokg_boss"
             
             await message.answer(success_message)
         else:
