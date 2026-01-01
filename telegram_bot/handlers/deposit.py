@@ -780,10 +780,12 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
             await state.update_data(request_id=request_id)
             
             # Отправляем сообщение о создании заявки и сохраняем его ID
+            casino_name = data.get('casino_name', casino_id)  # Получаем название букмекера
             request_created_msg = await message.answer(
                 get_text(lang, 'deposit', 'request_created',
                         amount=amount,
-                        account_id=account_id)
+                        account_id=account_id,
+                        casino=casino_name)
             )
             
             # Сохраняем ID сообщения в заявке через API
