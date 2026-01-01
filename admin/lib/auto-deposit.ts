@@ -416,6 +416,7 @@ export async function matchAndProcessPayment(
     // Отправляем уведомление пользователю асинхронно (не блокируем ответ)
     // Используем Promise.all для параллельного получения данных
     // Добавляем явную обработку ошибок с логированием
+    // Важно: используем .catch() в конце, чтобы не потерять ошибки
     Promise.all([
       prisma.botUser.findUnique({ 
         where: { userId: request.userId },
@@ -443,6 +444,7 @@ export async function matchAndProcessPayment(
       console.log(`📨 [Auto-Deposit] Preparing notification for user ${request.userId.toString()}`)
       console.log(`📨 [Auto-Deposit] Bookmaker: ${request.bookmaker}, RequestId: ${request.id}`)
       console.log(`📨 [Auto-Deposit] Message text: ${notificationMessage}`)
+      console.log(`📨 [Auto-Deposit] About to call sendMessageWithMainMenuButton with bookmaker: "${request.bookmaker}"`)
       
       if (!notificationMessage || notificationMessage.trim().length === 0) {
         console.error(`❌ [Auto-Deposit] Notification message is empty for request ${request.id}`)
@@ -450,8 +452,14 @@ export async function matchAndProcessPayment(
       }
       
       // Отправляем сообщение с кнопкой "Главное меню" (такая же логика, как при подтверждении админом)
+      // Используем bookmaker для определения бота:
+      // - Если bookmaker содержит "1xbet" -> отправляется через бота 1xbet (BOT_TOKEN_1XBET)
+      // - Если bookmaker содержит "mostbet" -> отправляется через бота Mostbet (BOT_TOKEN_MOSTBET)
+      // - Для остальных -> отправляется через основной бот (BOT_TOKEN)
       try {
+        console.log(`📨 [Auto-Deposit] Calling sendMessageWithMainMenuButton...`)
         const result = await sendMessageWithMainMenuButton(request.userId, notificationMessage, request.bookmaker)
+        console.log(`📨 [Auto-Deposit] sendMessageWithMainMenuButton returned: success=${result.success}, error=${result.error || 'none'}`)
         if (result.success) {
           console.log(`✅ [Auto-Deposit] Notification with main menu button sent successfully to user ${request.userId.toString()} for request ${request.id}`)
         } else {

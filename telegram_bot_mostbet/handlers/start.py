@@ -180,3 +180,55 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
             show_alert=True
         )
 
+@router.callback_query(F.data == 'main_menu')
+async def main_menu_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Обработка кнопки 'Главное меню'"""
+    lang = await get_lang_from_state(state)
+    
+    # Очищаем состояние
+    await state.clear()
+    
+    # Восстанавливаем язык
+    await state.update_data(language=lang)
+    
+    # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
+    data = await state.get_data()
+    qr_message_id = data.get('qr_message_id')
+    if qr_message_id:
+        from handlers.deposit import active_timers
+        timer_key = f"{callback.message.chat.id}_{qr_message_id}"
+        active_timers.pop(timer_key, None)
+        
+        try:
+            await bot.delete_message(chat_id=callback.message.chat.id, message_id=qr_message_id)
+        except Exception:
+            pass
+    
+    # Показываем главное меню
+    first_name = callback.from_user.first_name or ('kotik' if lang == 'ru' else 'баатыр')
+    
+    text = f"""{get_text(lang, 'start', 'greeting', name=first_name)}
+
+{get_text(lang, 'start', 'auto_deposit')}
+{get_text(lang, 'start', 'auto_withdraw')}
+{get_text(lang, 'start', 'working')}
+
+{get_text(lang, 'start', 'support', support=Config.SUPPORT)}"""
+    
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text=get_text(lang, 'menu', 'deposit')),
+                KeyboardButton(text=get_text(lang, 'menu', 'withdraw'))
+            ],
+            [
+                KeyboardButton(text=get_text(lang, 'menu', 'instruction')),
+                KeyboardButton(text=get_text(lang, 'menu', 'language'))
+            ]
+        ],
+        resize_keyboard=True
+    )
+    
+    await callback.message.answer(text, reply_markup=keyboard)
+    await callback.answer()
+

@@ -8,20 +8,29 @@ import { prisma } from './prisma'
  */
 export function getBotTokenByBookmaker(bookmaker: string | null | undefined): string | null {
   if (!bookmaker) {
+    console.log(`[getBotTokenByBookmaker] No bookmaker provided, using main BOT_TOKEN`)
     return process.env.BOT_TOKEN || null
   }
 
   const normalized = bookmaker.toLowerCase()
+  console.log(`[getBotTokenByBookmaker] Bookmaker: "${bookmaker}", normalized: "${normalized}"`)
 
+  // Проверяем mostbet первым (чтобы избежать совпадений)
   if (normalized.includes('mostbet')) {
-    return process.env.BOT_TOKEN_MOSTBET || process.env.BOT_TOKEN || null
+    const token = process.env.BOT_TOKEN_MOSTBET || process.env.BOT_TOKEN || null
+    console.log(`[getBotTokenByBookmaker] Matched Mostbet, using BOT_TOKEN_MOSTBET: ${token ? 'configured' : 'NOT configured'}`)
+    return token
   }
 
+  // Проверяем 1xbet (включая варианты с xbet)
   if (normalized.includes('1xbet') || normalized.includes('xbet')) {
-    return process.env.BOT_TOKEN_1XBET || process.env.BOT_TOKEN || null
+    const token = process.env.BOT_TOKEN_1XBET || process.env.BOT_TOKEN || null
+    console.log(`[getBotTokenByBookmaker] Matched 1xbet, using BOT_TOKEN_1XBET: ${token ? 'configured' : 'NOT configured'}`)
+    return token
   }
 
   // Для остальных казино используем основной бот
+  console.log(`[getBotTokenByBookmaker] No match, using main BOT_TOKEN`)
   return process.env.BOT_TOKEN || null
 }
 
