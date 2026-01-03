@@ -654,19 +654,9 @@ export async function POST(request: NextRequest) {
         addLog('success', `✅ Статус заявки исправлен на 'pending' (ID: ${verifyRequest.id})`)
       }
 
-      // Для заявок на пополнение с фото чека - запускаем быстрый watcher (каждую миллисекунду)
-      if (validType === 'deposit' && amountNum > 0 && receipt_photo) {
-        // Запускаем быстрый watcher для этой заявки - проверяет платеж каждую миллисекунду
-        setImmediate(async () => {
-          try {
-            const { startFastRequestWatcher } = await import('@/lib/auto-deposit')
-            startFastRequestWatcher(newRequest.id, amountNum)
-            console.log(`🚀 [Payment API] Started fast watcher for request ${newRequest.id} (checking every 1ms)`)
-          } catch (error: any) {
-            console.error(`❌ [Payment API] Failed to start fast watcher:`, error.message)
-          }
-        })
-      }
+      // Автопополнение теперь работает через Email Watcher
+      // Email Watcher сохраняет платежи в БД и вызывает matchAndProcessPayment
+      // Не нужно запускать отдельный watcher для заявок с фото чека
 
       const response = NextResponse.json(
         createApiResponse({
