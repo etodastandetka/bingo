@@ -706,9 +706,31 @@ export async function POST(request: NextRequest) {
           } else {
             console.log(`ℹ️ [Payment API] No matching unprocessed payments found for request ${newRequest.id} (amount: ${amountNum})`)
           }
+          
+          // Запускаем ожидание для этой заявки - будет проверять почту каждые 100ms
+          setImmediate(async () => {
+            try {
+              const { startRequestWatcher } = await import('@/lib/auto-deposit')
+              startRequestWatcher(newRequest.id, amountNum)
+              console.log(`🚀 [Payment API] Started request watcher for request ${newRequest.id}`)
+            } catch (error: any) {
+              console.error(`❌ [Payment API] Failed to start request watcher:`, error.message)
+            }
+          })
         } catch (error: any) {
           console.error(`❌ [Payment API] Auto-match failed for request ${newRequest.id}:`, error.message)
           // Не возвращаем ошибку, т.к. заявка уже создана и может быть обработана вручную
+          
+          // Все равно запускаем ожидание, даже если первая проверка не удалась
+          setImmediate(async () => {
+            try {
+              const { startRequestWatcher } = await import('@/lib/auto-deposit')
+              startRequestWatcher(newRequest.id, amountNum)
+              console.log(`🚀 [Payment API] Started request watcher for request ${newRequest.id} (after error)`)
+            } catch (watcherError: any) {
+              console.error(`❌ [Payment API] Failed to start request watcher:`, watcherError.message)
+            }
+          })
         }
       }
 

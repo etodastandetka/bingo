@@ -356,9 +356,27 @@ export async function PATCH(
                 })
             }
           }
+          // Останавливаем ожидание для этой заявки, если оно было запущено (заявка обработана)
+          try {
+            const { stopRequestWatcher } = await import('@/lib/auto-deposit')
+            stopRequestWatcher(currentRequest.id)
+            console.log(`🛑 [Request API] Stopped watcher for completed request ${currentRequest.id}`)
+          } catch (error: any) {
+            // Игнорируем ошибки остановки watcher
+          }
+          
           // Для обычных заявок (не операторских) notificationMessage отправится в правильный бот ниже
           // Бот определяется на основе updatedRequest.bookmaker
         } else if (['rejected', 'declined'].includes(body.status)) {
+          // Останавливаем ожидание для этой заявки, если оно было запущено
+          try {
+            const { stopRequestWatcher } = await import('@/lib/auto-deposit')
+            stopRequestWatcher(currentRequest.id)
+            console.log(`🛑 [Request API] Stopped watcher for rejected request ${currentRequest.id}`)
+          } catch (error: any) {
+            // Игнорируем ошибки остановки watcher
+          }
+          
           // Отклонение заявки - уведомление отправится в правильный бот на основе bookmaker
           notificationMessage = formatRejectMessage(currentRequest.requestType, adminUsername, lang)
           
