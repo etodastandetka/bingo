@@ -127,6 +127,18 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
       if (exactMatchingPayments.length > 0) {
         // Берем первый платеж (самый старый)
         const payment = exactMatchingPayments[0]
+        
+        // ВАЖНО: Проверяем, что платеж еще не обработан перед обработкой
+        // Это предотвращает двойную обработку, если платеж уже обрабатывается через email watcher
+        const currentPayment = await prisma.incomingPayment.findUnique({
+          where: { id: payment.id },
+        })
+        
+        if (!currentPayment || currentPayment.isProcessed || currentPayment.requestId !== null) {
+          console.log(`⚠️ [Auto-Deposit Check] Payment ${payment.id} already processed (isProcessed: ${currentPayment?.isProcessed}, requestId: ${currentPayment?.requestId}), skipping`)
+          continue
+        }
+        
         const paymentAge = Date.now() - payment.paymentDate.getTime()
         const paymentAgeSeconds = Math.floor(paymentAge / 1000)
         
