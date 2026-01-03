@@ -119,7 +119,12 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
       })
       
       // Фильтруем вручную для точного сравнения (до 2 копеек для учета ошибок округления Decimal)
+      // Исключаем платежи, которые уже обрабатываются (есть в Set processingPayments)
       const exactMatchingPayments = matchingPayments.filter((payment) => {
+        // Пропускаем платежи, которые уже обрабатываются
+        if (processingPayments.has(payment.id)) {
+          return false
+        }
         const paymentAmount = parseFloat(payment.amount.toString())
         const diff = Math.abs(paymentAmount - requestAmount)
         return diff < 0.02 // Точность до 2 копеек для учета возможных ошибок округления
@@ -196,9 +201,15 @@ export async function matchAndProcessPayment(
   processingPayments.add(paymentId)
   
   // Очищаем Set после задержки (защита от зависания при ошибке)
-  setTimeout(() => {
+  const cleanupTimeout = setTimeout(() => {
     processingPayments.delete(paymentId)
   }, 30000) // 30 секунд - максимум для обработки одного платежа
+  
+  // Функция для очистки Set (вызывается при успехе или ошибке)
+  const cleanup = () => {
+    clearTimeout(cleanupTimeout)
+    processingPayments.delete(paymentId)
+  }
   
   // Проверяем, включено ли автопополнение
   // Сначала проверяем BotConfiguration (новый способ), затем BotSetting (старый способ для совместимости)
@@ -236,6 +247,7 @@ export async function matchAndProcessPayment(
   
   if (!isAutodepositEnabled) {
     console.log(`⚠️ Auto-deposit is disabled, skipping payment ${paymentId}`)
+    cleanup()
     return {
       success: false,
       message: 'Auto-deposit is disabled',
@@ -305,6 +317,7 @@ export async function matchAndProcessPayment(
     console.log(
       `ℹ️ No matching request found for payment ${paymentId} (amount: ${amount})`
     )
+    cleanup()
     return {
       success: false,
       message: 'No matching request found',
@@ -322,6 +335,7 @@ export async function matchAndProcessPayment(
 
   if (!currentPayment) {
     console.log(`⚠️ Payment ${paymentId} not found, skipping`)
+    cleanup()
     return {
       success: false,
       message: 'Payment not found',
@@ -330,6 +344,7 @@ export async function matchAndProcessPayment(
 
   if (currentPayment.isProcessed || currentPayment.requestId !== null) {
     console.log(`⚠️ Payment ${paymentId} is already processed or linked (isProcessed: ${currentPayment.isProcessed}, requestId: ${currentPayment.requestId}), skipping`)
+    cleanup()
     return {
       success: false,
       message: 'Payment already processed or linked',
@@ -338,6 +353,7 @@ export async function matchAndProcessPayment(
 
   if (!request.accountId || !request.bookmaker) {
     console.warn(`⚠️ Request ${request.id} missing accountId or bookmaker`)
+    cleanup()
     return {
       success: false,
       message: 'Request missing accountId or bookmaker',
@@ -366,6 +382,7 @@ export async function matchAndProcessPayment(
 
   if (!currentRequest || currentRequest.status !== 'pending') {
     console.log(`⚠️ Request ${request.id} is no longer pending (status: ${currentRequest?.status}), skipping`)
+    cleanup()
     return {
       success: false,
       message: 'Request is no longer pending',
@@ -374,6 +391,7 @@ export async function matchAndProcessPayment(
 
   if (currentRequest.incomingPayments && currentRequest.incomingPayments.length > 0) {
     console.log(`⚠️ Request ${request.id} already has processed payment, skipping`)
+    cleanup()
     return {
       success: false,
       message: 'Request already has processed payment',
@@ -397,6 +415,7 @@ export async function matchAndProcessPayment(
   // Если updateMany вернул 0, значит платеж уже был обработан другим процессом
   if (updateResult.count === 0) {
     console.log(`⚠️ Payment ${paymentId} was already processed by another process, skipping`)
+    cleanup()
     return {
       success: false,
       message: 'Payment was already processed by another process',
@@ -428,6 +447,7 @@ export async function matchAndProcessPayment(
 
   if (duplicate) {
     console.log(`⚠️ [Auto-Deposit] Duplicate deposit detected: Request ${duplicate.id} with same amount (${requestAmount}) was processed ${Math.floor((Date.now() - (duplicate.processedAt?.getTime() || 0)) / 1000)}s ago`)
+    cleanup()
     return {
       success: false,
       requestId: request.id,
@@ -497,15 +517,13 @@ export async function matchAndProcessPayment(
     // Определяем bookmaker для fallback (если botType все еще не указан)
     const bookmakerForFallback = botType ? null : request.bookmaker
     
-    // ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ СРАЗУ, НЕ ЖДЕМ ОБНОВЛЕНИЯ БД
-    // Это критично важно для мгновенной доставки уведомления
-    const notificationPromise = sendMessageWithMainMenuButton(request.userId, notificationMessage, bookmakerForFallback, botType)
-    
-    // Обновляем статус заявки ПАРАЛЛЕЛЬНО с отправкой уведомления
-    // processedBy = "автопополнение" означает что заявка закрыта автоматически
-    // Очищаем ошибку казино при успешном пополнении
-    const dbUpdatePromise = prisma.request.update({
-      where: { id: request.id },
+    // КРИТИЧНО: Обновляем статус заявки СИНХРОННО (await), чтобы вторая заявка сразу видела, что первая обработана
+    // Используем updateMany с условием для атомарности (предотвращает race condition)
+    const requestUpdateResult = await prisma.request.updateMany({
+      where: {
+        id: request.id,
+        status: 'pending', // Только если еще pending (защита от двойной обработки)
+      },
       data: {
         status: 'autodeposit_success',
         statusDetail: null,
@@ -515,9 +533,22 @@ export async function matchAndProcessPayment(
         updatedAt: new Date(),
       } as any,
     })
+
+    // Если заявка уже была обработана другим процессом, выходим
+    if (requestUpdateResult.count === 0) {
+      console.log(`⚠️ [Auto-Deposit] Request ${request.id} was already processed by another process, skipping notification`)
+      return {
+        success: false,
+        requestId: request.id,
+        message: 'Request was already processed by another process',
+      }
+    }
+
+    // ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ ПОСЛЕ обновления статуса (в фоне, не блокируя)
+    // Это гарантирует, что статус заявки обновлен до того, как вторая заявка начнет поиск
+    const notificationPromise = sendMessageWithMainMenuButton(request.userId, notificationMessage, bookmakerForFallback, botType)
     
-    // Запускаем оба процесса параллельно, но не ждем их завершения
-    // Уведомление отправится мгновенно, обновление БД произойдет в фоне
+    // Запускаем отправку уведомления в фоне
     notificationPromise
       .then((result) => {
         if (result.success) {
@@ -555,11 +586,9 @@ export async function matchAndProcessPayment(
             console.error(`❌ [Auto-Deposit] Fallback notification exception for request ${request.id}:`, fallbackError)
           })
       })
-    
-    // Обновляем БД в фоне, не блокируя возврат функции
-    dbUpdatePromise.catch((error) => {
-      console.error(`❌ [Auto-Deposit] Failed to update request status in DB for request ${request.id}:`, error)
-    })
+
+    // Очищаем Set сразу после успешной обработки
+    cleanup()
 
     return {
       success: true,
@@ -568,6 +597,9 @@ export async function matchAndProcessPayment(
     }
   } catch (error: any) {
     console.error(`❌ Auto-deposit failed for request ${request.id}:`, error)
+
+    // Очищаем Set при ошибке
+    cleanup()
 
     // В случае ошибки API казино, ставим статус profile-5 и сохраняем ошибку
     await prisma.request.update({
