@@ -661,34 +661,50 @@ export async function POST(request: NextRequest) {
         // Запускаем в фоне без await - не блокируем создание заявки, обрабатываем параллельно
         (async () => {
           try {
-            const { matchAndProcessPayment } = await import('@/lib/auto-deposit')
+            const { matchAndProcessPaymentDirect } = await import('@/lib/auto-deposit')
             console.log(`🚀 [Payment API] Checking payment for request ${newRequest.id} with amount ${amountNum}`)
             
-            // Ищем необработанные платежи с точной суммой
             const amountRounded = Math.round(amountNum * 100) / 100
-            const matchingPayments = await prisma.incomingPayment.findMany({
-              where: {
-                amount: amountRounded,
-                isProcessed: false,
-                requestId: null,
-              },
-              orderBy: {
-                createdAt: 'desc',
-              },
-              take: 1,
-            })
+            
+            // Функция для поиска платежа
+            const findPayment = async () => {
+              const matchingPayments = await prisma.incomingPayment.findMany({
+                where: {
+                  amount: amountRounded,
+                  isProcessed: false,
+                  requestId: null,
+                },
+                orderBy: {
+                  createdAt: 'desc',
+                },
+                take: 1,
+              })
 
-            // Фильтруем для точного совпадения
-            const exactMatch = matchingPayments.find((payment) => {
-              const paymentAmount = parseFloat(payment.amount.toString())
-              const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
-              return paymentAmountRounded === amountRounded
-            })
+              // Фильтруем для точного совпадения
+              return matchingPayments.find((payment) => {
+                const paymentAmount = parseFloat(payment.amount.toString())
+                const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
+                return paymentAmountRounded === amountRounded
+              })
+            }
+
+            // Проверяем сразу (0ms)
+            let exactMatch = await findPayment()
+
+            // Если не нашли - ждем 100ms и проверяем снова (Email Watcher может еще сохранять платеж)
+            if (!exactMatch) {
+              await new Promise(resolve => setTimeout(resolve, 100))
+              exactMatch = await findPayment()
+            }
+
+            // Если все еще не нашли - ждем еще 200ms (всего 300ms максимум)
+            if (!exactMatch) {
+              await new Promise(resolve => setTimeout(resolve, 200))
+              exactMatch = await findPayment()
+            }
 
             if (exactMatch) {
               console.log(`🎯 [Payment API] Found matching payment ${exactMatch.id} for request ${newRequest.id}, processing immediately...`)
-              // Используем оптимизированную функцию с прямым requestId - быстрее в 2 раза
-              const { matchAndProcessPaymentDirect } = await import('@/lib/auto-deposit')
               const result = await matchAndProcessPaymentDirect(exactMatch.id, newRequest.id, amountNum)
               if (result.success) {
                 console.log(`✅ [Payment API] Auto-deposit completed instantly for request ${newRequest.id}`)
@@ -696,7 +712,7 @@ export async function POST(request: NextRequest) {
                 console.log(`⚠️ [Payment API] Auto-deposit failed for request ${newRequest.id}: ${result.message}`)
               }
             } else {
-              console.log(`ℹ️ [Payment API] No matching payment found for request ${newRequest.id}, amount: ${amountNum}`)
+              console.log(`ℹ️ [Payment API] No matching payment found for request ${newRequest.id}, amount: ${amountNum} (checked 3 times with delays)`)
             }
           } catch (error: any) {
             console.error(`❌ [Payment API] Error checking payment:`, error.message)
