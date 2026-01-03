@@ -150,6 +150,7 @@ async function processEmail(
             )
 
             // Сохраняем входящий платеж в БД
+            const emailDate = parsed.date || new Date() // Дата письма
             const paymentDate = isoDatetime
               ? new Date(isoDatetime)
               : emailDate // Используем дату письма, если не удалось распарсить дату из текста
