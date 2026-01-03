@@ -33,7 +33,7 @@ export function startRequestWatcher(requestId: number, amount: number): void {
 
   let stopFlag = false
 
-  // Проверяем каждые 100ms для максимальной скорости
+  // Проверяем каждые 50ms для максимальной скорости (практически мгновенно)
   const intervalId = setInterval(async () => {
     if (stopFlag) {
       clearInterval(intervalId)
@@ -109,7 +109,7 @@ export function startRequestWatcher(requestId: number, amount: number): void {
     } catch (error: any) {
       console.error(`❌ [Request Watcher] Error checking request ${requestId}:`, error.message)
     }
-  }, 100) // Проверка каждые 100ms для максимальной скорости
+  }, 50) // Проверка каждые 50ms для максимальной скорости (практически мгновенно)
 
   activeRequestWatchers.set(requestId, { intervalId, amount, stopFlag: false })
 }
@@ -197,6 +197,7 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
     console.log(`🔍 [Auto-Deposit Check] Found ${pendingRequests.length} pending requests`)
 
     // Обрабатываем все заявки ПАРАЛЛЕЛЬНО для быстрой обработки множественных платежей
+    // Сначала проверяем активные request watchers - они могут найти платеж быстрее
     const processingPromises = pendingRequests.map(async (request) => {
       if (!request.amount) {
         console.log(`⚠️ [Auto-Deposit Check] Request ${request.id} skipped: no amount`)
