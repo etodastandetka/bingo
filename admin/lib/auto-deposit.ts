@@ -11,9 +11,6 @@ interface MatchResult {
   message?: string
 }
 
-// Флаг для предотвращения параллельных вызовов checkPendingRequestsForPayments
-let isCheckingPendingRequests = false
-
 // Map для отслеживания активных ожиданий для конкретных заявок
 // Key: requestId, Value: { intervalId, amount, stopFlag }
 const activeRequestWatchers = new Map<number, { intervalId: NodeJS.Timeout; amount: number; stopFlag: boolean }>()
@@ -143,198 +140,11 @@ export function stopRequestWatcher(requestId: number): void {
 }
 
 /**
- * Проверка всех pending заявок и поиск платежей для них
- * Вызывается каждые 100ms для мгновенного автопополнения
- * Обрабатываются все pending заявки без ограничения по времени
+ * ОТКЛЮЧЕНО: Проверка всех pending заявок и поиск платежей для них
+ * Эта функция больше не используется - автопополнение работает только через Request Watcher
+ * Удалено для упрощения системы автопополнения
  */
-export async function checkPendingRequestsForPayments(): Promise<void> {
-  // Предотвращаем параллельные вызовы
-  if (isCheckingPendingRequests) {
-    return
-  }
-  
-  isCheckingPendingRequests = true
-  
-  try {
-    // Проверяем, включено ли автопополнение
-    // Сначала проверяем BotConfiguration (новый способ), затем BotSetting (старый способ для совместимости)
-    let autodepositValue: string | null = null
-    
-    const botConfigSetting = await prisma.botConfiguration.findUnique({
-      where: { key: 'autodeposit_enabled' },
-    })
-    
-    if (botConfigSetting) {
-      autodepositValue = botConfigSetting.value
-    } else {
-      const botSetting = await prisma.botSetting.findUnique({
-        where: { key: 'autodeposit_enabled' },
-      })
-      if (botSetting) {
-        autodepositValue = botSetting.value
-      }
-    }
-    
-    const isAutodepositEnabled = autodepositValue && (
-      (typeof autodepositValue === 'string' && (autodepositValue.toLowerCase() === 'true' || autodepositValue === '1')) ||
-      (autodepositValue !== null && String(autodepositValue).toLowerCase() === 'true') ||
-      (autodepositValue !== null && String(autodepositValue) === '1')
-    )
-    
-    if (!isAutodepositEnabled) {
-      return
-    }
-
-    // Ищем заявки на пополнение со статусом pending за последние 5 минут
-    // Это ускоряет поиск и предотвращает обработку старых заявок
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
-    const pendingRequests = await prisma.request.findMany({
-      where: {
-        requestType: 'deposit',
-        status: 'pending',
-        createdAt: { gte: fiveMinutesAgo }, // ✅ Только последние 5 минут
-        // Исключаем заявки, которые уже имеют связанный обработанный платеж
-        incomingPayments: {
-          none: {
-            isProcessed: true,
-          },
-        },
-      },
-      select: {
-        id: true,
-        userId: true,
-        accountId: true,
-        bookmaker: true,
-        amount: true,
-        status: true,
-        createdAt: true,
-        botType: true,
-        incomingPayments: {
-          where: {
-            isProcessed: true,
-          },
-          select: {
-            id: true,
-            isProcessed: true,
-          },
-        },
-      },
-    })
-
-    if (pendingRequests.length === 0) {
-      return
-    }
-
-    console.log(`🔍 [Auto-Deposit Check] Found ${pendingRequests.length} pending requests`)
-
-    // Обрабатываем все заявки ПАРАЛЛЕЛЬНО для быстрой обработки множественных платежей
-    // Сначала проверяем активные request watchers - они могут найти платеж быстрее
-    const processingPromises = pendingRequests.map(async (request) => {
-      if (!request.amount) {
-        console.log(`⚠️ [Auto-Deposit Check] Request ${request.id} skipped: no amount`)
-        return
-      }
-      if (request.incomingPayments && request.incomingPayments.length > 0) {
-        console.log(`⚠️ [Auto-Deposit Check] Request ${request.id} skipped: already has processed payment`)
-        return
-      }
-
-      const requestAmount = parseFloat(request.amount.toString())
-      const requestAge = Date.now() - request.createdAt.getTime()
-      const requestAgeSeconds = Math.floor(requestAge / 1000)
-      
-      // Дополнительная проверка возраста заявки (максимум 5 минут)
-      const maxAge = 5 * 60 * 1000
-      if (requestAge > maxAge) {
-        console.log(`⚠️ [Auto-Deposit Check] Request ${request.id} is too old (${requestAgeSeconds}s), skipping`)
-        return
-      }
-      
-      console.log(`🔍 [Auto-Deposit Check] Checking request ${request.id}: amount=${requestAmount}, age=${requestAgeSeconds}s`)
-
-      // Ищем необработанные платежи с ТОЧНО такой же суммой (без допуска)
-      // Округляем до 2 знаков для точного сравнения
-      const requestAmountRounded = Math.round(requestAmount * 100) / 100
-      
-      const matchingPayments = await prisma.incomingPayment.findMany({
-        where: {
-          isProcessed: false,
-          requestId: null,
-          amount: requestAmountRounded, // Точное сравнение
-          paymentDate: {
-            gte: new Date(request.createdAt.getTime() - 60 * 60 * 1000), // Платежи за час до создания заявки (на случай если платеж пришел раньше)
-            lte: new Date(),
-          },
-        },
-        orderBy: {
-          paymentDate: 'asc',
-        },
-        select: {
-          id: true,
-          amount: true,
-          paymentDate: true,
-          isProcessed: true,
-          requestId: true,
-        },
-      })
-      
-      // Фильтруем вручную для ТОЧНОГО сравнения (1 к 1, без разницы)
-      const exactMatchingPayments = matchingPayments.filter((payment) => {
-        const paymentAmount = parseFloat(payment.amount.toString())
-        const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
-        // Точное сравнение: суммы должны быть абсолютно равны
-        return paymentAmountRounded === requestAmountRounded
-      })
-
-      console.log(`🔍 [Auto-Deposit Check] Found ${matchingPayments.length} potential matching payments (before exact filter), ${exactMatchingPayments.length} exact matches for request ${request.id}`)
-
-      if (exactMatchingPayments.length > 0) {
-        // Берем первый платеж (самый старый)
-        const payment = exactMatchingPayments[0]
-        
-        // ВАЖНО: Проверяем, что платеж еще не обработан перед обработкой
-        // Это предотвращает двойную обработку, если платеж уже обрабатывается через email watcher
-        const currentPayment = await prisma.incomingPayment.findUnique({
-          where: { id: payment.id },
-        })
-        
-        if (!currentPayment || currentPayment.isProcessed || currentPayment.requestId !== null) {
-          console.log(`⚠️ [Auto-Deposit Check] Payment ${payment.id} already processed (isProcessed: ${currentPayment?.isProcessed}, requestId: ${currentPayment?.requestId}), skipping`)
-          return
-        }
-        
-        const paymentAge = Date.now() - payment.paymentDate.getTime()
-        const paymentAgeSeconds = Math.floor(paymentAge / 1000)
-        
-        console.log(`🎯 [Auto-Deposit Check] Found matching payment ${payment.id} for request ${request.id}`)
-        console.log(`   Payment amount: ${payment.amount}, age: ${paymentAgeSeconds}s`)
-        console.log(`   Request amount: ${requestAmount}, age: ${requestAgeSeconds}s`)
-        console.log(`   Processing...`)
-        
-        // Обрабатываем платеж (await внутри Promise.all обрабатывает все параллельно)
-        try {
-          const result = await matchAndProcessPayment(payment.id, requestAmount)
-          if (result.success) {
-            console.log(`✅ [Auto-Deposit Check] Successfully processed payment ${payment.id} for request ${request.id}`)
-          } else {
-            console.log(`⚠️ [Auto-Deposit Check] Failed to process payment ${payment.id} for request ${request.id}: ${result.message}`)
-          }
-        } catch (error: any) {
-          console.error(`❌ [Auto-Deposit Check] Exception processing payment ${payment.id} for request ${request.id}:`, error)
-        }
-      } else {
-        console.log(`ℹ️ [Auto-Deposit Check] No matching payments found for request ${request.id} (amount: ${requestAmount})`)
-      }
-    })
-
-    // Ждем завершения всех обработок параллельно
-    await Promise.allSettled(processingPromises)
-  } catch (error: any) {
-    console.error(`❌ [Auto-Deposit Check] Error checking pending requests:`, error)
-  } finally {
-    isCheckingPendingRequests = false
-  }
-}
+// export async function checkPendingRequestsForPayments(): Promise<void> { ... }
 
 /**
  * Сопоставление платежа с заявкой и автоматическое пополнение
@@ -618,9 +428,77 @@ export async function matchAndProcessPayment(
     return { updatedRequest, updatedPayment }
   })
 
-  // Если транзакция пропустила обновление, значит заявка или платеж уже обработаны
+  // Если транзакция пропустила обновление, проверяем статус заявки
+  // Возможно, депозит уже был выполнен другим процессом - в этом случае нужно отправить уведомление
   if (transactionResult.skipped) {
     console.log(`⚠️ Transaction skipped: ${transactionResult.reason}`)
+    
+    // Проверяем текущий статус заявки - возможно, депозит уже был выполнен
+    const currentRequestStatus = await prisma.request.findUnique({
+      where: { id: request.id },
+      select: {
+        id: true,
+        status: true,
+        userId: true,
+        accountId: true,
+        bookmaker: true,
+        amount: true,
+        botType: true,
+        processedAt: true,
+      },
+    })
+    
+    // Если заявка уже обработана (депозит выполнен другим процессом), отправляем уведомление
+    if (currentRequestStatus && 
+        (currentRequestStatus.status === 'autodeposit_success' || 
+         currentRequestStatus.status === 'completed' || 
+         currentRequestStatus.status === 'approved')) {
+      console.log(`✅ [Auto-Deposit] Request ${request.id} already processed by another process, sending notification...`)
+      
+      // Отправляем уведомление о успешном пополнении
+      const amount = parseFloat(currentRequestStatus.amount?.toString() || '0')
+      const casino = currentRequestStatus.bookmaker || 'Неизвестно'
+      const accountId = currentRequestStatus.accountId || ''
+      const processingTime = '1s'
+      const lang = 'ru'
+      const adminUsername = '@helperbingo_bot'
+      
+      const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
+      
+      let botType = currentRequestStatus.botType || null
+      if (!botType && currentRequestStatus.bookmaker) {
+        const bookmakerLower = currentRequestStatus.bookmaker.toLowerCase()
+        if (bookmakerLower.includes('mostbet')) {
+          botType = 'mostbet'
+        } else if (bookmakerLower.includes('1xbet') || bookmakerLower.includes('xbet')) {
+          botType = '1xbet'
+        }
+      }
+      
+      const bookmakerForFallback = botType ? null : currentRequestStatus.bookmaker
+      
+      // Отправляем уведомление в фоне
+      sendMessageWithMainMenuButton(currentRequestStatus.userId, notificationMessage, bookmakerForFallback, botType)
+        .then((result) => {
+          if (result.success) {
+            console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${currentRequestStatus.userId.toString()} for request ${request.id}`)
+          } else {
+            console.error(`❌ [Auto-Deposit] Failed to send notification for request ${request.id}: ${result.error}`)
+          }
+        })
+        .catch((error) => {
+          console.error(`❌ [Auto-Deposit] Exception sending notification for request ${request.id}:`, error)
+        })
+      
+      cleanup()
+      return {
+        success: true,
+        requestId: request.id,
+        message: 'Deposit already processed by another process, notification sent',
+      }
+    }
+    
+    // Если заявка все еще pending, значит что-то пошло не так
     cleanup()
     return {
       success: false,

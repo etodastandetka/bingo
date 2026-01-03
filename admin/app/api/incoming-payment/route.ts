@@ -123,21 +123,8 @@ export async function POST(request: NextRequest) {
     console.log(`✅ IncomingPayment saved: ID ${incomingPayment.id}, Amount: ${amount} ${bank || ''}`)
     console.log(`🔍 [Incoming Payment] Starting auto-match for payment ${incomingPayment.id}, amount: ${amount}`)
 
-    // Пытаемся найти совпадение по сумме и автоматически пополнить баланс
-    // Ищем только заявки созданные за последние 5 минут чтобы избежать случайного пополнения
-    // Вызываем СИНХРОННО для мгновенного автопополнения (секунда в секунду)
-    // Используем await чтобы гарантировать что автопополнение произошло до ответа
-    try {
-      const result = await matchAndProcessPayment(incomingPayment.id, parseFloat(amount))
-      if (result && result.success) {
-        console.log(`✅ [Incoming Payment] Auto-deposit completed instantly for payment ${incomingPayment.id}, request ${result.requestId}`)
-      } else {
-        console.log(`ℹ️ [Incoming Payment] No matching request (last 5 min) for payment ${incomingPayment.id} (amount: ${amount})`)
-      }
-    } catch (error: any) {
-      console.error(`❌ [Incoming Payment] Auto-match failed for payment ${incomingPayment.id}:`, error.message)
-      // Не возвращаем ошибку, т.к. платеж уже сохранен и может быть обработан вручную
-    }
+    // Автопополнение теперь выполняется только через Request Watcher
+    // Платеж сохранен, Request Watcher найдет его при следующей проверке (каждые 50ms)
 
     const response = NextResponse.json(
       createApiResponse(

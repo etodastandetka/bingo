@@ -7,7 +7,6 @@ import Imap from 'imap'
 import { simpleParser } from 'mailparser'
 import { prisma } from './prisma'
 import { parseEmailByBank } from './email-parsers'
-import { matchAndProcessPayment } from './auto-deposit'
 
 interface WatcherSettings {
   enabled: boolean
@@ -215,35 +214,9 @@ async function processEmail(
             })
 
             console.log(`✅ IncomingPayment saved: ID ${incomingPayment.id}`)
-
-            // Пытаемся найти совпадение и автоматически пополнить баланс СРАЗУ (синхронно)
-            let matchResult = await matchAndProcessPayment(incomingPayment.id, amount)
-            if (matchResult.success) {
-              console.log(`✅ Auto-deposit completed for payment ${incomingPayment.id}, request ${matchResult.requestId}`)
-            } else {
-              console.log(`ℹ️ No matching request found for payment ${incomingPayment.id} (amount: ${amount}), will retry immediately...`)
-              // Если заявка не найдена сразу, делаем несколько повторных попыток БЕЗ ЗАДЕРЖЕК
-              // Это нужно на случай, если заявка создается одновременно или сразу после платежа
-              for (let attempt = 1; attempt <= 3; attempt++) {
-                matchResult = await matchAndProcessPayment(incomingPayment.id, amount)
-                if (matchResult.success) {
-                  console.log(`✅ Auto-deposit completed on retry ${attempt} for payment ${incomingPayment.id}, request ${matchResult.requestId}`)
-                  break
-                }
-              }
-            }
             
-            // ВСЕГДА запускаем общую проверку заявок СРАЗУ после сохранения платежа (независимо от результата matchAndProcessPayment)
-            // Это гарантирует максимально быструю обработку, даже если заявка создается одновременно или сразу после платежа
-            // Используем setImmediate для неблокирующего выполнения, но запускаем немедленно
-            setImmediate(async () => {
-              try {
-                const { checkPendingRequestsForPayments } = await import('./auto-deposit')
-                await checkPendingRequestsForPayments()
-              } catch (error: any) {
-                // Игнорируем ошибки, чтобы не прерывать обработку
-              }
-            })
+            // Автопополнение теперь выполняется только при создании заявки с фото чека
+            // Платеж сохранен в БД, будет обработан когда пользователь создаст заявку с фото чека
 
             // СРАЗУ помечаем письмо как прочитанное ПОСЛЕ успешной обработки
             // Это критично важно, чтобы не обрабатывать письмо повторно
@@ -273,7 +246,7 @@ async function processEmail(
   })
 }
 
-// Функция matchAndProcessPayment импортируется из ./auto-deposit
+// Автопополнение теперь выполняется только через Request Watcher
 
 /**
  * Проверка всех непрочитанных писем (для первого запуска после перезапуска)
@@ -802,25 +775,8 @@ export async function startWatcher(): Promise<void> {
     console.warn('⚠️ Initial timeout check failed:', error.message)
   })
 
-  // Запускаем проверку заявок мгновенно и затем каждые 100ms для максимально быстрого автопополнения
-  const { checkPendingRequestsForPayments } = await import('./auto-deposit')
-  
-  // Немедленный запуск для мгновенной обработки
-  setImmediate(() => {
-    checkPendingRequestsForPayments().catch((error) => {
-      console.warn('⚠️ Auto-deposit check failed:', error.message)
-    })
-  })
-  
-  // Периодическая проверка каждые 200ms для максимально быстрой обработки
-  // 200ms обеспечивает практически мгновенную обработку без излишней нагрузки
-  const autoDepositCheckInterval = setInterval(() => {
-    checkPendingRequestsForPayments().catch((error) => {
-      console.warn('⚠️ Auto-deposit check failed:', error.message)
-    })
-  }, 200) // Каждые 200ms для максимально быстрой обработки
-
-  console.log('✅ Auto-deposit check started (immediate + every 500ms)')
+  // Автопополнение теперь выполняется только через Request Watcher
+  // Периодическая проверка удалена
 
   while (true) {
     try {

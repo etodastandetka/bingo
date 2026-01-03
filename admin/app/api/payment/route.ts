@@ -654,84 +654,50 @@ export async function POST(request: NextRequest) {
         addLog('success', `✅ Статус заявки исправлен на 'pending' (ID: ${verifyRequest.id})`)
       }
 
-      // Для заявок на пополнение сразу проверяем входящие платежи для автопополнения
-      if (validType === 'deposit' && amountNum > 0) {
-        try {
-          const { matchAndProcessPayment } = await import('@/lib/auto-deposit')
-          console.log(`🔍 [Payment API] Starting auto-match for new deposit request ${newRequest.id}, amount: ${amountNum}`)
-          
-          // Ищем необработанные входящие платежи за последний час с ТОЧНЫМ совпадением суммы (1 к 1)
-          // Используем час, чтобы найти платежи, которые могли прийти раньше заявки
-          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-          const amountNumRounded = Math.round(amountNum * 100) / 100
-          
-          const matchingPayments = await prisma.incomingPayment.findMany({
-            where: {
-              amount: amountNumRounded, // Точное сравнение
-              isProcessed: false,
-              requestId: null,
-              createdAt: {
-                gte: oneHourAgo,
+      // Для заявок на пополнение с фото чека - сразу проверяем платеж и выполняем автопополнение
+      if (validType === 'deposit' && amountNum > 0 && receipt_photo) {
+        // Если есть фото чека - сразу проверяем наличие платежа и выполняем автопополнение
+        setImmediate(async () => {
+          try {
+            const { matchAndProcessPayment } = await import('@/lib/auto-deposit')
+            console.log(`🚀 [Payment API] Checking payment for request ${newRequest.id} with amount ${amountNum}`)
+            
+            // Ищем необработанные платежи с точной суммой
+            const amountRounded = Math.round(amountNum * 100) / 100
+            const matchingPayments = await prisma.incomingPayment.findMany({
+              where: {
+                amount: amountRounded,
+                isProcessed: false,
+                requestId: null,
               },
-            },
-            orderBy: {
-              createdAt: 'asc', // Берем самый старый платеж
-            },
-          })
+              orderBy: {
+                createdAt: 'desc',
+              },
+              take: 1,
+            })
 
-          // Фильтруем вручную для ТОЧНОГО сравнения (1 к 1, без разницы)
-          const exactMatchingPayments = matchingPayments.filter((payment) => {
-            const paymentAmount = parseFloat(payment.amount.toString())
-            const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
-            return paymentAmountRounded === amountNumRounded // Точное сравнение: суммы должны быть абсолютно равны
-          })
+            // Фильтруем для точного совпадения
+            const exactMatch = matchingPayments.find((payment) => {
+              const paymentAmount = parseFloat(payment.amount.toString())
+              const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
+              return paymentAmountRounded === amountRounded
+            })
 
-          console.log(`🔍 [Payment API] Found ${matchingPayments.length} potential matching payments, ${exactMatchingPayments.length} exact matches for amount ${amountNum}`)
-
-          if (exactMatchingPayments.length > 0) {
-            // Обрабатываем все найденные платежи параллельно (хотя обычно должен быть только один)
-            // Обрабатываем в фоне, не блокируя ответ пользователю
-            const payment = exactMatchingPayments[0]
-            matchAndProcessPayment(payment.id, amountNum)
-              .then((result) => {
-                if (result && result.success) {
-                  console.log(`✅ [Payment API] Auto-deposit completed instantly for request ${newRequest.id}, payment ${payment.id}`)
-                } else {
-                  console.log(`ℹ️ [Payment API] Auto-deposit did not complete for request ${newRequest.id}: ${result?.message || 'unknown reason'}`)
-                }
-              })
-              .catch((error) => {
-                console.error(`❌ [Payment API] Auto-deposit error for request ${newRequest.id}:`, error)
-              })
-          } else {
-            console.log(`ℹ️ [Payment API] No matching unprocessed payments found for request ${newRequest.id} (amount: ${amountNum})`)
+            if (exactMatch) {
+              console.log(`🎯 [Payment API] Found matching payment ${exactMatch.id} for request ${newRequest.id}, processing...`)
+              const result = await matchAndProcessPayment(exactMatch.id, amountNum)
+              if (result.success) {
+                console.log(`✅ [Payment API] Auto-deposit completed for request ${newRequest.id}`)
+              } else {
+                console.log(`⚠️ [Payment API] Auto-deposit failed for request ${newRequest.id}: ${result.message}`)
+              }
+            } else {
+              console.log(`ℹ️ [Payment API] No matching payment found for request ${newRequest.id}, amount: ${amountNum}`)
+            }
+          } catch (error: any) {
+            console.error(`❌ [Payment API] Error checking payment:`, error.message)
           }
-          
-          // Запускаем ожидание для этой заявки - будет проверять почту каждые 100ms
-          setImmediate(async () => {
-            try {
-              const { startRequestWatcher } = await import('@/lib/auto-deposit')
-              startRequestWatcher(newRequest.id, amountNum)
-              console.log(`🚀 [Payment API] Started request watcher for request ${newRequest.id}`)
-            } catch (error: any) {
-              console.error(`❌ [Payment API] Failed to start request watcher:`, error.message)
-            }
-          })
-        } catch (error: any) {
-          console.error(`❌ [Payment API] Auto-match failed for request ${newRequest.id}:`, error.message)
-          // Не возвращаем ошибку, т.к. заявка уже создана и может быть обработана вручную
-          
-          // Все равно запускаем ожидание, даже если первая проверка не удалась
-          setImmediate(async () => {
-            try {
-              const { startRequestWatcher } = await import('@/lib/auto-deposit')
-              startRequestWatcher(newRequest.id, amountNum)
-              console.log(`🚀 [Payment API] Started request watcher for request ${newRequest.id} (after error)`)
-            } catch (watcherError: any) {
-              console.error(`❌ [Payment API] Failed to start request watcher:`, watcherError.message)
-            }
-          })
-        }
+        })
       }
 
       const response = NextResponse.json(
