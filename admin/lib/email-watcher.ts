@@ -231,18 +231,19 @@ async function processEmail(
                   break
                 }
               }
-              // Если все попытки не удались, запускаем общую проверку заявок СРАЗУ (без задержки)
-              if (!matchResult.success) {
-                setImmediate(async () => {
-                  try {
-                    const { checkPendingRequestsForPayments } = await import('./auto-deposit')
-                    await checkPendingRequestsForPayments()
-                  } catch (error: any) {
-                    console.warn(`⚠️ Final retry check failed for payment ${incomingPayment.id}:`, error.message)
-                  }
-                })
-              }
             }
+            
+            // ВСЕГДА запускаем общую проверку заявок СРАЗУ после сохранения платежа (независимо от результата matchAndProcessPayment)
+            // Это гарантирует максимально быструю обработку, даже если заявка создается одновременно или сразу после платежа
+            // Используем setImmediate для неблокирующего выполнения, но запускаем немедленно
+            setImmediate(async () => {
+              try {
+                const { checkPendingRequestsForPayments } = await import('./auto-deposit')
+                await checkPendingRequestsForPayments()
+              } catch (error: any) {
+                // Игнорируем ошибки, чтобы не прерывать обработку
+              }
+            })
 
             // СРАЗУ помечаем письмо как прочитанное ПОСЛЕ успешной обработки
             // Это критично важно, чтобы не обрабатывать письмо повторно
