@@ -216,7 +216,7 @@ async function processEmail(
 
             console.log(`✅ IncomingPayment saved: ID ${incomingPayment.id}`)
 
-            // Пытаемся найти совпадение и автоматически пополнить баланс
+            // Пытаемся найти совпадение и автоматически пополнить баланс СРАЗУ (синхронно)
             let matchResult = await matchAndProcessPayment(incomingPayment.id, amount)
             if (matchResult.success) {
               console.log(`✅ Auto-deposit completed for payment ${incomingPayment.id}, request ${matchResult.requestId}`)
@@ -551,8 +551,8 @@ async function startIdleModeWithTracking(settings: WatcherSettings): Promise<voi
         
         console.log('✅ Real-time mode active - listening for new emails...')
         
-        // Быстрый polling если IDLE не работает (каждые 5 секунд вместо 60)
-        // Это почти как реальное время, но с небольшой задержкой
+        // Быстрый polling если IDLE не работает (каждые 1 секунду для максимально быстрой обработки)
+        // Это почти как реальное время с минимальной задержкой
         idleInterval = setInterval(async () => {
           try {
             // Проверяем, не изменились ли учетные данные активного кошелька
@@ -603,7 +603,7 @@ async function startIdleModeWithTracking(settings: WatcherSettings): Promise<voi
             consecutiveNetworkErrors = 0
             console.error('Error in quick polling:', error.message || error)
           }
-        }, 5000) // Проверка каждые 5 секунд вместо 60
+        }, 1000) // Проверка каждую 1 секунду для максимально быстрой обработки
         
         // Сохраняем интервалы в глобальные переменные
         currentIdleInterval = idleInterval
