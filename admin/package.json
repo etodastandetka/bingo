@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "node scripts/show-logo.js && next dev -p 3001",
     "build": "next build",
-    "start": "next start -p 3001",
+    "start": "node scripts/show-logo.js && next start -p 3001",
     "lint": "next lint",
     "clean": "rm -rf .next",
     "db:generate": "prisma generate",
