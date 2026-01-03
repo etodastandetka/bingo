@@ -64,7 +64,7 @@ DATABASE_URL="postgresql://gen_user:dastan10dz@92.51.38.85:5432/default_db?schem
 JWT_SECRET="измените-этот-секретный-ключ-на-уникальный"
 NODE_ENV="production"
 BOT_TOKEN="8413027203:AAHhXadiHxW8WUSGp8tzxPqOF7iLHf8lI_s"
-OPERATOR_BOT_TOKEN="8279477654:AAHZHyx5Ez_qeOYx610ayISgHhtz9Uy7F_0"
+OPERATOR_BOT_TOKEN="7958632748:AAH478HkHt2czFo7dxCoyFSgqH_zVLzDJ98"
 ```
 
 ```bash
@@ -97,7 +97,7 @@ nano .env
 Содержимое `.env`:
 ```env
 BOT_TOKEN=8413027203:AAHhXadiHxW8WUSGp8tzxPqOF7iLHf8lI_s
-OPERATOR_BOT_TOKEN=8279477654:AAHZHyx5Ez_qeOYx610ayISgHhtz9Uy7F_0
+OPERATOR_BOT_TOKEN=7958632748:AAH478HkHt2czFo7dxCoyFSgqH_zVLzDJ98
 API_BASE_URL=https://fqxgmrzplndwsyvkeu.ru/api
 PAYMENT_SITE_URL=https://gldwueprxkmbtqsnva.ru
 ```

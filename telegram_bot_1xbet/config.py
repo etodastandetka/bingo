@@ -26,7 +26,7 @@ domains_config = load_domains_config()
 class Config:
     # Токен для бота 1xbet (можно использовать отдельный токен или тот же)
     BOT_TOKEN = os.getenv('BOT_TOKEN_1XBET', os.getenv('BOT_TOKEN', '8355684601:AAFQNSjNrlXmwF-0YvdKhzD4OKAr0DgOL74'))
-    OPERATOR_BOT_TOKEN = os.getenv('OPERATOR_BOT_TOKEN', '8279477654:AAHZHyx5Ez_qeOYx610ayISgHhtz9Uy7F_0')
+    OPERATOR_BOT_TOKEN = os.getenv('OPERATOR_BOT_TOKEN', '7958632748:AAH478HkHt2czFo7dxCoyFSgqH_zVLzDJ98')
     BOT_TYPE = '1xbet'  # Тип бота для определения правильного токена при отправке уведомлений
     
     # Для API: используем конфиг из domains.json или .env, иначе localhost
