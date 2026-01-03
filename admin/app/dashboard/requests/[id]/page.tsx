@@ -590,6 +590,11 @@ export default function RequestDetailPage() {
             localStorage.removeItem('request_updated')
             
             pushToast(`Баланс пополнен. Заявка подтверждена.`, 'success')
+            
+            // Редирект в дашборд после подтверждения
+            setTimeout(() => {
+              router.push('/dashboard/requests')
+            }, 1000)
             return
           } catch (depositError) {
             console.error('Failed to deposit balance:', depositError)
@@ -652,6 +657,11 @@ export default function RequestDetailPage() {
           
           const statusLabel = newStatus === 'completed' || newStatus === 'approved' ? 'подтверждена' : 'отклонена'
           pushToast(`Заявка ${statusLabel}`, 'success')
+          
+          // Редирект в дашборд после подтверждения/отклонения
+          setTimeout(() => {
+            router.push('/dashboard/requests')
+          }, 1000)
         } else {
           pushToast(data.error || 'Ошибка при обновлении заявки', 'error')
         }
@@ -873,6 +883,11 @@ export default function RequestDetailPage() {
           setSelectedPaymentId(null)
         setSelectedPaymentPreview(null)
         pushToast('Подтверждено.', 'success')
+        
+        // Редирект в дашборд после подтверждения
+        setTimeout(() => {
+          router.push('/dashboard/requests')
+        }, 1000)
         } else {
         pushToast('Ошибка при обновлении заявки: ' + (data.error || 'Неизвестная ошибка'), 'error')
       }
