@@ -158,12 +158,22 @@ export async function editRequestCreatedMessage(
 export async function deleteRequestCreatedMessage(
   userId: bigint,
   messageId: bigint | null,
-  bookmaker?: string | null
+  bookmaker?: string | null,
+  botType?: string | null
 ): Promise<void> {
   if (!messageId) return
 
   try {
-    const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
+    // Используем botType с приоритетом, если он передан
+    let botToken: string | null = null
+    if (botType) {
+      botToken = getBotTokenByBotType(botType)
+    } else if (bookmaker) {
+      botToken = getBotTokenByBookmaker(bookmaker)
+    } else {
+      botToken = process.env.BOT_TOKEN || null
+    }
+    
     if (!botToken) return
 
     const deleteMessageUrl = `https://api.telegram.org/bot${botToken}/deleteMessage`

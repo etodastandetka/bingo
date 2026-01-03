@@ -419,7 +419,7 @@ export async function PATCH(
             })
             
             if (request?.requestCreatedMessageId) {
-              await deleteRequestCreatedMessage(currentRequest.userId, request.requestCreatedMessageId, updatedRequest.bookmaker)
+              await deleteRequestCreatedMessage(currentRequest.userId, request.requestCreatedMessageId, updatedRequest.bookmaker, botType)
               await prisma.request.update({
                 where: { id: updatedRequest.id },
                 data: { requestCreatedMessageId: null },
