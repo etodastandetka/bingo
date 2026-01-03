@@ -90,6 +90,23 @@ export function startRequestWatcher(requestId: number, amount: number): void {
       })
 
       if (exactMatch) {
+        // ВАЖНО: Проверяем, что платеж еще не обработан перед обработкой
+        // Это предотвращает race condition, если платеж уже обрабатывается другим процессом
+        const currentPayment = await prisma.incomingPayment.findUnique({
+          where: { id: exactMatch.id },
+          select: { isProcessed: true, requestId: true },
+        })
+        
+        if (!currentPayment || currentPayment.isProcessed || currentPayment.requestId !== null) {
+          console.log(`⚠️ [Request Watcher] Payment ${exactMatch.id} already processed (isProcessed: ${currentPayment?.isProcessed}, requestId: ${currentPayment?.requestId}), skipping`)
+          // Если платеж уже обработан, проверяем, не для нашей ли заявки
+          if (currentPayment?.requestId === requestId) {
+            console.log(`✅ [Request Watcher] Payment ${exactMatch.id} already processed for request ${requestId}, stopping watcher`)
+            stopRequestWatcher(requestId)
+          }
+          return
+        }
+        
         console.log(`🎯 [Request Watcher] Found matching payment ${exactMatch.id} for request ${requestId}, processing...`)
         stopRequestWatcher(requestId)
         
