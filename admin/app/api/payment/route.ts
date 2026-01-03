@@ -647,15 +647,23 @@ export async function POST(request: NextRequest) {
           const { matchAndProcessPayment } = await import('@/lib/auto-deposit')
           console.log(`🔍 [Payment API] Starting auto-match for new deposit request ${newRequest.id}, amount: ${amountNum}`)
           
-          // Ищем необработанные входящие платежи за последние 10 минут с точным совпадением суммы
-          const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+          // Ищем необработанные входящие платежи за последний час с точным совпадением суммы
+          // Используем час, чтобы найти платежи, которые могли прийти раньше заявки
+          // Используем диапазон для суммы (до 1 копейки разницы) из-за проблем с точностью Decimal
+          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+          const amountMin = amountNum - 0.01
+          const amountMax = amountNum + 0.01
+          
           const matchingPayments = await prisma.incomingPayment.findMany({
             where: {
-              amount: amountNum,
+              amount: {
+                gte: amountMin,
+                lte: amountMax,
+              },
               isProcessed: false,
               requestId: null,
               createdAt: {
-                gte: tenMinutesAgo,
+                gte: oneHourAgo,
               },
             },
             orderBy: {
@@ -663,18 +671,30 @@ export async function POST(request: NextRequest) {
             },
           })
 
-          console.log(`🔍 [Payment API] Found ${matchingPayments.length} unprocessed payments matching amount ${amountNum}`)
+          // Фильтруем вручную для точного сравнения (до 2 копеек для учета ошибок округления Decimal)
+          const exactMatchingPayments = matchingPayments.filter((payment) => {
+            const paymentAmount = parseFloat(payment.amount.toString())
+            const diff = Math.abs(paymentAmount - amountNum)
+            return diff < 0.02 // Точность до 2 копеек для учета возможных ошибок округления
+          })
 
-          if (matchingPayments.length > 0) {
-            // Пытаемся обработать первый подходящий платеж
-            const payment = matchingPayments[0]
-            const result = await matchAndProcessPayment(payment.id, amountNum)
-            
-            if (result && result.success) {
-              console.log(`✅ [Payment API] Auto-deposit completed instantly for request ${newRequest.id}, payment ${payment.id}`)
-            } else {
-              console.log(`ℹ️ [Payment API] Auto-deposit did not complete for request ${newRequest.id}: ${result?.message || 'unknown reason'}`)
-            }
+          console.log(`🔍 [Payment API] Found ${matchingPayments.length} potential matching payments, ${exactMatchingPayments.length} exact matches for amount ${amountNum}`)
+
+          if (exactMatchingPayments.length > 0) {
+            // Обрабатываем все найденные платежи параллельно (хотя обычно должен быть только один)
+            // Обрабатываем в фоне, не блокируя ответ пользователю
+            const payment = exactMatchingPayments[0]
+            matchAndProcessPayment(payment.id, amountNum)
+              .then((result) => {
+                if (result && result.success) {
+                  console.log(`✅ [Payment API] Auto-deposit completed instantly for request ${newRequest.id}, payment ${payment.id}`)
+                } else {
+                  console.log(`ℹ️ [Payment API] Auto-deposit did not complete for request ${newRequest.id}: ${result?.message || 'unknown reason'}`)
+                }
+              })
+              .catch((error) => {
+                console.error(`❌ [Payment API] Auto-deposit error for request ${newRequest.id}:`, error)
+              })
           } else {
             console.log(`ℹ️ [Payment API] No matching unprocessed payments found for request ${newRequest.id} (amount: ${amountNum})`)
           }

@@ -11,6 +11,9 @@ interface MatchResult {
   message?: string
 }
 
+// Set для отслеживания платежей, которые сейчас обрабатываются (предотвращает race condition)
+const processingPayments = new Set<number>()
+
 /**
  * Проверка всех pending заявок и поиск платежей для них
  * Вызывается каждые 100ms для мгновенного автопополнения
@@ -74,15 +77,15 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
 
     console.log(`🔍 [Auto-Deposit Check] Found ${pendingRequests.length} pending requests`)
 
-    // Для каждой заявки ищем платежи по сумме
-    for (const request of pendingRequests) {
+    // Обрабатываем все заявки ПАРАЛЛЕЛЬНО для быстрой обработки множественных платежей
+    const processingPromises = pendingRequests.map(async (request) => {
       if (!request.amount) {
         console.log(`⚠️ [Auto-Deposit Check] Request ${request.id} skipped: no amount`)
-        continue
+        return
       }
       if (request.incomingPayments && request.incomingPayments.length > 0) {
         console.log(`⚠️ [Auto-Deposit Check] Request ${request.id} skipped: already has processed payment`)
-        continue
+        return
       }
 
       const requestAmount = parseFloat(request.amount.toString())
@@ -136,7 +139,7 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
         
         if (!currentPayment || currentPayment.isProcessed || currentPayment.requestId !== null) {
           console.log(`⚠️ [Auto-Deposit Check] Payment ${payment.id} already processed (isProcessed: ${currentPayment?.isProcessed}, requestId: ${currentPayment?.requestId}), skipping`)
-          continue
+          return
         }
         
         const paymentAge = Date.now() - payment.paymentDate.getTime()
@@ -147,7 +150,7 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
         console.log(`   Request amount: ${requestAmount}, age: ${requestAgeSeconds}s`)
         console.log(`   Processing...`)
         
-        // Обрабатываем платеж
+        // Обрабатываем платеж (await внутри Promise.all обрабатывает все параллельно)
         try {
           const result = await matchAndProcessPayment(payment.id, requestAmount)
           if (result.success) {
@@ -161,7 +164,10 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
       } else {
         console.log(`ℹ️ [Auto-Deposit Check] No matching payments found for request ${request.id} (amount: ${requestAmount})`)
       }
-    }
+    })
+
+    // Ждем завершения всех обработок параллельно
+    await Promise.allSettled(processingPromises)
   } catch (error: any) {
     console.error(`❌ [Auto-Deposit Check] Error checking pending requests:`, error)
   }
@@ -176,6 +182,23 @@ export async function matchAndProcessPayment(
   amount: number
 ): Promise<MatchResult> {
   console.log(`🚀 [Auto-Deposit] matchAndProcessPayment called: paymentId=${paymentId}, amount=${amount}`)
+  
+  // Проверяем, не обрабатывается ли этот платеж уже
+  if (processingPayments.has(paymentId)) {
+    console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} is already being processed, skipping duplicate call`)
+    return {
+      success: false,
+      message: 'Payment is already being processed',
+    }
+  }
+  
+  // Добавляем платеж в Set обрабатываемых
+  processingPayments.add(paymentId)
+  
+  // Очищаем Set после задержки (защита от зависания при ошибке)
+  setTimeout(() => {
+    processingPayments.delete(paymentId)
+  }, 30000) // 30 секунд - максимум для обработки одного платежа
   
   // Проверяем, включено ли автопополнение
   // Сначала проверяем BotConfiguration (новый способ), затем BotSetting (старый способ для совместимости)

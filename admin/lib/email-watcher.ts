@@ -221,27 +221,26 @@ async function processEmail(
             if (matchResult.success) {
               console.log(`✅ Auto-deposit completed for payment ${incomingPayment.id}, request ${matchResult.requestId}`)
             } else {
-              console.log(`ℹ️ No matching request found for payment ${incomingPayment.id} (amount: ${amount}), will retry...`)
-              // Если заявка не найдена сразу, делаем несколько повторных попыток
+              console.log(`ℹ️ No matching request found for payment ${incomingPayment.id} (amount: ${amount}), will retry immediately...`)
+              // Если заявка не найдена сразу, делаем несколько повторных попыток БЕЗ ЗАДЕРЖЕК
               // Это нужно на случай, если заявка создается одновременно или сразу после платежа
               for (let attempt = 1; attempt <= 3; attempt++) {
-                await new Promise(resolve => setTimeout(resolve, 300 * attempt)) // Задержка увеличивается: 300ms, 600ms, 900ms
                 matchResult = await matchAndProcessPayment(incomingPayment.id, amount)
                 if (matchResult.success) {
                   console.log(`✅ Auto-deposit completed on retry ${attempt} for payment ${incomingPayment.id}, request ${matchResult.requestId}`)
                   break
                 }
               }
-              // Если все попытки не удались, запускаем общую проверку заявок
+              // Если все попытки не удались, запускаем общую проверку заявок СРАЗУ (без задержки)
               if (!matchResult.success) {
-                setTimeout(async () => {
+                setImmediate(async () => {
                   try {
                     const { checkPendingRequestsForPayments } = await import('./auto-deposit')
                     await checkPendingRequestsForPayments()
                   } catch (error: any) {
                     console.warn(`⚠️ Final retry check failed for payment ${incomingPayment.id}:`, error.message)
                   }
-                }, 1000) // Финальная попытка через 1 секунду
+                })
               }
             }
 
@@ -689,14 +688,14 @@ export async function startWatcher(): Promise<void> {
     })
   })
   
-  // Периодическая проверка каждые 1 секунду для баланса между скоростью и нагрузкой
+  // Периодическая проверка каждые 100ms для максимально быстрой обработки множественных платежей
   const autoDepositCheckInterval = setInterval(() => {
     checkPendingRequestsForPayments().catch((error) => {
       console.warn('⚠️ Auto-deposit check failed:', error.message)
     })
-  }, 1000) // Каждую 1 секунду для баланса между скоростью и нагрузкой
+  }, 100) // Каждые 100ms для мгновенной обработки множественных платежей
 
-  console.log('✅ Auto-deposit check started (immediate + every 1s)')
+  console.log('✅ Auto-deposit check started (immediate + every 100ms)')
 
   while (true) {
     try {
