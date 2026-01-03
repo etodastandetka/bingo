@@ -655,50 +655,52 @@ export async function POST(request: NextRequest) {
       }
 
       // Для заявок на пополнение с фото чека - сразу проверяем платеж и выполняем автопополнение
-      // Выполняем СИНХРОННО для мгновенного автопополнения (1 секунда)
+      // Выполняем АСИНХРОННО (не блокируя создание заявки) для параллельной обработки множественных заявок
       if (validType === 'deposit' && amountNum > 0 && receipt_photo) {
         // Если есть фото чека - сразу проверяем наличие платежа и выполняем автопополнение
-        // Используем await для синхронного выполнения - автопополнение должно быть мгновенным
-        try {
-          const { matchAndProcessPayment } = await import('@/lib/auto-deposit')
-          console.log(`🚀 [Payment API] Checking payment for request ${newRequest.id} with amount ${amountNum}`)
-          
-          // Ищем необработанные платежи с точной суммой
-          const amountRounded = Math.round(amountNum * 100) / 100
-          const matchingPayments = await prisma.incomingPayment.findMany({
-            where: {
-              amount: amountRounded,
-              isProcessed: false,
-              requestId: null,
-            },
-            orderBy: {
-              createdAt: 'desc',
-            },
-            take: 1,
-          })
+        // Запускаем в фоне без await - не блокируем создание заявки, обрабатываем параллельно
+        (async () => {
+          try {
+            const { matchAndProcessPayment } = await import('@/lib/auto-deposit')
+            console.log(`🚀 [Payment API] Checking payment for request ${newRequest.id} with amount ${amountNum}`)
+            
+            // Ищем необработанные платежи с точной суммой
+            const amountRounded = Math.round(amountNum * 100) / 100
+            const matchingPayments = await prisma.incomingPayment.findMany({
+              where: {
+                amount: amountRounded,
+                isProcessed: false,
+                requestId: null,
+              },
+              orderBy: {
+                createdAt: 'desc',
+              },
+              take: 1,
+            })
 
-          // Фильтруем для точного совпадения
-          const exactMatch = matchingPayments.find((payment) => {
-            const paymentAmount = parseFloat(payment.amount.toString())
-            const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
-            return paymentAmountRounded === amountRounded
-          })
+            // Фильтруем для точного совпадения
+            const exactMatch = matchingPayments.find((payment) => {
+              const paymentAmount = parseFloat(payment.amount.toString())
+              const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
+              return paymentAmountRounded === amountRounded
+            })
 
-          if (exactMatch) {
-            console.log(`🎯 [Payment API] Found matching payment ${exactMatch.id} for request ${newRequest.id}, processing immediately...`)
-            const result = await matchAndProcessPayment(exactMatch.id, amountNum)
-            if (result.success) {
-              console.log(`✅ [Payment API] Auto-deposit completed instantly for request ${newRequest.id}`)
+            if (exactMatch) {
+              console.log(`🎯 [Payment API] Found matching payment ${exactMatch.id} for request ${newRequest.id}, processing immediately...`)
+              const result = await matchAndProcessPayment(exactMatch.id, amountNum)
+              if (result.success) {
+                console.log(`✅ [Payment API] Auto-deposit completed instantly for request ${newRequest.id}`)
+              } else {
+                console.log(`⚠️ [Payment API] Auto-deposit failed for request ${newRequest.id}: ${result.message}`)
+              }
             } else {
-              console.log(`⚠️ [Payment API] Auto-deposit failed for request ${newRequest.id}: ${result.message}`)
+              console.log(`ℹ️ [Payment API] No matching payment found for request ${newRequest.id}, amount: ${amountNum}`)
             }
-          } else {
-            console.log(`ℹ️ [Payment API] No matching payment found for request ${newRequest.id}, amount: ${amountNum}`)
+          } catch (error: any) {
+            console.error(`❌ [Payment API] Error checking payment:`, error.message)
+            // Не блокируем создание заявки при ошибке автопополнения
           }
-        } catch (error: any) {
-          console.error(`❌ [Payment API] Error checking payment:`, error.message)
-          // Не блокируем создание заявки при ошибке автопополнения
-        }
+        })() // Запускаем IIFE (Immediately Invoked Function Expression) в фоне
       }
 
       const response = NextResponse.json(
