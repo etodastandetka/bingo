@@ -676,7 +676,7 @@ export async function matchAndProcessPayment(
     cleanup()
     return {
       success: false,
-      requestId: request.id,
+      requestId: requestToUse.id,
       message: `Депозит уже был проведен (заявка #${duplicate.id})`,
     }
   }
@@ -684,19 +684,19 @@ export async function matchAndProcessPayment(
   // Пополняем баланс через казино API (использует localhost API)
   const depositStartTime = Date.now()
   try {
-    console.log(`⏱️ [Auto-Deposit] Starting deposit for request ${request.id} at ${new Date().toISOString()}`)
+    console.log(`⏱️ [Auto-Deposit] Starting deposit for request ${requestToUse.id} at ${new Date().toISOString()}`)
     const depositResult = await depositToCasino(
-      request.bookmaker,
-      request.accountId,
+      requestToUse.bookmaker!,
+      requestToUse.accountId!,
       requestAmount
     )
     const depositDuration = Date.now() - depositStartTime
-    console.log(`⏱️ [Auto-Deposit] Deposit completed for request ${request.id} in ${depositDuration}ms`)
+    console.log(`⏱️ [Auto-Deposit] Deposit completed for request ${requestToUse.id} in ${depositDuration}ms`)
 
     if (!depositResult.success) {
       // Сохраняем ошибку казино в базе данных перед выбросом исключения
       await prisma.request.update({
-        where: { id: request.id },
+        where: { id: requestToUse.id },
         data: {
           casinoError: depositResult.message || 'Deposit failed',
         },
@@ -705,7 +705,7 @@ export async function matchAndProcessPayment(
     }
 
     console.log(
-      `✅ Auto-deposit successful: Request ${request.id}, Account ${request.accountId}`
+      `✅ Auto-deposit successful: Request ${requestToUse.id}, Account ${requestToUse.accountId}`
     )
 
     // ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ СРАЗУ ПОСЛЕ УСПЕШНОГО ПОПОЛНЕНИЯ
