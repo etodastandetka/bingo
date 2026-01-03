@@ -368,7 +368,7 @@ async function matchAndProcessPayment(paymentId: number, amount: number): Promis
 }
 
 /**
- * Проверка всех непрочитанных писем (для первого запуска после перезапуска)
+ * Помечает все непрочитанные письма как прочитанные (при переподключении к новому аккаунту)
  */
 async function checkAllUnreadEmails(settings: WatcherSettings): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -395,7 +395,7 @@ async function checkAllUnreadEmails(settings: WatcherSettings): Promise<void> {
         }
 
         // Ищем ВСЕ непрочитанные письма (без фильтра по дате)
-        console.log('🔍 Checking all unread emails (first run after restart)...')
+        console.log('🔍 Marking all unread emails as read (new account connection)...')
         imap.search(['UNSEEN'], (err: Error | null, results?: number[]) => {
           if (err) {
             reject(err)
@@ -410,29 +410,22 @@ async function checkAllUnreadEmails(settings: WatcherSettings): Promise<void> {
             return
           }
 
-          console.log(`📬 Found ${results.length} unread email(s) - processing all...`)
+          console.log(`📬 Found ${results.length} unread email(s) - marking as read (skipping processing)...`)
 
-          const processSequentially = async () => {
-            for (const uid of results!) {
-              try {
-                await processEmail(imap, uid, settings)
-              } catch (error: any) {
-                console.error(`❌ Error processing email UID ${uid}:`, error.message)
-              }
+          // Просто помечаем все письма как прочитанные, не обрабатывая их
+          imap.setFlags(results, ['\\Seen'], (err: Error | null) => {
+            if (err) {
+              console.error(`❌ Error marking emails as read:`, err)
+              imap.end()
+              reject(err)
+              return
             }
-          }
 
-          processSequentially()
-            .then(() => {
-              consecutiveNetworkErrors = 0
-              console.log(`✅ Finished processing ${results.length} unread email(s)`)
-              imap.end()
-              resolve()
-            })
-            .catch((error) => {
-              imap.end()
-              reject(error)
-            })
+            consecutiveNetworkErrors = 0
+            console.log(`✅ Marked ${results.length} unread email(s) as read`)
+            imap.end()
+            resolve()
+          })
         })
       })
     })
@@ -853,15 +846,15 @@ export async function startWatcher(): Promise<void> {
 
       console.log(`📧 Connecting to ${settings.imapHost} (${settings.email})...`)
 
-      // При первом запуске обрабатываем ВСЕ непрочитанные письма
+      // При первом запуске просто помечаем все непрочитанные письма как прочитанные
       if (isFirstRun) {
-        console.log('🔄 First run detected - processing all unread emails...')
+        console.log('🔄 First run detected - marking all unread emails as read...')
         try {
           await checkAllUnreadEmails(settings)
-          console.log('✅ Finished processing all unread emails, switching to real-time mode...')
+          console.log('✅ Finished marking unread emails as read, switching to real-time mode...')
         } catch (error: any) {
-          console.error('❌ Error processing unread emails on first run:', error.message)
-          // Продолжаем работу даже если обработка непрочитанных писем не удалась
+          console.error('❌ Error marking unread emails on first run:', error.message)
+          // Продолжаем работу даже если помечание непрочитанных писем не удалось
         }
         isFirstRun = false
       }
