@@ -341,18 +341,13 @@ export async function PATCH(
             }
             
             if (currentRequest.requestType === 'withdraw' && notificationMessage) {
-              const { formatWithdrawInstruction, formatWithdrawRequestMessage } = await import('@/lib/send-notification')
+              const { formatWithdrawRequestMessage } = await import('@/lib/send-notification')
               
-              // 1. Отправляем инструкцию
-              const instruction = formatWithdrawInstruction(casino)
-              sendNotificationToUser(currentRequest.userId, instruction, updatedRequest.bookmaker, null, botType)
+              // 1. Отправляем сообщение о принятии заявки
+              const requestMessage = formatWithdrawRequestMessage(amount, accountId, adminUsername, lang)
+              sendNotificationToUser(currentRequest.userId, requestMessage, updatedRequest.bookmaker, null, botType)
                 .then(() => {
-                  // 2. Отправляем сообщение о принятии заявки
-                  const requestMessage = formatWithdrawRequestMessage(amount, accountId, adminUsername, lang)
-                  return sendNotificationToUser(currentRequest.userId, requestMessage, updatedRequest.bookmaker, null, botType)
-                })
-                .then(() => {
-                  // 3. Отправляем финальное сообщение БЕЗ кнопки "Главное меню"
+                  // 2. Отправляем финальное сообщение БЕЗ кнопки "Главное меню"
                   return sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, null, botType)
                 })
                 .catch((error) => {
@@ -444,20 +439,15 @@ export async function PATCH(
                 console.error('Failed to send rejection notification:', error)
               })
           } else if (currentRequest.requestType === 'withdraw') {
-            // Для вывода отправляем несколько сообщений: инструкцию, сообщение о принятии, и финальное сообщение БЕЗ кнопки
+            // Для вывода отправляем сообщение о принятии заявки и финальное сообщение БЕЗ кнопки
             // Используем botType из заявки для определения правильного бота
-            const { formatWithdrawInstruction, formatWithdrawRequestMessage } = await import('@/lib/send-notification')
+            const { formatWithdrawRequestMessage } = await import('@/lib/send-notification')
             
-            // 1. Отправляем инструкцию
-            const instruction = formatWithdrawInstruction(casino)
-            sendNotificationToUser(currentRequest.userId, instruction, updatedRequest.bookmaker, null, botType)
+            // 1. Отправляем сообщение о принятии заявки
+            const requestMessage = formatWithdrawRequestMessage(amount, accountId, adminUsername, lang)
+            sendNotificationToUser(currentRequest.userId, requestMessage, updatedRequest.bookmaker, null, botType)
               .then(() => {
-                // 2. Отправляем сообщение о принятии заявки
-                const requestMessage = formatWithdrawRequestMessage(amount, accountId, adminUsername, lang)
-                return sendNotificationToUser(currentRequest.userId, requestMessage, updatedRequest.bookmaker, null, botType)
-              })
-              .then(() => {
-                // 3. Отправляем финальное сообщение БЕЗ кнопки "Главное меню"
+                // 2. Отправляем финальное сообщение БЕЗ кнопки "Главное меню"
                 return sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, null, botType)
               })
               .catch((error) => {
