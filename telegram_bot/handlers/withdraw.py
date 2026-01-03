@@ -531,13 +531,13 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
                     success_message += f"✅ Чыгаруу {amount_str} сом\n"
                     success_message += f"🆔 {account_id}\n"
                     success_message += f"⏳ Акчаңыз 5 мүнөттүн ичинде капчыңызга келет.\n\n"
-                    success_message += f"👨‍💻 Оператор:  @bingokg_boss"
+                    success_message += f"👨‍💻 Оператор:  @helperbingo_bot"
                 else:
                     success_message = f"🎰 {casino_name}\n"
                     success_message += f"✅ Вывод {amount_str} сом\n"
                     success_message += f"🆔 {account_id}\n"
                     success_message += f"⏳ Ваши деньги поступят на ваш кошелёк в течение 5 минут.\n\n"
-                    success_message += f"👨‍💻 Оператор:  @bingokg_boss"
+                    success_message += f"👨‍💻 Оператор:  @helperbingo_bot"
             else:
                 # Если сумма не получена, используем стандартное сообщение
                 casino_name = data.get('casino_name', 'Казино')
@@ -546,13 +546,13 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
                     success_message += f"✅ Чыгаруу өтүнүчү түзүлдү\n"
                     success_message += f"🆔 {account_id}\n"
                     success_message += f"⏳ Акчаңыз 5 мүнөттүн ичинде капчыңызга келет.\n\n"
-                    success_message += f"👨‍💻 Оператор:  @bingokg_boss"
+                    success_message += f"👨‍💻 Оператор:  @helperbingo_bot"
                 else:
                     success_message = f"🎰 {casino_name}\n"
                     success_message += f"✅ Заявка на вывод создана\n"
                     success_message += f"🆔 {account_id}\n"
                     success_message += f"⏳ Ваши деньги поступят на ваш кошелёк в течение 5 минут.\n\n"
-                    success_message += f"👨‍💻 Оператор:  @bingokg_boss"
+                    success_message += f"👨‍💻 Оператор:  @helperbingo_bot"
             
             # Отправляем сообщение о создании заявки и сохраняем его ID
             request_created_msg = await message.answer(success_message)

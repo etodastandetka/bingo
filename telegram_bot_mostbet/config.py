@@ -88,7 +88,7 @@ class Config:
     
     # Канал и поддержка
     CHANNEL = '@bingokg_news'
-    SUPPORT = '@bingokg_boss'
+    SUPPORT = '@helperbingo_bot'
     
     # Языки
     LANGUAGES = [

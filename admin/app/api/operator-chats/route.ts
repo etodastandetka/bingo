@@ -71,26 +71,43 @@ export async function GET(request: NextRequest) {
           lastName: true,
         },
       }),
-      // Последние сообщения для каждого пользователя
-      Promise.all(
-        userIds.map(async (userId: any) => {
-          const lastMessage = await prisma.chatMessage.findFirst({
-            where: {
-              userId,
-              botType: 'operator',
-            },
-            orderBy: {
-              createdAt: 'desc',
-            },
-            select: {
-              messageText: true,
-              direction: true,
-              createdAt: true,
-            },
-          })
-          return { userId, lastMessage }
+      // Последние сообщения для каждого пользователя - оптимизированный запрос
+      (async () => {
+        // Получаем все последние сообщения одним запросом
+        const allLastMessages = await prisma.chatMessage.findMany({
+          where: {
+            userId: { in: userIds.map((id: any) => BigInt(id)) },
+            botType: 'operator',
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+          select: {
+            userId: true,
+            messageText: true,
+            direction: true,
+            createdAt: true,
+          },
         })
-      ),
+
+        // Группируем по userId и берем первое (самое новое) для каждого
+        const lastMessageMap = new Map()
+        allLastMessages.forEach((msg: any) => {
+          const userIdStr = msg.userId.toString()
+          if (!lastMessageMap.has(userIdStr)) {
+            lastMessageMap.set(userIdStr, {
+              messageText: msg.messageText,
+              direction: msg.direction,
+              createdAt: msg.createdAt,
+            })
+          }
+        })
+
+        return userIds.map((userId: any) => ({
+          userId,
+          lastMessage: lastMessageMap.get(userId.toString()) || null,
+        }))
+      })(),
     ])
 
     const statusMap = new Map(
@@ -102,52 +119,83 @@ export async function GET(request: NextRequest) {
     )
 
     // Оптимизация: получаем все последние сообщения оператора одним запросом
-    const lastOperatorMessagesData = await Promise.all(
-      userIds.map(async (userId: any) => {
-        const lastOpMsg = await prisma.chatMessage.findFirst({
-          where: {
-            userId,
-            botType: 'operator',
-            direction: 'out',
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-          select: {
-            createdAt: true,
-          },
-        })
-        return { userId, lastOpMsg }
-      })
-    )
+    const allOperatorMessages = await prisma.chatMessage.findMany({
+      where: {
+        userId: { in: userIds.map((id: any) => BigInt(id)) },
+        botType: 'operator',
+        direction: 'out',
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      select: {
+        userId: true,
+        createdAt: true,
+      },
+    })
+    
+    // Группируем по userId и берем первое (самое новое) для каждого
+    const lastOperatorMessagesMap = new Map()
+    allOperatorMessages.forEach((msg: any) => {
+      const userIdStr = msg.userId.toString()
+      if (!lastOperatorMessagesMap.has(userIdStr)) {
+        lastOperatorMessagesMap.set(userIdStr, msg)
+      }
+    })
+    
+    const lastOperatorMessagesData = userIds.map((userId: any) => {
+      const lastOpMsg = lastOperatorMessagesMap.get(userId.toString())
+      return { userId, lastOpMsg: lastOpMsg || null }
+    })
 
-    // Подсчитываем непрочитанные сообщения параллельно
-    const unreadCounts = await Promise.all(
-      lastOperatorMessagesData.map(async ({ userId, lastOpMsg }) => {
-        if (!lastOpMsg) {
-          const count = await prisma.chatMessage.count({
-            where: {
-              userId,
-              botType: 'operator',
-              direction: 'in',
-            },
-          })
-          return { userId, count }
-        }
+    // Оптимизация: подсчитываем непрочитанные сообщения одним запросом
+    const userIdsWithLastOpMsg = lastOperatorMessagesData
+      .filter((item: { userId: any, lastOpMsg: { userId: any, createdAt: Date } | null }) => item.lastOpMsg)
+      .map((item: { userId: any, lastOpMsg: { userId: any, createdAt: Date } | null }) => ({
+        userId: BigInt(item.userId),
+        lastOpMsgTime: item.lastOpMsg!.createdAt,
+      }))
+    
+    const userIdsWithoutLastOpMsg = lastOperatorMessagesData
+      .filter((item: { userId: any, lastOpMsg: { userId: any, createdAt: Date } | null }) => !item.lastOpMsg)
+      .map((item: { userId: any, lastOpMsg: { userId: any, createdAt: Date } | null }) => BigInt(item.userId))
 
+    // Подсчет для пользователей с последним сообщением оператора
+    const unreadCountsWithLastMsg = await Promise.all(
+      userIdsWithLastOpMsg.map(async (item: { userId: bigint, lastOpMsgTime: Date }) => {
+        const { userId, lastOpMsgTime } = item
         const count = await prisma.chatMessage.count({
           where: {
             userId,
             botType: 'operator',
             direction: 'in',
             createdAt: {
-              gt: lastOpMsg.createdAt,
+              gt: lastOpMsgTime,
             },
           },
         })
-        return { userId, count }
+        return { userId: userId.toString(), count }
       })
     )
+
+    // Подсчет для пользователей без последнего сообщения оператора
+    const unreadCountsWithoutLastMsg = userIdsWithoutLastOpMsg.length > 0
+      ? await prisma.chatMessage.groupBy({
+          by: ['userId'],
+          where: {
+            userId: { in: userIdsWithoutLastOpMsg },
+            botType: 'operator',
+            direction: 'in',
+          },
+          _count: {
+            id: true,
+          },
+        }).then(results => 
+          results.map(r => ({ userId: r.userId.toString(), count: r._count.id }))
+        )
+      : []
+
+    const unreadCounts = [...unreadCountsWithLastMsg, ...unreadCountsWithoutLastMsg]
 
     const unreadCountMap = new Map(
       unreadCounts.map(u => [u.userId.toString(), u.count])
@@ -165,7 +213,7 @@ export async function GET(request: NextRequest) {
         if (status === 'closed' && !isClosed) return null
 
         const user = userMap.get(userIdStr)
-        const lastMessage = lastMessageMap.get(userIdStr)
+        const lastMessage = lastMessageMap.get(userIdStr) as { messageText: string, direction: string, createdAt: Date } | undefined
         const unreadCount = unreadCountMap.get(userIdStr) || 0
 
         // Если пользователь не найден, создаем его асинхронно

@@ -98,15 +98,6 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
       const requestAgeSeconds = Math.floor(requestAge / 1000)
       
       console.log(`🔍 [Auto-Deposit Check] Checking request ${request.id}: amount=${requestAmount}, age=${requestAgeSeconds}s`)
-      
-      // Проверяем, есть ли вообще необработанные платежи в БД
-      const totalUnprocessedPayments = await prisma.incomingPayment.count({
-        where: {
-          isProcessed: false,
-          requestId: null,
-        },
-      })
-      console.log(`📊 [Auto-Deposit Check] Total unprocessed payments in DB: ${totalUnprocessedPayments}`)
 
       // Ищем необработанные платежи с такой же суммой
       // Используем более широкий временной диапазон для поиска платежей
@@ -431,7 +422,7 @@ export async function matchAndProcessPayment(
     const accountId = request.accountId || ''
     const processingTime = '1s' // Для автопополнения всегда используем 1s
     const lang = 'ru' // Дефолтный язык для мгновенной отправки
-    const adminUsername = '@bingokg_boss' // Дефолтный username для мгновенной отправки
+    const adminUsername = '@helperbingo_bot' // Дефолтный username для мгновенной отправки
 
     // Формируем сообщение сразу, без ожидания запросов к БД
     const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)

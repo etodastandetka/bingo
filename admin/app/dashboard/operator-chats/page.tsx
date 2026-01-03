@@ -77,11 +77,11 @@ export default function OperatorChatsPage() {
     }
   }
 
-  // Debounce для поиска (задержка 500ms)
+  // Debounce для поиска (задержка 200ms для быстрой реакции)
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery)
-    }, 500)
+    }, 200)
     return () => clearTimeout(timer)
   }, [searchQuery])
 

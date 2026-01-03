@@ -3,7 +3,7 @@ import logging
 import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from config import Config
+from config import Config, print_logo
 from handlers import start, deposit, withdraw, language, instruction, chat
 
 # Настройка логирования
@@ -12,6 +12,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Выводим логотип при запуске
+print_logo()
 
 async def main():
     """Главная функция запуска бота"""

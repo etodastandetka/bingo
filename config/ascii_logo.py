@@ -1,11 +1,19 @@
-#!/usr/bin/env python3
 """
-Server Monitor - мониторинг сервера
+Конфигурация ASCII логотипа для вывода в консоль
+Замените содержимое ASCII_LOGO на свой логотип
 """
 
-# ASCII логотип для вывода в консоль
-# Замените содержимое на свой ASCII-арт
+# ASCII логотип - замените на свой
 ASCII_LOGO = """
+╔═══════════════════════════════════════╗
+║                                       ║
+║          BINGO BOT SYSTEM             ║
+║                                       ║
+╚═══════════════════════════════════════╝
+"""
+
+# Альтернативный вариант (можно использовать несколько)
+ASCII_LOGO_ALT = """
  ███████████   ███                                        
 ▒▒███▒▒▒▒▒███ ▒▒▒                                         
  ▒███    ▒███ ████  ████████    ███████  ██████           
@@ -25,15 +33,34 @@ ASCII_LOGO = """
  ▒███ ▒▒███  ▒▒███     ███     ▒███     ▒███  ▒███ ▒▒███  
  █████ ▒▒████ ▒▒▒███████▒      █████    █████ █████ ▒▒████
 ▒▒▒▒▒   ▒▒▒▒    ▒▒▒▒▒▒▒       ▒▒▒▒▒    ▒▒▒▒▒ ▒▒▒▒▒   ▒▒▒▒ 
+                                                                                                           
 """
 
-def print_logo():
-    """Выводит ASCII логотип в консоль"""
-    print(ASCII_LOGO)
-    print()
+def print_logo(logo_type: str = 'default'):
+    """
+    Выводит ASCII логотип в консоль
+    
+    Args:
+        logo_type: Тип логотипа ('default' или 'alt')
+    """
+    if logo_type == 'alt':
+        print(ASCII_LOGO_ALT)
+    else:
+        print(ASCII_LOGO)
+    print()  # Пустая строка после логотипа
 
-# Выводим логотип при запуске
-if __name__ == '__main__':
-    print_logo()
-    print("Server monitor started...")
+def get_logo(logo_type: str = 'default') -> str:
+    """
+    Возвращает ASCII логотип как строку
+    
+    Args:
+        logo_type: Тип логотипа ('default' или 'alt')
+    
+    Returns:
+        Строка с ASCII логотипом
+    """
+    if logo_type == 'alt':
+        return ASCII_LOGO_ALT
+    return ASCII_LOGO
+
 

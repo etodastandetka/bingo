@@ -338,7 +338,7 @@ export async function sendNotificationToUser(
 
 /**
  * Получить username админа из настроек
- * Использует значение из Config.SUPPORT (по умолчанию @bingokg_boss)
+ * Использует значение из Config.SUPPORT (по умолчанию @helperbingo_bot)
  */
 export async function getAdminUsername(): Promise<string> {
   try {
@@ -356,9 +356,9 @@ export async function getAdminUsername(): Promise<string> {
     }
     
     // Fallback на дефолтное значение из Config.SUPPORT
-    return process.env.ADMIN_USERNAME || '@bingokg_boss'
+    return process.env.ADMIN_USERNAME || '@helperbingo_bot'
   } catch {
-    return '@bingokg_boss'
+    return '@helperbingo_bot'
   }
 }
 
@@ -646,7 +646,7 @@ export async function sendMainMenuToUser(
     const autoDeposit = lang === 'ky' ? '⚡️ Авто-толтуруу: 0%' : '⚡️ Авто-пополнение: 0%'
     const autoWithdraw = lang === 'ky' ? '⚡️ Авто-чыгаруу: 0%' : '⚡️ Авто-вывод: 0%'
     const working = lang === 'ky' ? '🕐 Иштеп жатабыз: 24/7' : '🕐 Работаем: 24/7'
-    const support = process.env.ADMIN_USERNAME || '@bingokg_boss'
+    const support = process.env.ADMIN_USERNAME || '@helperbingo_bot'
     const supportText = lang === 'ky' 
       ? `👨‍💻Колдоо кызматы: ${support}`
       : `👨‍💻Служба поддержки: ${support}`
