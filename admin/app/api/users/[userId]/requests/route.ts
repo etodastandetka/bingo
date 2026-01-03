@@ -11,16 +11,29 @@ export async function GET(
     requireAuth(request)
 
     const userId = BigInt(params.userId)
+    
+    // Получаем параметры запроса
+    const searchParams = request.nextUrl.searchParams
+    const requestType = searchParams.get('type') // 'deposit' или 'withdraw'
+    const limitParam = searchParams.get('limit')
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined
 
     // Синхронизируем данные пользователя перед получением заявок
     await syncUserFromRequest(userId)
 
     const uncreatedModel = (prisma as any).uncreatedRequest
 
+    // Формируем условие where с учетом фильтра по типу
+    const whereClause: any = { userId }
+    if (requestType) {
+      whereClause.requestType = requestType
+    }
+
     const [requests, uncreated] = await Promise.all([
       prisma.request.findMany({
-        where: { userId },
+        where: whereClause,
         orderBy: { createdAt: 'desc' },
+        take: limit, // Применяем лимит, если указан
         select: {
           id: true,
           userId: true,

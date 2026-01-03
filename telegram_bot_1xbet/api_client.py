@@ -392,6 +392,46 @@ class APIClient:
                 return await response.json()
     
     @staticmethod
+    async def get_last_withdraw_phone(telegram_user_id: str) -> Optional[str]:
+        """Получить последний номер телефона из последней заявки на вывод"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            try:
+                # Пробуем сначала локальный API, если не доступен - используем продакшн
+                api_url = Config.API_BASE_URL
+                if api_url.startswith('http://localhost'):
+                    try:
+                        async with session.get(
+                            f'{api_url}/api/users/{telegram_user_id}/requests?type=withdraw&limit=1',
+                            timeout=aiohttp.ClientTimeout(total=2)
+                        ) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                if data.get('success') and data.get('data'):
+                                    requests = data.get('data', [])
+                                    if requests and len(requests) > 0:
+                                        last_request = requests[0]
+                                        return last_request.get('phone')
+                        return None
+                    except:
+                        api_url = Config.API_FALLBACK_URL
+                
+                async with session.get(
+                    f'{api_url}/api/users/{telegram_user_id}/requests?type=withdraw&limit=1',
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get('success') and data.get('data'):
+                            requests = data.get('data', [])
+                            if requests and len(requests) > 0:
+                                last_request = requests[0]
+                                return last_request.get('phone')
+                return None
+            except Exception:
+                return None
+    
+    @staticmethod
     async def save_casino_account_id(telegram_user_id: str, casino_id: str, account_id: str) -> Dict[str, Any]:
         """Сохранить ID казино для пользователя"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)

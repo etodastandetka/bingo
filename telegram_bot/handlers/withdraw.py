@@ -218,8 +218,21 @@ async def withdraw_bank_selected(callback: CallbackQuery, state: FSMContext, bot
     except Exception:
         pass  # Игнорируем ошибки удаления
     
+    # Получаем последний номер телефона из последней заявки на вывод
+    saved_phone = None
+    try:
+        saved_phone = await APIClient.get_last_withdraw_phone(str(callback.from_user.id))
+    except Exception:
+        pass  # Игнорируем ошибки получения номера
+    
+    # Формируем клавиатуру: если есть сохраненный номер, добавляем его как кнопку
+    keyboard_buttons = []
+    if saved_phone:
+        keyboard_buttons.append([KeyboardButton(text=saved_phone)])
+    keyboard_buttons.append([KeyboardButton(text=get_text(lang, 'withdraw', 'cancel'))])
+    
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=get_text(lang, 'withdraw', 'cancel'))]],
+        keyboard=keyboard_buttons,
         resize_keyboard=True
     )
     
