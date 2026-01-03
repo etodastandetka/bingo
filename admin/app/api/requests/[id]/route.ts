@@ -341,8 +341,9 @@ export async function PATCH(
             }
             
             if (currentRequest.requestType === 'withdraw' && notificationMessage) {
-              // Отправляем только финальное сообщение БЕЗ кнопки "Главное меню"
-              sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, null, botType)
+              // Отправляем финальное сообщение С инлайн кнопкой "Главное меню"
+              const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
+              sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
                 .catch((error) => {
                   console.error('Failed to send withdrawal notification for operator request:', error)
                 })
@@ -432,9 +433,10 @@ export async function PATCH(
                 console.error('Failed to send rejection notification:', error)
               })
           } else if (currentRequest.requestType === 'withdraw') {
-            // Для вывода отправляем только финальное сообщение БЕЗ кнопки
+            // Для вывода отправляем финальное сообщение С инлайн кнопкой "Главное меню"
             // Используем botType из заявки для определения правильного бота
-            sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, null, botType)
+            const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
+            sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
               .catch((error) => {
                 console.error('Failed to send withdrawal notification:', error)
               })
