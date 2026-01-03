@@ -403,9 +403,9 @@ export async function PATCH(
                 console.error('❌ [Rejection] Exception sending rejection notification:', error)
               })
           } else if (currentRequest.requestType === 'withdraw') {
-            // Для вывода отправляем несколько сообщений: инструкцию, сообщение о принятии, и финальное сообщение С кнопкой
+            // Для вывода отправляем несколько сообщений: инструкцию, сообщение о принятии, и финальное сообщение БЕЗ кнопки
             // Используем botType из заявки для определения правильного бота
-            const { formatWithdrawInstruction, formatWithdrawRequestMessage, sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
+            const { formatWithdrawInstruction, formatWithdrawRequestMessage } = await import('@/lib/send-notification')
             
             // 1. Отправляем инструкцию
             const instruction = formatWithdrawInstruction(casino)
@@ -416,8 +416,8 @@ export async function PATCH(
                 return sendNotificationToUser(currentRequest.userId, requestMessage, updatedRequest.bookmaker, null, botType)
               })
               .then(() => {
-                // 3. Отправляем финальное сообщение С инлайн кнопкой "Главное меню"
-                return sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
+                // 3. Отправляем финальное сообщение БЕЗ кнопки "Главное меню"
+                return sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, null, botType)
               })
               .catch((error) => {
                 console.error('Failed to send withdrawal notifications:', error)
