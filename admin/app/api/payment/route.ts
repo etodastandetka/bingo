@@ -361,19 +361,30 @@ export async function POST(request: NextRequest) {
         lastName: cleanLastName,
       })
 
-      // Определяем botType: сначала используем переданный bot_type, если нет - определяем из последнего сообщения
+      // Определяем botType: сначала используем переданный bot_type, если нет - определяем по букмекеру или из последнего сообщения
       let finalBotType: string | null = null
       
       if (bot_type) {
         // Используем переданный bot_type напрямую из бота (наиболее надежный способ)
         finalBotType = bot_type
-        console.log(`📱 Payment API - Using botType from request: ${finalBotType} for user ${userIdBigInt.toString()}`)
+      } else if (bookmaker) {
+        // Fallback: определяем botType по букмекеру
+        const bookmakerLower = bookmaker.toLowerCase()
+        if (bookmakerLower.includes('mostbet')) {
+          finalBotType = 'mostbet'
+        } else if (bookmakerLower.includes('1xbet') || bookmakerLower.includes('xbet') || bookmakerLower.includes('1xcasino')) {
+          finalBotType = '1xbet'
+        } else {
+          // Если букмекер не совпадает, определяем из последнего сообщения пользователя
+          const { getBotTypeByUserLastMessage } = await import('@/lib/send-notification')
+          const requestCreatedAt = new Date()
+          finalBotType = await getBotTypeByUserLastMessage(userIdBigInt, requestCreatedAt)
+        }
       } else {
         // Fallback: определяем botType из последнего сообщения пользователя
         const { getBotTypeByUserLastMessage } = await import('@/lib/send-notification')
         const requestCreatedAt = new Date()
         finalBotType = await getBotTypeByUserLastMessage(userIdBigInt, requestCreatedAt)
-        console.log(`📱 Payment API - Determined botType from last message: ${finalBotType} for user ${userIdBigInt.toString()}`)
       }
 
       // Проверка активных заявок на пополнение для этого пользователя

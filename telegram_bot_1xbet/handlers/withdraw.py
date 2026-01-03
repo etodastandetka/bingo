@@ -413,6 +413,7 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
             telegram_last_name=message.from_user.last_name,
             receipt_photo=data.get('qr_photo'),
             withdrawal_code=withdrawal_code,
+            bot_type=Config.BOT_TYPE,  # Передаем botType для правильной отправки уведомлений
         )
         
         request_id = request_data.get('data', {}).get('id')
