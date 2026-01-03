@@ -208,6 +208,9 @@ export function startFastRequestWatcher(requestId: number, amount: number): void
       })
 
       if (exactMatch) {
+        // ВАЖНО: Сначала останавливаем watcher, чтобы не обрабатывать платеж несколько раз
+        stopRequestWatcher(requestId)
+        
         // ВАЖНО: Проверяем, что платеж еще не обработан перед обработкой
         const currentPayment = await prisma.incomingPayment.findUnique({
           where: { id: exactMatch.id },
@@ -215,16 +218,12 @@ export function startFastRequestWatcher(requestId: number, amount: number): void
         })
         
         if (!currentPayment || currentPayment.isProcessed || currentPayment.requestId !== null) {
-          // Если платеж уже обработан, проверяем, не для нашей ли заявки
-          if (currentPayment?.requestId === requestId) {
-            console.log(`✅ [Fast Watcher] Payment ${exactMatch.id} already processed for request ${requestId}, stopping watcher`)
-            stopRequestWatcher(requestId)
-          }
+          // Если платеж уже обработан, просто выходим
+          console.log(`⚠️ [Fast Watcher] Payment ${exactMatch.id} already processed, skipping`)
           return
         }
         
         console.log(`🎯 [Fast Watcher] Found matching payment ${exactMatch.id} for request ${requestId}, processing...`)
-        stopRequestWatcher(requestId)
         
         // Обрабатываем платеж через оптимизированную функцию
         matchAndProcessPaymentDirect(exactMatch.id, requestId, amount)
@@ -847,73 +846,8 @@ export async function matchAndProcessPayment(
   // Возможно, депозит уже был выполнен другим процессом - в этом случае нужно отправить уведомление
   if (transactionResult.skipped) {
     console.log(`⚠️ Transaction skipped: ${transactionResult.reason}`)
-    
-    // Проверяем текущий статус заявки - возможно, депозит уже был выполнен
-    const currentRequestStatus = await prisma.request.findUnique({
-      where: { id: request.id },
-      select: {
-        id: true,
-        status: true,
-        userId: true,
-        accountId: true,
-        bookmaker: true,
-        amount: true,
-        botType: true,
-        processedAt: true,
-      },
-    })
-    
-    // Если заявка уже обработана (депозит выполнен другим процессом), отправляем уведомление
-    if (currentRequestStatus && 
-        (currentRequestStatus.status === 'autodeposit_success' || 
-         currentRequestStatus.status === 'completed' || 
-         currentRequestStatus.status === 'approved')) {
-      console.log(`✅ [Auto-Deposit] Request ${request.id} already processed by another process, sending notification...`)
-      
-      // Отправляем уведомление о успешном пополнении
-      const amount = parseFloat(currentRequestStatus.amount?.toString() || '0')
-      const casino = currentRequestStatus.bookmaker || 'Неизвестно'
-      const accountId = currentRequestStatus.accountId || ''
-      const processingTime = '1s'
-      const lang = 'ru'
-      const adminUsername = '@helperbingo_bot'
-      
-      const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
-      
-      let botType = currentRequestStatus.botType || null
-      if (!botType && currentRequestStatus.bookmaker) {
-        const bookmakerLower = currentRequestStatus.bookmaker.toLowerCase()
-        if (bookmakerLower.includes('mostbet')) {
-          botType = 'mostbet'
-        } else if (bookmakerLower.includes('1xbet') || bookmakerLower.includes('xbet')) {
-          botType = '1xbet'
-        }
-      }
-      
-      const bookmakerForFallback = botType ? null : currentRequestStatus.bookmaker
-      
-      // Отправляем уведомление в фоне
-      sendMessageWithMainMenuButton(currentRequestStatus.userId, notificationMessage, bookmakerForFallback, botType)
-        .then((result) => {
-          if (result.success) {
-            console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${currentRequestStatus.userId.toString()} for request ${request.id}`)
-          } else {
-            console.error(`❌ [Auto-Deposit] Failed to send notification for request ${request.id}: ${result.error}`)
-          }
-        })
-        .catch((error) => {
-          console.error(`❌ [Auto-Deposit] Exception sending notification for request ${request.id}:`, error)
-        })
-      
-      cleanup()
-      return {
-        success: true,
-        requestId: request.id,
-        message: 'Deposit already processed by another process, notification sent',
-      }
-    }
-    
-    // Если заявка все еще pending, значит что-то пошло не так
+    // Если транзакция пропущена, значит заявка уже обработана другим процессом
+    // Уведомление уже было отправлено при обработке, поэтому не отправляем повторно
     cleanup()
     return {
       success: false,
@@ -1000,6 +934,31 @@ export async function matchAndProcessPayment(
     console.log(
       `✅ Auto-deposit successful: Request ${requestToUse.id}, Account ${requestToUse.accountId}`
     )
+
+    // ВАЖНО: Проверяем, что уведомление еще не было отправлено (защита от дубликатов)
+    // Проверяем текущий статус заявки - если уже не pending, значит уже обработана
+    const currentRequestCheck = await prisma.request.findUnique({
+      where: { id: requestToUse.id },
+      select: {
+        id: true,
+        status: true,
+        incomingPayments: {
+          where: { isProcessed: true },
+          select: { id: true },
+        },
+      },
+    })
+
+    // Если заявка уже обработана другим процессом, не отправляем уведомление повторно
+    if (currentRequestCheck && currentRequestCheck.status !== 'autodeposit_success') {
+      console.log(`⚠️ [Auto-Deposit] Request ${requestToUse.id} status is ${currentRequestCheck.status}, skipping notification (already processed)`)
+      cleanup()
+      return {
+        success: true,
+        requestId: requestToUse.id,
+        message: 'Auto-deposit completed successfully (notification skipped - already processed)',
+      }
+    }
 
     // ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ СРАЗУ ПОСЛЕ УСПЕШНОГО ПОПОЛНЕНИЯ
     // Статус уже обновлен в транзакции, так что заявка уже обработана
