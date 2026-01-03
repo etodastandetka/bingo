@@ -368,6 +368,38 @@ export async function matchAndProcessPayment(
     }
   }
 
+  // Защита от дублирования: проверяем недавние пополнения перед вызовом API
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+  const requestAmount = parseFloat(request.amount?.toString() || '0')
+  
+  const recentDeposits = await prisma.request.findMany({
+    where: {
+      accountId: request.accountId,
+      bookmaker: request.bookmaker,
+      status: { in: ['completed', 'autodeposit_success', 'approved', 'auto_completed'] },
+      processedAt: {
+        gte: fiveMinutesAgo,
+      },
+    },
+  })
+
+  // Проверяем на дубликат по сумме (разница не более 2 копеек)
+  const duplicate = recentDeposits.find((deposit) => {
+    if (!deposit.amount) return false
+    const depositAmount = parseFloat(deposit.amount.toString())
+    const diff = Math.abs(depositAmount - requestAmount)
+    return diff < 0.02 // Точность до 2 копеек
+  })
+
+  if (duplicate) {
+    console.log(`⚠️ [Auto-Deposit] Duplicate deposit detected: Request ${duplicate.id} with same amount (${requestAmount}) was processed ${Math.floor((Date.now() - (duplicate.processedAt?.getTime() || 0)) / 1000)}s ago`)
+    return {
+      success: false,
+      requestId: request.id,
+      message: `Депозит уже был проведен (заявка #${duplicate.id})`,
+    }
+  }
+
   // Пополняем баланс через казино API (использует localhost API)
   const depositStartTime = Date.now()
   try {
@@ -375,7 +407,7 @@ export async function matchAndProcessPayment(
     const depositResult = await depositToCasino(
       request.bookmaker,
       request.accountId,
-      parseFloat(request.amount?.toString() || '0')
+      requestAmount
     )
     const depositDuration = Date.now() - depositStartTime
     console.log(`⏱️ [Auto-Deposit] Deposit completed for request ${request.id} in ${depositDuration}ms`)
