@@ -86,6 +86,8 @@ export async function POST(request: NextRequest) {
     // ВАЖНО: account_id - это ID казино, НЕ Telegram ID!
     // Не используем user_id/userId/playerId как fallback, так как это Telegram ID, а не ID казино
     const finalAccountId = account_id ? String(account_id).trim() : null
+    // Обрабатываем номер телефона так же, как accountId
+    const finalPhone = phone ? String(phone).trim() : null
 
     // Валидация типа - должен быть 'deposit' или 'withdraw'
     const validType = (type === 'deposit' || type === 'withdraw') ? type : 'deposit'
@@ -548,7 +550,7 @@ export async function POST(request: NextRequest) {
           amount: amountDecimal,
           requestType: validType, // Используем валидированный тип
           bank: cleanString(bank),
-          phone: cleanString(phone),
+          phone: finalPhone ? cleanString(finalPhone) : null,
           status: 'pending',
           photoFileUrl: processedPhoto, // Сохраняем base64 фото чека (с префиксом data:image если нужно)
           withdrawalCode: cleanString(withdrawal_code), // Сохраняем код подтверждения вывода
