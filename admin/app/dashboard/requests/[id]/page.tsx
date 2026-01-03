@@ -593,7 +593,7 @@ export default function RequestDetailPage() {
             
             // Редирект в дашборд после подтверждения
             setTimeout(() => {
-              router.push('/dashboard/requests')
+              router.push('/dashboard/')
             }, 1000)
             return
           } catch (depositError) {
@@ -660,7 +660,7 @@ export default function RequestDetailPage() {
           
           // Редирект в дашборд после подтверждения/отклонения
           setTimeout(() => {
-            router.push('/dashboard/requests')
+            router.push('/dashboard/')
           }, 1000)
         } else {
           pushToast(data.error || 'Ошибка при обновлении заявки', 'error')
@@ -886,7 +886,7 @@ export default function RequestDetailPage() {
         
         // Редирект в дашборд после подтверждения
         setTimeout(() => {
-          router.push('/dashboard/requests')
+          router.push('/dashboard/')
         }, 1000)
         } else {
         pushToast('Ошибка при обновлении заявки: ' + (data.error || 'Неизвестная ошибка'), 'error')
