@@ -591,35 +591,29 @@ export async function sendMessageWithMainMenuButton(
       }
     }
     
-    console.log(`📤 [sendMessageWithMainMenuButton] Sending to Telegram API (non-blocking)...`)
+    console.log(`📤 [sendMessageWithMainMenuButton] Sending to Telegram API...`)
     
-    // Отправляем запрос БЕЗ ожидания ответа для максимальной скорости
-    // Это гарантирует, что функция вернется мгновенно, а уведомление отправится в фоне
-    fetch(sendMessageUrl, {
+    // Отправляем запрос и ждем ответа от Telegram API
+    const response = await fetch(sendMessageUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(requestBody)
     })
-      .then(async (response) => {
-        const data = await response.json()
-        console.log(`📤 [sendMessageWithMainMenuButton] Telegram API response: ok=${data.ok}, description=${data.description || 'none'}`)
-        
-        if (data.ok) {
-          console.log(`✅ [sendMessageWithMainMenuButton] Message sent with main menu button to user ${userId.toString()}, message_id: ${data.result?.message_id || 'unknown'}`)
-        } else {
-          console.error(`❌ [sendMessageWithMainMenuButton] Failed to send message: ${data.description}`)
-          console.error(`❌ [sendMessageWithMainMenuButton] Full error response:`, JSON.stringify(data, null, 2))
-        }
-      })
-      .catch((error) => {
-        console.error(`❌ [sendMessageWithMainMenuButton] Exception sending message:`, error)
-      })
     
-    // Возвращаем успех сразу, не дожидаясь ответа от Telegram API
-    // Это критично важно для мгновенной отправки уведомления
-    return { success: true }
+    const data = await response.json()
+    console.log(`📤 [sendMessageWithMainMenuButton] Telegram API response: ok=${data.ok}, description=${data.description || 'none'}`)
+    
+    if (data.ok) {
+      console.log(`✅ [sendMessageWithMainMenuButton] Message sent with main menu button to user ${userId.toString()}, message_id: ${data.result?.message_id || 'unknown'}`)
+      return { success: true }
+    } else {
+      const errorMsg = `Telegram API error: ${data.description || 'Unknown error'}`
+      console.error(`❌ [sendMessageWithMainMenuButton] Failed to send message: ${errorMsg}`)
+      console.error(`❌ [sendMessageWithMainMenuButton] Full error response:`, JSON.stringify(data, null, 2))
+      return { success: false, error: errorMsg }
+    }
   } catch (error: any) {
     console.error('❌ [sendMessageWithMainMenuButton] Exception:', error)
     console.error('❌ [sendMessageWithMainMenuButton] Error stack:', error.stack)

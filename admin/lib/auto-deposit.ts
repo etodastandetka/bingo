@@ -244,20 +244,18 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
         console.log(`📨 [Auto-Deposit] Sending notification to user ${fullRequest.userId.toString()}, botType: ${botType || 'main'}, requestId: ${request.id}`)
         
         // Отправляем уведомление в правильный бот
-        sendMessageWithMainMenuButton(
+        const notificationResult = await sendMessageWithMainMenuButton(
           fullRequest.userId,
           notificationMessage,
           botType ? null : fullRequest.bookmaker, // bookmaker только если botType не указан
           botType
-        ).then((result) => {
-          if (result.success) {
-            console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${fullRequest.userId.toString()} for request ${request.id}`)
-          } else {
-            console.error(`❌ [Auto-Deposit] Failed to send notification for request ${request.id}: ${result.error}`)
-          }
-        }).catch((error) => {
-          console.error(`❌ [Auto-Deposit] Exception sending notification for request ${request.id}:`, error)
-        })
+        )
+        
+        if (notificationResult.success) {
+          console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${fullRequest.userId.toString()} for request ${request.id}`)
+        } else {
+          console.error(`❌ [Auto-Deposit] Failed to send notification for request ${request.id}: ${notificationResult.error}`)
+        }
       }
     } catch (notificationError: any) {
       // Не блокируем выполнение если уведомление не отправилось
