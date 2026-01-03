@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Генератор иконок PWA</title>
+</head>
+<body>
+    <h1>Генератор иконок для PWA</h1>
+    <p>Откройте консоль браузера (F12) и выполните код ниже для сохранения иконок:</p>
+    <canvas id="icon192" width="192" height="192"></canvas>
+    <canvas id="icon512" width="512" height="512"></canvas>
+    <script>
+        function drawIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            
+            // Фон с закругленными углами
+            ctx.fillStyle = '#0ea5e9';
+            const radius = size * 0.125;
+            ctx.beginPath();
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(size - radius, 0);
+            ctx.quadraticCurveTo(size, 0, size, radius);
+            ctx.lineTo(size, size - radius);
+            ctx.quadraticCurveTo(size, size, size - radius, size);
+            ctx.lineTo(radius, size);
+            ctx.quadraticCurveTo(0, size, 0, size - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Основной элемент
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            const center = size / 2;
+            const sizeInner = size * 0.5;
+            ctx.beginPath();
+            ctx.moveTo(center, center - sizeInner/2);
+            ctx.lineTo(center + sizeInner/2, center);
+            ctx.lineTo(center, center + sizeInner/2);
+            ctx.lineTo(center - sizeInner/2, center);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Круг
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.beginPath();
+            ctx.arc(center, center, size * 0.156, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Крест
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = size * 0.047;
+            ctx.lineCap = 'round';
+            const crossSize = size * 0.22;
+            ctx.beginPath();
+            ctx.moveTo(center - crossSize/2, center - crossSize/2);
+            ctx.lineTo(center + crossSize/2, center + crossSize/2);
+            ctx.moveTo(center + crossSize/2, center - crossSize/2);
+            ctx.lineTo(center - crossSize/2, center + crossSize/2);
+            ctx.stroke();
+        }
+        
+        const canvas192 = document.getElementById('icon192');
+        const canvas512 = document.getElementById('icon512');
+        
+        drawIcon(canvas192, 192);
+        drawIcon(canvas512, 512);
+        
+        // Функция для сохранения
+        function saveIcon(canvas, filename) {
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        console.log('Для сохранения иконок выполните:');
+        console.log('saveIcon(document.getElementById("icon192"), "icon-192.png")');
+        console.log('saveIcon(document.getElementById("icon512"), "icon-512.png")');
+        
+        // Автоматическое сохранение при клике
+        canvas192.addEventListener('click', () => saveIcon(canvas192, 'icon-192.png'));
+        canvas512.addEventListener('click', () => saveIcon(canvas512, 'icon-512.png'));
+    </script>
+</body>
+</html>
+

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { BottomNav } from '@/components/BottomNav';
 import { RefreshButton } from '@/components/RefreshButton';
+import { RebelBanner } from '@/components/RebelBanner';
 
 type TabType = 'pending' | 'delayed';
 
@@ -34,6 +35,7 @@ export default function Home() {
   return (
     <>
       <main className="flex flex-1 flex-col gap-6 px-4 pb-8 pt-10 text-white">
+        <RebelBanner className="mb-2" />
         <header className="flex items-center justify-center relative">
           <div className="flex flex-col items-center">
             <h1 className="text-2xl font-semibold text-white">Заявки</h1>

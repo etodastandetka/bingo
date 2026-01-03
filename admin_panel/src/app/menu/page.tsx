@@ -1,4 +1,5 @@
 import { BottomNav } from '@/components/BottomNav';
+import { RebelBanner } from '@/components/RebelBanner';
 
 const menuItems = [
   { label: 'Настройки каналов', hint: 'Статус и токены' },
@@ -11,6 +12,7 @@ export default function MenuPage() {
   return (
     <>
       <main className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-6">
+        <RebelBanner className="mb-2" />
         <div>
           <p className="text-sm text-white/60">Быстрые настройки</p>
           <h1 className="text-2xl font-semibold">Меню</h1>

@@ -98,7 +98,7 @@ const filters = [
 
 export default function HistoryPage() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDateRange, setSelectedDateRange] = useState<{ from: string; to: string } | string | null>(null);
 
   const filteredTransactions = useMemo(() => {
     let filtered = mockTransactions;
@@ -109,18 +109,23 @@ export default function HistoryPage() {
       // Пока оставляем все транзакции
     }
 
-    // Фильтр по дате
-    if (selectedDate) {
+    // Фильтр по дате или диапазону
+    if (selectedDateRange) {
       filtered = filtered.filter((transaction) => {
         // Преобразуем формат даты из '26.11.2025' в '2025-11-26'
         const [day, month, year] = transaction.date.split('.');
         const transactionDate = `${year}-${month}-${day}`;
-        return transactionDate === selectedDate;
+        
+        if (typeof selectedDateRange === 'string') {
+          return transactionDate === selectedDateRange;
+        } else {
+          return transactionDate >= selectedDateRange.from && transactionDate <= selectedDateRange.to;
+        }
       });
     }
 
     return filtered;
-  }, [activeFilter, selectedDate]);
+  }, [activeFilter, selectedDateRange]);
 
   return (
     <>
@@ -135,7 +140,7 @@ export default function HistoryPage() {
           </div>
         </header>
 
-        <DatePicker value={selectedDate || undefined} onChange={setSelectedDate} />
+        <DatePicker value={selectedDateRange || undefined} onChange={setSelectedDateRange} range={true} />
 
         <section className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {filters.map((filter) => {
@@ -189,7 +194,7 @@ export default function HistoryPage() {
               <div className="space-y-1">
                 <h2 className="text-xl font-semibold text-white">Нет транзакций</h2>
                 <p className="text-sm text-white/70">
-                  {selectedDate ? 'На выбранную дату транзакций не найдено' : 'Транзакции не найдены'}
+                  {selectedDateRange ? 'На выбранный период транзакций не найдено' : 'Транзакции не найдены'}
                 </p>
               </div>
             </div>

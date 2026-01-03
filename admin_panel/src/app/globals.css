@@ -27,3 +27,74 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Rebel Banner Glitch эффекты */
+@keyframes glitch-1 {
+  0%, 100% { 
+    transform: translate(0);
+    clip-path: inset(0 0 0 0);
+  }
+  20% { 
+    transform: translate(-2px, 2px);
+    clip-path: inset(20% 0 60% 0);
+  }
+  40% { 
+    transform: translate(-2px, -2px);
+    clip-path: inset(60% 0 20% 0);
+  }
+  60% { 
+    transform: translate(2px, 2px);
+    clip-path: inset(40% 0 40% 0);
+  }
+  80% { 
+    transform: translate(2px, -2px);
+    clip-path: inset(10% 0 90% 0);
+  }
+}
+
+@keyframes glitch-2 {
+  0%, 100% { 
+    transform: translate(0);
+    clip-path: inset(0 0 0 0);
+  }
+  20% { 
+    transform: translate(2px, -2px);
+    clip-path: inset(60% 0 20% 0);
+  }
+  40% { 
+    transform: translate(2px, 2px);
+    clip-path: inset(20% 0 60% 0);
+  }
+  60% { 
+    transform: translate(-2px, -2px);
+    clip-path: inset(40% 0 40% 0);
+  }
+  80% { 
+    transform: translate(-2px, 2px);
+    clip-path: inset(90% 0 10% 0);
+  }
+}
+
+@keyframes chromatic {
+  0%, 100% { 
+    transform: translateX(0);
+    opacity: 0.1;
+  }
+  25% { 
+    transform: translateX(1px);
+    opacity: 0.2;
+  }
+  50% { 
+    transform: translateX(-1px);
+    opacity: 0.15;
+  }
+  75% { 
+    transform: translateX(1px);
+    opacity: 0.2;
+  }
+}
+
+@keyframes scanlines {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
