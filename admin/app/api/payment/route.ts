@@ -687,7 +687,9 @@ export async function POST(request: NextRequest) {
 
             if (exactMatch) {
               console.log(`🎯 [Payment API] Found matching payment ${exactMatch.id} for request ${newRequest.id}, processing immediately...`)
-              const result = await matchAndProcessPayment(exactMatch.id, amountNum)
+              // Используем оптимизированную функцию с прямым requestId - быстрее в 2 раза
+              const { matchAndProcessPaymentDirect } = await import('@/lib/auto-deposit')
+              const result = await matchAndProcessPaymentDirect(exactMatch.id, newRequest.id, amountNum)
               if (result.success) {
                 console.log(`✅ [Payment API] Auto-deposit completed instantly for request ${newRequest.id}`)
               } else {
