@@ -140,6 +140,114 @@ export function stopRequestWatcher(requestId: number): void {
 }
 
 /**
+ * Быстрый watcher для заявок с фото чека - проверяет каждую миллисекунду
+ * Останавливается автоматически, если заявка отменена или обработана
+ */
+export function startFastRequestWatcher(requestId: number, amount: number): void {
+  // Если уже есть ожидание для этой заявки, останавливаем его
+  stopRequestWatcher(requestId)
+
+  console.log(`🚀 [Fast Watcher] Starting fast watcher for request ${requestId}, amount: ${amount} (checking every 1ms)`)
+
+  let stopFlag = false
+
+  // Проверяем каждую миллисекунду для максимальной скорости
+  const intervalId = setInterval(async () => {
+    if (stopFlag) {
+      clearInterval(intervalId)
+      activeRequestWatchers.delete(requestId)
+      return
+    }
+
+    try {
+      // Проверяем статус заявки - если не pending, останавливаем
+      const request = await prisma.request.findUnique({
+        where: { id: requestId },
+        select: { status: true, amount: true },
+      })
+
+      if (!request || request.status !== 'pending') {
+        console.log(`🛑 [Fast Watcher] Request ${requestId} is no longer pending (status: ${request?.status}), stopping watcher`)
+        stopRequestWatcher(requestId)
+        return
+      }
+
+      // Проверяем, есть ли уже обработанный платеж для этой заявки
+      const hasProcessedPayment = await prisma.incomingPayment.findFirst({
+        where: {
+          requestId: requestId,
+          isProcessed: true,
+        },
+      })
+
+      if (hasProcessedPayment) {
+        console.log(`✅ [Fast Watcher] Request ${requestId} already has processed payment, stopping watcher`)
+        stopRequestWatcher(requestId)
+        return
+      }
+
+      // Ищем необработанные платежи с точной суммой
+      const amountRounded = Math.round(amount * 100) / 100
+      const matchingPayments = await prisma.incomingPayment.findMany({
+        where: {
+          amount: amountRounded,
+          isProcessed: false,
+          requestId: null,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 1,
+      })
+
+      // Фильтруем для точного совпадения
+      const exactMatch = matchingPayments.find((payment) => {
+        const paymentAmount = parseFloat(payment.amount.toString())
+        const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
+        return paymentAmountRounded === amountRounded
+      })
+
+      if (exactMatch) {
+        // ВАЖНО: Проверяем, что платеж еще не обработан перед обработкой
+        const currentPayment = await prisma.incomingPayment.findUnique({
+          where: { id: exactMatch.id },
+          select: { isProcessed: true, requestId: true },
+        })
+        
+        if (!currentPayment || currentPayment.isProcessed || currentPayment.requestId !== null) {
+          // Если платеж уже обработан, проверяем, не для нашей ли заявки
+          if (currentPayment?.requestId === requestId) {
+            console.log(`✅ [Fast Watcher] Payment ${exactMatch.id} already processed for request ${requestId}, stopping watcher`)
+            stopRequestWatcher(requestId)
+          }
+          return
+        }
+        
+        console.log(`🎯 [Fast Watcher] Found matching payment ${exactMatch.id} for request ${requestId}, processing...`)
+        stopRequestWatcher(requestId)
+        
+        // Обрабатываем платеж через оптимизированную функцию
+        matchAndProcessPaymentDirect(exactMatch.id, requestId, amount)
+          .then((result) => {
+            if (result.success) {
+              console.log(`✅ [Fast Watcher] Auto-deposit completed for request ${requestId}`)
+            } else {
+              console.log(`⚠️ [Fast Watcher] Auto-deposit failed for request ${requestId}: ${result.message}`)
+            }
+          })
+          .catch((error) => {
+            console.error(`❌ [Fast Watcher] Error processing payment for request ${requestId}:`, error)
+          })
+      }
+    } catch (error: any) {
+      console.error(`❌ [Fast Watcher] Error checking request ${requestId}:`, error.message)
+    }
+  }, 1) // Проверка каждую миллисекунду для максимальной скорости
+
+  activeRequestWatchers.set(requestId, { intervalId, amount, stopFlag: false })
+}
+
+/**
  * ОТКЛЮЧЕНО: Проверка всех pending заявок и поиск платежей для них
  * Эта функция больше не используется - автопополнение работает только через Request Watcher
  * Удалено для упрощения системы автопополнения

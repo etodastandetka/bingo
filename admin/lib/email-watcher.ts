@@ -111,24 +111,7 @@ async function processEmail(
               console.log(`📨 Email preview: ${preview}...`)
             }
 
-            // ВАЖНО: Проверяем дату письма - если письмо старше 24 часов, пропускаем его
-            // (обрабатываем только свежие письма, чтобы не обрабатывать очень старые письма)
-            const emailDate = parsed.date || new Date()
-            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-            
-            if (emailDate < oneDayAgo) {
-              console.log(`⚠️ Email UID ${uid} is too old (${emailDate.toISOString()}), marking as read and skipping`)
-              // Помечаем старые письма как прочитанные, чтобы не обрабатывать их снова
-              imap.setFlags(uid, ['\\Seen'], (err: Error | null) => {
-                if (err) {
-                  console.error(`❌ Error marking old email as seen:`, err)
-                } else {
-                  console.log(`✅ Old email UID ${uid} marked as read (skipped)`)
-                }
-                resolve()
-              })
-              return
-            }
+            // Обрабатываем только новые письма - не проверяем дату, просто обрабатываем все UNSEEN
 
             // Парсим сумму и дату из письма
             const paymentData = parseEmailByBank(text, settings.bank)
@@ -343,16 +326,8 @@ async function checkAllUnreadEmails(settings: WatcherSettings): Promise<void> {
 async function checkEmailsWithConnection(imap: Imap, settings: WatcherSettings): Promise<void> {
   return new Promise((resolve, reject) => {
     // Используем уже открытое соединение imap
-    // Ищем непрочитанные письма за последние 30 минут
-    const thirtyMinutesAgo = new Date()
-    thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30)
-    const searchDate = [
-      'SINCE',
-      thirtyMinutesAgo.toISOString().split('T')[0].replace(/-/g, '-')
-    ]
-    
-    // Ищем только UNSEEN (непрочитанные) письма за последние 30 минут
-    imap.search(['UNSEEN', searchDate], (err: Error | null, results?: number[]) => {
+    // Ищем только UNSEEN (непрочитанные) письма - без фильтра по дате
+    imap.search(['UNSEEN'], (err: Error | null, results?: number[]) => {
       if (err) {
         reject(err)
         return
@@ -363,7 +338,7 @@ async function checkEmailsWithConnection(imap: Imap, settings: WatcherSettings):
         return
       }
 
-      console.log(`📬 Found ${results.length} unread email(s) (since ${thirtyMinutesAgo.toISOString().split('T')[0]})`)
+      console.log(`📬 Found ${results.length} unread email(s)`)
 
       // Обрабатываем каждое письмо последовательно (не параллельно), чтобы избежать конфликтов
       const processSequentially = async () => {
@@ -419,33 +394,24 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
           return
         }
 
-        // Ищем только НЕПРОЧИТАННЫЕ письма за последние 30 минут
-        // После обработки помечаем их как прочитанные, чтобы не обрабатывать повторно
-        const thirtyMinutesAgo = new Date()
-        thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30)
-        const searchDate = [
-          'SINCE',
-          thirtyMinutesAgo.toISOString().split('T')[0].replace(/-/g, '-')
-        ]
-        
-        // Ищем только UNSEEN (непрочитанные) письма за последние 30 минут
-        // Это гарантирует, что каждое письмо обработается только один раз
-        imap.search(['UNSEEN', searchDate], (err: Error | null, results?: number[]) => {
+    // Ищем только НЕПРОЧИТАННЫЕ письма (UNSEEN) - без фильтра по дате
+    // Обрабатываем только новые письма, старые не трогаем
+    imap.search(['UNSEEN'], (err: Error | null, results?: number[]) => {
           if (err) {
             reject(err)
             return
           }
 
-          if (!results || results.length === 0) {
-            console.log('📭 No unread emails (last 30 minutes)')
-            // Сбрасываем счетчик при успешной проверке
-            consecutiveNetworkErrors = 0
-            imap.end()
-            resolve()
-            return
-          }
+      if (!results || results.length === 0) {
+        console.log('📭 No unread emails')
+        // Сбрасываем счетчик при успешной проверке
+        consecutiveNetworkErrors = 0
+        imap.end()
+        resolve()
+        return
+      }
 
-          console.log(`📬 Found ${results.length} unread email(s) (since ${thirtyMinutesAgo.toISOString().split('T')[0]})`)
+      console.log(`📬 Found ${results.length} unread email(s)`)
 
           // Обрабатываем каждое письмо последовательно (не параллельно), чтобы избежать конфликтов
           const processSequentially = async () => {

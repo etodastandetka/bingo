@@ -654,71 +654,18 @@ export async function POST(request: NextRequest) {
         addLog('success', `✅ Статус заявки исправлен на 'pending' (ID: ${verifyRequest.id})`)
       }
 
-      // Для заявок на пополнение с фото чека - сразу проверяем платеж и выполняем автопополнение
-      // Выполняем АСИНХРОННО (не блокируя создание заявки) для параллельной обработки множественных заявок
+      // Для заявок на пополнение с фото чека - запускаем быстрый watcher (каждую миллисекунду)
       if (validType === 'deposit' && amountNum > 0 && receipt_photo) {
-        // Если есть фото чека - сразу проверяем наличие платежа и выполняем автопополнение
-        // Запускаем в фоне без await - не блокируем создание заявки, обрабатываем параллельно
-        (async () => {
+        // Запускаем быстрый watcher для этой заявки - проверяет платеж каждую миллисекунду
+        setImmediate(async () => {
           try {
-            const { matchAndProcessPaymentDirect } = await import('@/lib/auto-deposit')
-            console.log(`🚀 [Payment API] Checking payment for request ${newRequest.id} with amount ${amountNum}`)
-            
-            const amountRounded = Math.round(amountNum * 100) / 100
-            
-            // Функция для поиска платежа
-            const findPayment = async () => {
-              const matchingPayments = await prisma.incomingPayment.findMany({
-                where: {
-                  amount: amountRounded,
-                  isProcessed: false,
-                  requestId: null,
-                },
-                orderBy: {
-                  createdAt: 'desc',
-                },
-                take: 1,
-              })
-
-              // Фильтруем для точного совпадения
-              return matchingPayments.find((payment) => {
-                const paymentAmount = parseFloat(payment.amount.toString())
-                const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
-                return paymentAmountRounded === amountRounded
-              })
-            }
-
-            // Проверяем сразу (0ms)
-            let exactMatch = await findPayment()
-
-            // Если не нашли - ждем 100ms и проверяем снова (Email Watcher может еще сохранять платеж)
-            if (!exactMatch) {
-              await new Promise(resolve => setTimeout(resolve, 100))
-              exactMatch = await findPayment()
-            }
-
-            // Если все еще не нашли - ждем еще 200ms (всего 300ms максимум)
-            if (!exactMatch) {
-              await new Promise(resolve => setTimeout(resolve, 200))
-              exactMatch = await findPayment()
-            }
-
-            if (exactMatch) {
-              console.log(`🎯 [Payment API] Found matching payment ${exactMatch.id} for request ${newRequest.id}, processing immediately...`)
-              const result = await matchAndProcessPaymentDirect(exactMatch.id, newRequest.id, amountNum)
-              if (result.success) {
-                console.log(`✅ [Payment API] Auto-deposit completed instantly for request ${newRequest.id}`)
-              } else {
-                console.log(`⚠️ [Payment API] Auto-deposit failed for request ${newRequest.id}: ${result.message}`)
-              }
-            } else {
-              console.log(`ℹ️ [Payment API] No matching payment found for request ${newRequest.id}, amount: ${amountNum} (checked 3 times with delays)`)
-            }
+            const { startFastRequestWatcher } = await import('@/lib/auto-deposit')
+            startFastRequestWatcher(newRequest.id, amountNum)
+            console.log(`🚀 [Payment API] Started fast watcher for request ${newRequest.id} (checking every 1ms)`)
           } catch (error: any) {
-            console.error(`❌ [Payment API] Error checking payment:`, error.message)
-            // Не блокируем создание заявки при ошибке автопополнения
+            console.error(`❌ [Payment API] Failed to start fast watcher:`, error.message)
           }
-        })() // Запускаем IIFE (Immediately Invoked Function Expression) в фоне
+        })
       }
 
       const response = NextResponse.json(
