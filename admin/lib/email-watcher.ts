@@ -551,8 +551,8 @@ async function startIdleModeWithTracking(settings: WatcherSettings): Promise<voi
         
         console.log('✅ Real-time mode active - listening for new emails...')
         
-        // Быстрый polling если IDLE не работает (каждые 1 секунду для максимально быстрой обработки)
-        // Это почти как реальное время с минимальной задержкой
+        // Максимально быстрый polling если IDLE не работает (каждые 200ms для мгновенной обработки)
+        // Это практически реальное время с минимальной задержкой
         idleInterval = setInterval(async () => {
           try {
             // Проверяем, не изменились ли учетные данные активного кошелька
@@ -603,7 +603,7 @@ async function startIdleModeWithTracking(settings: WatcherSettings): Promise<voi
             consecutiveNetworkErrors = 0
             console.error('Error in quick polling:', error.message || error)
           }
-        }, 1000) // Проверка каждую 1 секунду для максимально быстрой обработки
+        }, 200) // Проверка каждые 200ms для мгновенной обработки (практически реальное время)
         
         // Сохраняем интервалы в глобальные переменные
         currentIdleInterval = idleInterval
@@ -761,13 +761,13 @@ export async function startWatcher(): Promise<void> {
     })
   })
   
-  // Периодическая проверка каждые 500ms для баланса между скоростью и нагрузкой
-  // 500ms достаточно быстро для обработки, но не создает слишком много параллельных вызовов
+  // Периодическая проверка каждые 200ms для максимально быстрой обработки
+  // 200ms обеспечивает практически мгновенную обработку без излишней нагрузки
   const autoDepositCheckInterval = setInterval(() => {
     checkPendingRequestsForPayments().catch((error) => {
       console.warn('⚠️ Auto-deposit check failed:', error.message)
     })
-  }, 500) // Каждые 500ms для баланса между скоростью и нагрузкой
+  }, 200) // Каждые 200ms для максимально быстрой обработки
 
   console.log('✅ Auto-deposit check started (immediate + every 500ms)')
 
