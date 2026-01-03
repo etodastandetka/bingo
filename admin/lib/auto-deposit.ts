@@ -104,20 +104,15 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
       
       console.log(`🔍 [Auto-Deposit Check] Checking request ${request.id}: amount=${requestAmount}, age=${requestAgeSeconds}s`)
 
-      // Ищем необработанные платежи с такой же суммой
-      // Используем более широкий временной диапазон для поиска платежей
-      // Используем диапазон для суммы (до 1 копейки разницы) из-за проблем с точностью Decimal
-      const amountMin = requestAmount - 0.01
-      const amountMax = requestAmount + 0.01
+      // Ищем необработанные платежи с ТОЧНО такой же суммой (без допуска)
+      // Округляем до 2 знаков для точного сравнения
+      const requestAmountRounded = Math.round(requestAmount * 100) / 100
       
       const matchingPayments = await prisma.incomingPayment.findMany({
         where: {
           isProcessed: false,
           requestId: null,
-          amount: {
-            gte: amountMin,
-            lte: amountMax,
-          },
+          amount: requestAmountRounded, // Точное сравнение
           paymentDate: {
             gte: new Date(request.createdAt.getTime() - 60 * 60 * 1000), // Платежи за час до создания заявки (на случай если платеж пришел раньше)
             lte: new Date(),
@@ -128,7 +123,7 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
         },
       })
       
-      // Фильтруем вручную для точного сравнения (до 2 копеек для учета ошибок округления Decimal)
+      // Фильтруем вручную для ТОЧНОГО сравнения (1 к 1, без разницы)
       // Исключаем платежи, которые уже обрабатываются (есть в Set processingPayments)
       const exactMatchingPayments = matchingPayments.filter((payment) => {
         // Пропускаем платежи, которые уже обрабатываются
@@ -136,8 +131,9 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
           return false
         }
         const paymentAmount = parseFloat(payment.amount.toString())
-        const diff = Math.abs(paymentAmount - requestAmount)
-        return diff < 0.02 // Точность до 2 копеек для учета возможных ошибок округления
+        const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
+        // Точное сравнение: суммы должны быть абсолютно равны
+        return paymentAmountRounded === requestAmountRounded
       })
 
       console.log(`🔍 [Auto-Deposit Check] Found ${matchingPayments.length} potential matching payments (before exact filter), ${exactMatchingPayments.length} exact matches for request ${request.id}`)
@@ -327,14 +323,15 @@ export async function matchAndProcessPayment(
     }
     
     // Обрабатываем все заявки независимо от возраста
-    // Точное сравнение суммы (до 2 копеек для учета ошибок округления Decimal)
+    // ТОЧНОЕ сравнение суммы (1 к 1, без разницы)
     const reqAmount = parseFloat(req.amount.toString())
-    const diff = Math.abs(reqAmount - amount)
-    const isMatch = diff < 0.02 // Точность до 2 копеек для учета возможных ошибок округления
+    const reqAmountRounded = Math.round(reqAmount * 100) / 100
+    const amountRounded = Math.round(amount * 100) / 100
+    const isMatch = reqAmountRounded === amountRounded // Точное сравнение: суммы должны быть абсолютно равны
     
     const requestAge = Date.now() - req.createdAt.getTime()
     const requestAgeMinutes = requestAge / (60 * 1000)
-    console.log(`[Auto-Deposit] Request ${req.id}: amount=${reqAmount}, payment=${amount}, diff=${diff.toFixed(4)}, match=${isMatch}, age=${requestAgeMinutes.toFixed(2)}min, createdAt=${req.createdAt.toISOString()}, hasProcessedPayment=${hasProcessedPayment}`)
+    console.log(`[Auto-Deposit] Request ${req.id}: amount=${reqAmountRounded}, payment=${amountRounded}, exactMatch=${isMatch}, age=${requestAgeMinutes.toFixed(2)}min, createdAt=${req.createdAt.toISOString()}, hasProcessedPayment=${hasProcessedPayment}`)
     
     return isMatch
   })
@@ -465,12 +462,13 @@ export async function matchAndProcessPayment(
     },
   })
 
-  // Проверяем на дубликат по сумме (разница не более 2 копеек)
+  // Проверяем на дубликат по сумме (ТОЧНОЕ сравнение, 1 к 1)
+  const requestAmountRounded = Math.round(requestAmount * 100) / 100
   const duplicate = recentDeposits.find((deposit) => {
     if (!deposit.amount) return false
     const depositAmount = parseFloat(deposit.amount.toString())
-    const diff = Math.abs(depositAmount - requestAmount)
-    return diff < 0.02 // Точность до 2 копеек
+    const depositAmountRounded = Math.round(depositAmount * 100) / 100
+    return depositAmountRounded === requestAmountRounded // Точное сравнение: суммы должны быть абсолютно равны
   })
 
   if (duplicate) {

@@ -647,19 +647,14 @@ export async function POST(request: NextRequest) {
           const { matchAndProcessPayment } = await import('@/lib/auto-deposit')
           console.log(`🔍 [Payment API] Starting auto-match for new deposit request ${newRequest.id}, amount: ${amountNum}`)
           
-          // Ищем необработанные входящие платежи за последний час с точным совпадением суммы
+          // Ищем необработанные входящие платежи за последний час с ТОЧНЫМ совпадением суммы (1 к 1)
           // Используем час, чтобы найти платежи, которые могли прийти раньше заявки
-          // Используем диапазон для суммы (до 1 копейки разницы) из-за проблем с точностью Decimal
           const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-          const amountMin = amountNum - 0.01
-          const amountMax = amountNum + 0.01
+          const amountNumRounded = Math.round(amountNum * 100) / 100
           
           const matchingPayments = await prisma.incomingPayment.findMany({
             where: {
-              amount: {
-                gte: amountMin,
-                lte: amountMax,
-              },
+              amount: amountNumRounded, // Точное сравнение
               isProcessed: false,
               requestId: null,
               createdAt: {
@@ -671,11 +666,11 @@ export async function POST(request: NextRequest) {
             },
           })
 
-          // Фильтруем вручную для точного сравнения (до 2 копеек для учета ошибок округления Decimal)
+          // Фильтруем вручную для ТОЧНОГО сравнения (1 к 1, без разницы)
           const exactMatchingPayments = matchingPayments.filter((payment) => {
             const paymentAmount = parseFloat(payment.amount.toString())
-            const diff = Math.abs(paymentAmount - amountNum)
-            return diff < 0.02 // Точность до 2 копеек для учета возможных ошибок округления
+            const paymentAmountRounded = Math.round(paymentAmount * 100) / 100
+            return paymentAmountRounded === amountNumRounded // Точное сравнение: суммы должны быть абсолютно равны
           })
 
           console.log(`🔍 [Payment API] Found ${matchingPayments.length} potential matching payments, ${exactMatchingPayments.length} exact matches for amount ${amountNum}`)
