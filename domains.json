@@ -1,0 +1,21 @@
+{
+  "domains": {
+    "admin": "https://gdsfafdsdf.me",
+    "admin_api": "https://gdsfafdsdf.me/api",
+    "payment": "https://erwerewrew.me"
+  },
+  "ports": {
+    "admin": 3001,
+    "payment": 3002
+  },
+  "local": {
+    "admin": "http://localhost:3001",
+    "admin_api": "http://localhost:3001/api",
+    "payment": "http://localhost:3002"
+  },
+  "fallback": {
+    "admin_api": "https://gdsfafdsdf.me/api",
+    "payment": "https://erwerewrew.me"
+  }
+}
+

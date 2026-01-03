@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Оплата - Bingo KG</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #1e3a8a 50%, #1e40af 75%, #2563eb 100%);
+            color: var(--tg-theme-text-color, #ffffff);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 12px;
+            margin: 0;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            position: relative;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+        
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(37, 99, 235, 0.15) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        
+        .container {
+            background: rgba(15, 23, 42, 0.95);
+            border-radius: 20px;
+            padding: 24px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 
+                        0 0 0 1px rgba(59, 130, 246, 0.2);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            position: relative;
+            z-index: 1;
+            margin: 12px 0;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        
+        .header h1 {
+            color: var(--tg-theme-text-color, #ffffff);
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        
+        .amount {
+            font-size: 36px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 16px 0;
+            text-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+        }
+        
+        .timer {
+            text-align: center;
+            margin: 16px 0;
+            font-size: 22px;
+            color: #fbbf24;
+            font-weight: 700;
+            text-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
+        }
+        
+        .block {
+            background: rgba(30, 41, 59, 0.6);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 12px 0;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        
+        .block-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #93c5fd;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .qr-container {
+            text-align: center;
+        }
+        
+        .qr-code {
+            max-width: 180px;
+            width: 100%;
+            margin: 0 auto;
+            background: white;
+            padding: 8px;
+            border-radius: 12px;
+            position: relative;
+            border: 2px solid #3b82f6;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+        
+        .qr-code img {
+            width: 100%;
+            height: auto;
+            display: block;
+            position: relative;
+            z-index: 1;
+            transform: scale(1.15); /* Увеличиваем QR код внутри контейнера */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-user-drag: none;
+            -khtml-user-drag: none;
+            -moz-user-drag: none;
+            -o-user-drag: none;
+            user-drag: none;
+        }
+        
+        .bank-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+        
+        .bank-button {
+            padding: 12px 8px;
+            border: 2px solid rgba(59, 130, 246, 0.4);
+            border-radius: 12px;
+            background: rgba(30, 41, 59, 0.5);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            text-decoration: none;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+            min-height: 50px;
+        }
+        
+        .bank-button:hover {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5);
+        }
+        
+        .bank-button.active {
+            border-color: #3b82f6;
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            color: white;
+            box-shadow: 0 8px 30px rgba(59, 130, 246, 0.7);
+        }
+        
+        .warning {
+            background: var(--tg-theme-secondary-bg-color, #fff3cd);
+            border: 1px solid #ffc107;
+            border-radius: 12px;
+            padding: 12px;
+            margin: 16px 0;
+            color: var(--tg-theme-hint-color, #856404);
+            font-size: 13px;
+        }
+        
+        .receipt-upload {
+            margin-top: 12px;
+        }
+        
+        .upload-area {
+            border: 2px dashed rgba(59, 130, 246, 0.5);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(10px);
+        }
+        
+        .upload-area:hover {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.15);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+        }
+        
+        .upload-area.dragover {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.2);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5);
+        }
+        
+        .upload-icon {
+            width: 24px;
+            height: 24px;
+            margin: 0 auto 6px;
+            color: var(--tg-theme-hint-color, rgba(100, 181, 246, 0.6));
+        }
+        
+        .upload-text {
+            font-size: 12px;
+            color: var(--tg-theme-text-color, #666);
+            margin-bottom: 3px;
+        }
+        
+        .upload-hint {
+            font-size: 11px;
+            color: var(--tg-theme-hint-color, #999);
+        }
+        
+        .receipt-preview {
+            margin-top: 12px;
+            display: none;
+        }
+        
+        .receipt-preview img {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 12px;
+            border: 2px solid rgba(100, 181, 246, 0.3);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        
+        .receipt-preview.show {
+            display: block;
+        }
+        
+        .remove-receipt {
+            margin-top: 8px;
+            padding: 6px 12px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--tg-theme-hint-color, #666);
+        }
+        
+        .button {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 14px 24px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 16px;
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .button:hover::before {
+            left: 100%;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(37, 99, 235, 0.6);
+        }
+        
+        .button:active {
+            transform: translateY(0);
+        }
+        
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .button.loading {
+            position: relative;
+            color: transparent;
+        }
+        
+        .button.loading::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            top: 50%;
+            left: 50%;
+            margin-left: -10px;
+            margin-top: -10px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 24px;
+            }
+            
+            .amount {
+                font-size: 28px;
+            }
+            
+            .bank-buttons {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+            
+            .bank-button {
+                padding: 12px 8px;
+                font-size: 12px;
+                min-height: 50px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+                Оплата
+            </h1>
+            <div class="amount" id="amount">{{ amount }} KGS</div>
+            <div class="timer" id="timer">05:00</div>
+        </div>
+        
+        <div class="block">
+            <div class="block-title">QR код для любого банка</div>
+            <div class="qr-container" id="qrContainer">
+                <div class="loading">Загрузка QR кода...</div>
+            </div>
+        </div>
+        
+        <div class="block">
+            <div class="block-title">Выберите банк</div>
+            <div class="bank-buttons" id="bankButtons">
+                <!-- Банки будут добавлены через JS -->
+            </div>
+        </div>
+        
+        <div class="block receipt-upload">
+            <div class="block-title">Фото чека <span id="receiptRequired" style="color: #ef4444;">*</span></div>
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                </div>
+                <div class="upload-text">Нажмите или перетащите фото</div>
+                <div class="upload-hint" id="receiptHint">JPG, PNG до 5MB. Обязательно для подтверждения оплаты</div>
+            </div>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;">
+            <div class="receipt-preview" id="receiptPreview">
+                <img id="receiptImage" src="" alt="Чек">
+                <button class="remove-receipt" onclick="removeReceipt()">Удалить</button>
+            </div>
+        </div>
+        
+        <button class="button" id="paidButton" onclick="submitPayment()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+                <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Я оплатил
+        </button>
+    </div>
+    
+    <script>
+        // Настройка защиты от копирования (можно отключить, установив в false)
+        const ENABLE_COPY_PROTECTION = true; // Установите true для включения защиты
+        
+        // Защита от копирования и скриншотов
+        if (ENABLE_COPY_PROTECTION) {
+        document.addEventListener('keydown', function(e) {
+            // Блокируем F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+            if (e.key === 'F12' || 
+                (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J')) ||
+                (e.ctrlKey && e.key === 'U')) {
+                e.preventDefault();
+                return false;
+            }
+            // Блокируем Print Screen (частично)
+            if (e.key === 'PrintScreen') {
+                e.preventDefault();
+                // Показываем предупреждение
+                alert('⚠️ Скриншоты защищены! Каждое изображение содержит уникальный идентификатор для отслеживания источника.');
+                return false;
+            }
+        });
+        }
+        
+        // Предупреждение при попытке скриншота через комбинации клавиш
+        if (ENABLE_COPY_PROTECTION) {
+        document.addEventListener('keyup', function(e) {
+            // Windows: Win + Shift + S
+            if (e.key === 's' && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+                setTimeout(() => {
+                    alert('⚠️ ВНИМАНИЕ! Скриншот содержит уникальный идентификатор. Пересылка скриншота третьим лицам запрещена и отслеживается.');
+                }, 100);
+            }
+        });
+        }
+        
+        // Предупреждение при потере фокуса (возможно делают скриншот)
+        if (ENABLE_COPY_PROTECTION) {
+        let warningShown = false;
+        window.addEventListener('blur', function() {
+            if (!warningShown) {
+                warningShown = true;
+                setTimeout(() => {
+                    if (document.hidden) {
+                        console.warn('⚠️ ВНИМАНИЕ: Каждый QR код содержит уникальный идентификатор для отслеживания источника скриншота.');
+                    }
+                    warningShown = false;
+                }, 2000);
+            }
+        });
+        }
+        
+        // Блокируем правый клик
+        document.addEventListener('contextmenu', function(e) {
+            if (ENABLE_COPY_PROTECTION) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // Блокируем выделение текста
+        document.addEventListener('selectstart', function(e) {
+            if (ENABLE_COPY_PROTECTION) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // Блокируем перетаскивание
+        document.addEventListener('dragstart', function(e) {
+            if (ENABLE_COPY_PROTECTION) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // Блокируем копирование
+        document.addEventListener('copy', function(e) {
+            if (ENABLE_COPY_PROTECTION) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // Блокируем вставку
+        document.addEventListener('paste', function(e) {
+            if (ENABLE_COPY_PROTECTION) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // Защита от DevTools (базовая)
+        if (ENABLE_COPY_PROTECTION) {
+        setInterval(function() {
+            if (window.outerHeight - window.innerHeight > 200 || 
+                window.outerWidth - window.innerWidth > 200) {
+                // Возможно открыт DevTools
+                console.clear();
+                console.warn('⚠️ ВНИМАНИЕ: Каждый QR код содержит уникальный идентификатор для отслеживания источника скриншота.');
+            }
+        }, 1000);
+        }
+        
+        // Дополнительная защита - отслеживание изменений размера окна
+        if (ENABLE_COPY_PROTECTION) {
+        let lastWidth = window.innerWidth;
+        let lastHeight = window.innerHeight;
+        setInterval(function() {
+            if (Math.abs(window.innerWidth - lastWidth) > 100 || 
+                Math.abs(window.innerHeight - lastHeight) > 100) {
+                console.warn('⚠️ ВНИМАНИЕ: Изменение размера окна зафиксировано. QR код содержит уникальный ID: ' + uniqueId);
+            }
+            lastWidth = window.innerWidth;
+            lastHeight = window.innerHeight;
+        }, 500);
+        }
+        
+        // Предупреждение при попытке сделать скриншот через расширения браузера
+        if (ENABLE_COPY_PROTECTION) {
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                console.warn('⚠️ ВНИМАНИЕ: Переключение вкладки зафиксировано. QR код содержит уникальный идентификатор для отслеживания.');
+            }
+        });
+        }
+        
+        // Инициализация Telegram WebApp
+        let tg = window.Telegram?.WebApp;
+        
+        // ВРЕМЕННО ОТКЛЮЧЕНО ДЛЯ ТЕСТИРОВАНИЯ
+        // Проверка, открыто ли приложение в Telegram
+        // if (!tg || !tg.initDataUnsafe?.user) {
+        //     // Если открыто не в Telegram, показываем предупреждение
+        //     document.body.innerHTML = `
+        //         <div style="
+        //             background: var(--tg-theme-bg-color, #ffffff);
+        //             color: var(--tg-theme-text-color, #000000);
+        //             padding: 40px 20px;
+        //             height: 100vh;
+        //             width: 100vw;
+        //             display: flex;
+        //             flex-direction: column;
+        //             align-items: center;
+        //             justify-content: center;
+        //             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        //             text-align: center;
+        //         ">
+        //             <img src="https://telegram.org/img/t_logo.png" alt="Telegram" style="width: 120px; height: 120px; margin-bottom: 20px;">
+        //             <p style="font-size: 18px; margin: 8px 0;"><strong>Упс!</strong></p>
+        //             <p style="font-size: 18px; margin: 8px 0;">Это приложение должно быть запущено <strong>внутри Telegram!</strong></p>
+        //         </div>
+        //     `;
+        // } else {
+        //     // Если открыто в Telegram, инициализируем приложение
+        //     tg.expand(); // Расширяем на все окно
+        //     tg.ready(); // Говорим Telegram, что приложение готово
+        // }
+        
+        // Если открыто в Telegram, инициализируем приложение
+        if (tg) {
+            tg.expand(); // Расширяем на все окно
+            tg.ready(); // Говорим Telegram, что приложение готово
+        }
+        
+        // Получаем ID пользователя из Telegram WebApp
+        function getUserId() {
+            // Основной способ: initDataUnsafe.user.id
+            if (tg?.initDataUnsafe?.user?.id) {
+                const userId = tg.initDataUnsafe.user.id.toString();
+                console.log('✅ Got user ID from initDataUnsafe.user.id:', userId);
+                return userId;
+            }
+            
+            // Fallback: пытаемся получить из URL параметров (если передано)
+            const urlParams = new URLSearchParams(window.location.search);
+            const userIdFromUrl = urlParams.get('user_id');
+            if (userIdFromUrl) {
+                console.log('✅ Got user ID from URL parameter:', userIdFromUrl);
+                return userIdFromUrl;
+            }
+            
+            console.warn('⚠️ Could not get user ID from Telegram WebApp');
+            return null;
+        }
+        
+        // Глобальные переменные
+        let amount, requestId, expiresAt, telegramUserId, bankUrls, selectedBank, receiptFile;
+        let casinoId, accountId, username, firstName, lastName;
+        let paymentSettings = null;
+        let requireReceiptPhoto = true; // По умолчанию требуется
+        let uniqueId = '{{ unique_id }}' || '';
+        let uncreatedRequestId = null;
+        
+        // Определяем базовый URL для API
+        // Используем домен админки из конфига или определяем автоматически
+        const API_BASE_URL = window.location.origin.includes('localhost') 
+            ? 'http://localhost:3001/api' 
+            : 'https://gdsfafdsdf.me/api'; // Домен админки из domains.json
+        
+        // Инициализация данных (всегда, независимо от Telegram)
+        amount = parseFloat('{{ amount }}') || 0;
+        // Обрабатываем request_id: если пустой или 'None', устанавливаем в пустую строку
+        const requestIdRaw = '{{ request_id }}'.trim();
+        requestId = (requestIdRaw && requestIdRaw !== 'None' && requestIdRaw !== 'null' && requestIdRaw !== 'undefined') ? requestIdRaw : '';
+        
+        // Получаем время создания заявки из URL или localStorage
+        let createdAtTimestamp = parseInt('{{ created_at_timestamp }}') || null;
+        
+        // Если время создания есть в URL, сохраняем в localStorage
+        if (createdAtTimestamp) {
+            localStorage.setItem('payment_created_at', createdAtTimestamp.toString());
+        } else {
+            // Пытаемся получить из localStorage (для перезагрузки страницы)
+            const savedCreatedAt = localStorage.getItem('payment_created_at');
+            if (savedCreatedAt) {
+                createdAtTimestamp = parseInt(savedCreatedAt);
+            } else {
+                // Если нет сохраненного времени, создаем новое
+                createdAtTimestamp = Date.now();
+                localStorage.setItem('payment_created_at', createdAtTimestamp.toString());
+            }
+        }
+        
+        // Вычисляем время окончания (5 минут от времени создания)
+        expiresAt = createdAtTimestamp + (5 * 60 * 1000); // 5 минут в миллисекундах
+        telegramUserId = getUserId() || '{{ user_id }}' || '';
+        casinoId = '{{ casino_id }}' || '';
+        accountId = '{{ account_id }}' || '';
+        username = '{{ username }}' || '';
+        firstName = '{{ first_name }}' || '';
+        lastName = '{{ last_name }}' || '';
+        bankUrls = {};
+        selectedBank = 'omoney';
+        receiptFile = null;
+        
+        // Все возможные банки (будут отфильтрованы по настройкам)
+        const allBanks = [
+            { id: 'omoney', name: 'O!Money' },
+            { id: 'mbank', name: 'MBank' },
+            { id: 'bakai', name: 'Bakai' },
+            { id: 'demir', name: 'DemirBank' },
+            { id: 'demirbank', name: 'DemirBank' }, // Альтернативное название
+            { id: 'balance', name: 'Balance.kg' },
+            { id: 'megapay', name: 'MegaPay' }
+        ];
+        
+        // Банки (будут обновлены после загрузки настроек)
+        let banks = [...allBanks];
+        
+        // Загрузка настроек из API
+        async function loadPaymentSettings() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/public/payment-settings`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    paymentSettings = data;
+                    
+                    // Проверяем, включены ли депозиты
+                    const depositsEnabled = data.deposits?.enabled !== false;
+                    if (!depositsEnabled) {
+                        // Показываем сообщение и блокируем форму
+                        document.body.innerHTML = `
+                            <div style="
+                                background: linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #1e3a8a 50%, #1e40af 75%, #2563eb 100%);
+                                color: #ffffff;
+                                padding: 40px 20px;
+                                height: 100vh;
+                                width: 100vw;
+                                display: flex;
+                                flex-direction: column;
+                                align-items: center;
+                                justify-content: center;
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                text-align: center;
+                            ">
+                                <div style="font-size: 48px; margin-bottom: 20px;">⏸️</div>
+                                <h1 style="font-size: 24px; margin-bottom: 12px; font-weight: 600;">Пополнения временно отключены</h1>
+                                <p style="font-size: 16px; color: #94a3b8; max-width: 400px;">
+                                    ${data.maintenance_message || 'Пополнения временно недоступны. Попробуйте позже.'}
+                                </p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    // Проверяем, включено ли казино
+                    const casinoEnabled = data.casinos?.[casinoId] !== false;
+                    if (!casinoEnabled) {
+                        // Показываем сообщение и блокируем форму
+                        document.body.innerHTML = `
+                            <div style="
+                                background: linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #1e3a8a 50%, #1e40af 75%, #2563eb 100%);
+                                color: #ffffff;
+                                padding: 40px 20px;
+                                height: 100vh;
+                                width: 100vw;
+                                display: flex;
+                                flex-direction: column;
+                                align-items: center;
+                                justify-content: center;
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                text-align: center;
+                            ">
+                                <div style="font-size: 48px; margin-bottom: 20px;">🚫</div>
+                                <h1 style="font-size: 24px; margin-bottom: 12px; font-weight: 600;">Казино временно недоступно</h1>
+                                <p style="font-size: 16px; color: #94a3b8; max-width: 400px;">
+                                    Выбранное казино временно отключено. Пожалуйста, выберите другое казино.
+                                </p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    // Обновляем требование фото чека
+                    requireReceiptPhoto = data.require_receipt_photo !== false;
+                    
+                    // Обновляем видимость блока с чеком
+                    const receiptBlock = document.querySelector('.receipt-upload');
+                    const receiptRequired = document.getElementById('receiptRequired');
+                    const receiptHint = document.getElementById('receiptHint');
+                    
+                    if (receiptBlock) {
+                        if (!requireReceiptPhoto) {
+                            receiptBlock.style.display = 'none';
+                        } else {
+                            receiptBlock.style.display = 'block';
+                        }
+                    }
+                    
+                    if (receiptRequired) {
+                        receiptRequired.style.display = requireReceiptPhoto ? 'inline' : 'none';
+                    }
+                    
+                    if (receiptHint) {
+                        receiptHint.textContent = requireReceiptPhoto 
+                            ? 'JPG, PNG до 5MB. Обязательно для подтверждения оплаты'
+                            : 'JPG, PNG до 5MB. Необязательно, но рекомендуется';
+                    }
+                    
+                    // Фильтруем банки по настройкам
+                    const enabledBanks = data.deposits?.banks || [];
+                    if (enabledBanks.length > 0) {
+                        banks = allBanks.filter(bank => {
+                            // Проверяем по id и альтернативным названиям
+                            return enabledBanks.includes(bank.id) || 
+                                   (bank.id === 'demirbank' && enabledBanks.includes('demir')) ||
+                                   (bank.id === 'demir' && enabledBanks.includes('demirbank'));
+                        });
+                        
+                        // Убираем дубликаты (demir и demirbank)
+                        const seen = new Set();
+                        banks = banks.filter(bank => {
+                            const key = bank.id === 'demir' || bank.id === 'demirbank' ? 'demir' : bank.id;
+                            if (seen.has(key)) return false;
+                            seen.add(key);
+                            return true;
+                        });
+                        
+                        // Если выбранный банк не в списке, выбираем первый доступный
+                        if (!banks.find(b => b.id === selectedBank || (b.id === 'demir' && selectedBank === 'demirbank') || (b.id === 'demirbank' && selectedBank === 'demir'))) {
+                            selectedBank = banks[0]?.id || 'omoney';
+                        }
+                        
+                        // Если нет доступных банков, показываем сообщение
+                        if (banks.length === 0) {
+                            document.body.innerHTML = `
+                                <div style="
+                                    background: linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #1e3a8a 50%, #1e40af 75%, #2563eb 100%);
+                                    color: #ffffff;
+                                    padding: 40px 20px;
+                                    height: 100vh;
+                                    width: 100vw;
+                                    display: flex;
+                                    flex-direction: column;
+                                    align-items: center;
+                                    justify-content: center;
+                                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                    text-align: center;
+                                ">
+                                    <div style="font-size: 48px; margin-bottom: 20px;">🚫</div>
+                                    <h1 style="font-size: 24px; margin-bottom: 12px; font-weight: 600;">Нет доступных банков</h1>
+                                    <p style="font-size: 16px; color: #94a3b8; max-width: 400px;">
+                                        Все банки временно отключены. Попробуйте позже.
+                                    </p>
+                                </div>
+                            `;
+                            return;
+                        }
+                    }
+                    
+                    console.log('✅ Payment settings loaded:', {
+                        requireReceiptPhoto: requireReceiptPhoto,
+                        enabledBanks: enabledBanks,
+                        filteredBanks: banks.map(b => b.id),
+                        depositsEnabled: depositsEnabled,
+                        casinoEnabled: casinoEnabled
+                    });
+                }
+            } catch (error) {
+                console.error('❌ Error loading payment settings:', error);
+                // Используем настройки по умолчанию
+            }
+        }
+
+        async function createUncreatedOnce() {
+            try {
+                if (!telegramUserId || !casinoId || !accountId) {
+                    console.warn('⚠️ Cannot create uncreated request: missing user/casino/account');
+                    return;
+                }
+                const storageKey = `uncreated_req_${telegramUserId}_${casinoId}_${accountId}`;
+                const storedId = localStorage.getItem(storageKey);
+                if (storedId) {
+                    uncreatedRequestId = storedId;
+                    return;
+                }
+                const resp = await fetch(`${API_BASE_URL}/public/uncreated-requests`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: telegramUserId,
+                        username,
+                        firstName,
+                        lastName,
+                        bookmaker: casinoId,
+                        accountId,
+                        bank: selectedBank,
+                        amount: amount || null,
+                        requestType: 'deposit'
+                    }),
+                });
+                const data = await resp.json();
+                if (data.success && data.data?.id) {
+                    uncreatedRequestId = data.data.id.toString();
+                    localStorage.setItem(storageKey, uncreatedRequestId);
+                }
+            } catch (e) {
+                console.warn('⚠️ Failed to create uncreated request', e);
+            }
+        }
+        
+        console.log('📊 Payment Form Data:', {
+            telegramUserId: telegramUserId,
+            requestId: requestId,
+            amount: amount,
+            expiresAt: expiresAt,
+            casinoId: casinoId,
+            accountId: accountId,
+            tgAvailable: !!tg,
+            userAvailable: !!tg?.initDataUnsafe?.user
+        });
+        
+        // Таймер обратного отсчета (глобальная функция)
+        function updateTimer() {
+            const now = Date.now();
+            const remaining = expiresAt - now;
+            
+            if (remaining <= 0) {
+                // Очищаем сохраненное время создания (время истекло)
+                localStorage.removeItem('payment_created_at');
+                
+                const timerEl = document.getElementById('timer');
+                if (timerEl) {
+                    timerEl.textContent = '00:00';
+                    timerEl.style.color = '#ef4444';
+                }
+                
+                // Блокируем кнопку оплаты
+                const paidButton = document.getElementById('paidButton');
+                if (paidButton) {
+                    paidButton.disabled = true;
+                    paidButton.textContent = '⏰ Время истекло';
+                    paidButton.style.opacity = '0.6';
+                }
+                
+                // Таймер истек - показываем сообщение
+                if (tg) {
+                    tg.showPopup({
+                        title: '⏰ Время истекло',
+                        message: 'Время на оплату истекло. Заявка не может быть отправлена.',
+                        buttons: [{ 
+                            type: 'ok',
+                            text: 'ОК'
+                        }]
+                    });
+                } else {
+                    alert('⏰ Время на оплату истекло. Заявка не может быть отправлена.');
+                }
+                return;
+            }
+            
+            const minutes = Math.floor(remaining / 60000);
+            const seconds = Math.floor((remaining % 60000) / 1000);
+            
+            const timerEl = document.getElementById('timer');
+            if (timerEl) {
+                timerEl.textContent = 
+                    `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
+        }
+        
+        // Запускаем таймер
+        setInterval(updateTimer, 1000);
+        updateTimer();
+        
+        // Генерация QR кода (глобальная функция)
+        async function loadQR() {
+            try {
+                console.log('📤 Loading QR code for amount:', amount);
+                
+                // Используем наш локальный API для генерации QR с водяным знаком
+                let response;
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 30000);
+                    
+                    response = await fetch('/api/generate-qr', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            amount: amount,
+                            bank: (typeof selectedBank !== 'undefined' ? selectedBank : 'omoney'),
+                            unique_id: uniqueId
+                        }),
+                        signal: controller.signal
+                    });
+                    
+                    clearTimeout(timeoutId);
+                } catch (fetchError) {
+                    console.error('❌ Fetch error loading QR:', fetchError);
+                    if (fetchError.name === 'AbortError') {
+                        throw new Error('Превышено время ожидания ответа от сервера');
+                    } else {
+                        throw new Error('Не удалось подключиться к серверу: ' + fetchError.message);
+                    }
+                }
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ Response error loading QR:', response.status, errorText);
+                    throw new Error(`Ошибка сервера (${response.status}): ${errorText.substring(0, 100)}`);
+                }
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (jsonError) {
+                    console.error('❌ JSON parse error loading QR:', jsonError);
+                    const text = await response.text();
+                    throw new Error(`Неверный ответ от сервера: ${text.substring(0, 100)}`);
+                }
+                
+                console.log('✅ QR data received:', { success: data.success, has_image: !!data.qr_image });
+                
+                if (data.success) {
+                    bankUrls = data.all_bank_urls || {};
+                    
+                    // Используем QR код с водяным знаком с сервера
+                    if (data.qr_image) {
+                        const qrContainer = document.getElementById('qrContainer');
+                        qrContainer.innerHTML = `
+                            <div class="qr-code">
+                                <img src="${data.qr_image}" 
+                                     alt="QR Code" 
+                                     style="width: 100%; height: auto;">
+                            </div>
+                        `;
+                    } else {
+                        console.error('❌ QR image not found in response');
+                        document.getElementById('qrContainer').innerHTML = 
+                            `<div class="loading" style="color: #e74c3c;">Ошибка: QR код не сгенерирован</div>`;
+                    }
+                    
+                    // Настраиваем кнопки банков
+                    setupBankButtons();
+                } else {
+                    console.error('❌ QR generation failed:', data.error);
+                    document.getElementById('qrContainer').innerHTML = 
+                        `<div class="loading" style="color: #e74c3c;">Ошибка: ${data.error || 'Не удалось сгенерировать QR код'}</div>`;
+                }
+            } catch (error) {
+                console.error('❌ Error loading QR:', error);
+                console.error('❌ Error details:', {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                });
+                document.getElementById('qrContainer').innerHTML = 
+                    `<div class="loading" style="color: #e74c3c;">Ошибка загрузки QR кода: ${error.message || 'Неизвестная ошибка'}</div>`;
+            }
+        }
+        
+        
+        // Настройка кнопок банков (глобальная функция)
+        function setupBankButtons() {
+            const bankButtonsContainer = document.getElementById('bankButtons');
+            if (!bankButtonsContainer) {
+                console.warn('bankButtons container not found');
+                return;
+            }
+            
+            bankButtonsContainer.innerHTML = '';
+            
+            banks.forEach(bank => {
+                const bankUrl = bankUrls[bank.id] || bankUrls[bank.name];
+                const button = document.createElement('a');
+                button.href = bankUrl || '#';
+                button.target = '_blank';
+                button.className = 'bank-button';
+                if (bank.id === selectedBank) {
+                    button.classList.add('active');
+                }
+                button.textContent = bank.name;
+                
+                if (bankUrl) {
+                    button.onclick = (e) => {
+                        e.preventDefault();
+                        selectedBank = bank.id;
+                        // Обновляем активную кнопку
+                        document.querySelectorAll('.bank-button').forEach(btn => {
+                            btn.classList.remove('active');
+                        });
+                        button.classList.add('active');
+                        // Открываем ссылку
+                        window.open(bankUrl, '_blank');
+                    };
+                } else {
+                    // Если URL еще не загружен, делаем кнопку неактивной
+                    button.style.opacity = '0.5';
+                    button.style.cursor = 'wait';
+                    button.onclick = (e) => {
+                        e.preventDefault();
+                    };
+                }
+                
+                bankButtonsContainer.appendChild(button);
+            });
+        }
+        
+        // Инициализация загрузки фото чека (глобальная функция)
+        function initReceiptUpload() {
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+            const receiptPreview = document.getElementById('receiptPreview');
+            const receiptImage = document.getElementById('receiptImage');
+            
+            if (!uploadArea || !fileInput) return;
+            
+            uploadArea.addEventListener('click', () => fileInput.click());
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFile(files[0]);
+                }
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFile(e.target.files[0]);
+                }
+            });
+        }
+        
+        // Обработка файла (глобальная функция)
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                if (tg) {
+                    tg.showPopup({
+                        title: 'Ошибка',
+                        message: 'Пожалуйста, выберите изображение',
+                        buttons: [{ type: 'ok' }]
+                    });
+                } else {
+                    alert('Пожалуйста, выберите изображение');
+                }
+                return;
+            }
+            
+            if (file.size > 5 * 1024 * 1024) {
+                if (tg) {
+                    tg.showPopup({
+                        title: 'Ошибка',
+                        message: 'Файл слишком большой. Максимум 5MB',
+                        buttons: [{ type: 'ok' }]
+                    });
+                } else {
+                    alert('Файл слишком большой. Максимум 5MB');
+                }
+                return;
+            }
+            
+            receiptFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                receiptImage.src = e.target.result;
+                receiptPreview.classList.add('show');
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        // Удаление чека (глобальная функция)
+        window.removeReceipt = function() {
+            receiptFile = null;
+            const receiptImage = document.getElementById('receiptImage');
+            const receiptPreview = document.getElementById('receiptPreview');
+            const fileInput = document.getElementById('fileInput');
+            
+            if (receiptImage) receiptImage.src = '';
+            if (receiptPreview) receiptPreview.classList.remove('show');
+            if (fileInput) fileInput.value = '';
+        };
+        
+        // Отправка заявки с чеком при нажатии "Я оплатил" (глобальная функция)
+        window.submitPayment = async function() {
+            console.log('🚀 submitPayment function called!');
+            
+            // Проверяем, не истекло ли время
+            const now = Date.now();
+            if (now >= expiresAt) {
+                const errorMsg = '⏰ Время на оплату истекло. Заявка не может быть отправлена.';
+                if (tg) {
+                    tg.showPopup({
+                        title: 'Время истекло',
+                        message: errorMsg,
+                        buttons: [{ type: 'ok' }]
+                    });
+                } else {
+                    alert(errorMsg);
+                }
+                return;
+            }
+            
+            console.log('🚀 Initial data check:', {
+                telegramUserId,
+                casinoId,
+                accountId,
+                amount,
+                requestId,
+                hasReceiptFile: !!receiptFile,
+                expiresAt: new Date(expiresAt).toISOString(),
+                timeRemaining: Math.floor((expiresAt - now) / 1000) + ' секунд'
+            });
+            
+            // ВРЕМЕННО ОТКЛЮЧЕНО ДЛЯ ТЕСТИРОВАНИЯ
+            // Проверяем, что открыто в Telegram
+            // if (!tg || !tg.initDataUnsafe?.user) {
+            //     if (tg) {
+            //         tg.showPopup({
+            //             title: 'Ошибка',
+            //             message: 'Приложение должно быть открыто в Telegram',
+            //             buttons: [{ type: 'ok' }]
+            //         });
+            //     } else {
+            //         alert('Приложение должно быть открыто в Telegram');
+            //     }
+            //     return;
+            // }
+            
+            const paidButton = document.getElementById('paidButton');
+            if (!paidButton) {
+                console.error('❌ paidButton not found!');
+                alert('Ошибка: кнопка не найдена');
+                return;
+            }
+            console.log('✅ paidButton found');
+            
+            // Проверяем наличие обязательных данных для создания заявки
+            if (!telegramUserId || !casinoId || !accountId) {
+                console.error('❌ Missing required data:', {
+                    telegramUserId: !!telegramUserId,
+                    casinoId: !!casinoId,
+                    accountId: !!accountId
+                });
+                if (tg) {
+                    tg.showPopup({
+                        title: 'Ошибка',
+                        message: 'Недостаточно данных для создания заявки',
+                        buttons: [{ type: 'ok' }]
+                    });
+                } else {
+                    alert('Недостаточно данных для создания заявки');
+                }
+                return;
+            }
+            
+            // Проверяем наличие фото чека (если требуется по настройкам)
+            if (requireReceiptPhoto && !receiptFile) {
+                if (tg) {
+                    tg.showPopup({
+                        title: 'Внимание',
+                        message: 'Пожалуйста, прикрепите фото чека об оплате. Это обязательно для подтверждения платежа.',
+                        buttons: [{ type: 'ok' }]
+                    });
+                } else {
+                    alert('Пожалуйста, прикрепите фото чека об оплате. Это обязательно для подтверждения платежа.');
+                }
+                return;
+            }
+            
+            // Блокируем кнопку
+            paidButton.disabled = true;
+            paidButton.classList.add('loading');
+            
+            try {
+                let receiptBase64 = null;
+                
+                // Конвертируем фото чека в base64 (обязательно)
+                if (receiptFile) {
+                    const reader = new FileReader();
+                    receiptBase64 = await new Promise((resolve, reject) => {
+                        reader.onload = (e) => {
+                            const base64 = e.target.result.split(',')[1];
+                            resolve(base64);
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(receiptFile);
+                    });
+                }
+                
+                // Если заявка уже существует (requestId), обновляем её
+                // Проверяем, что requestId не пустой и является валидным числом
+                if (requestId && requestId.trim() !== '' && !isNaN(parseInt(requestId))) {
+                    const updateData = {
+                        id: parseInt(requestId)
+                        // Не меняем статус автоматически - только обновляем данные
+                    };
+                    
+                    // Добавляем фото чека (base64 строка)
+                    if (receiptBase64 && receiptBase64.trim() !== '') {
+                        updateData.receipt_photo = receiptBase64.trim();
+                    }
+                    
+                    // Обновляем telegram_user_id, если есть
+                    if (telegramUserId && telegramUserId.toString().trim() !== '') {
+                        updateData.telegram_user_id = telegramUserId.toString().trim();
+                    }
+                    if (uncreatedRequestId) {
+                        updateData.uncreated_request_id = uncreatedRequestId;
+                    }
+                    
+                    // Обновляем amount (должно быть числом)
+                    const amountNum = parseFloat(amount) || 0;
+                    if (amountNum > 0) {
+                        updateData.amount = amountNum;
+                    }
+                    
+                    // Обновляем остальные поля только если они не пустые
+                    if (casinoId && casinoId.trim() !== '') {
+                        updateData.bookmaker = casinoId.trim();
+                    }
+                    
+                    if (accountId && accountId.trim() !== '') {
+                        updateData.account_id = accountId.trim();
+                    }
+                    
+                    if (selectedBank && selectedBank.trim() !== '') {
+                        updateData.bank = selectedBank.trim();
+                    }
+                    
+                    if (username && username.trim() !== '') {
+                        updateData.telegram_username = username.trim();
+                    }
+                    
+                    if (firstName && firstName.trim() !== '') {
+                        updateData.telegram_first_name = firstName.trim();
+                    }
+                    
+                    if (lastName && lastName.trim() !== '') {
+                        updateData.telegram_last_name = lastName.trim();
+                    }
+                    
+                    console.log('📤 Updating existing request:', {
+                        id: updateData.id,
+                        has_receipt: !!updateData.receipt_photo,
+                        status: updateData.status,
+                        amount: updateData.amount,
+                        bookmaker: updateData.bookmaker
+                    });
+                    
+                    let response;
+                    try {
+                        // Создаем AbortController для таймаута
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 секунд таймаут
+                        
+                        console.log('📤 Updating request to:', `${API_BASE_URL}/payment`);
+                        response = await fetch(`${API_BASE_URL}/payment`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(updateData),
+                            signal: controller.signal
+                        });
+                        
+                        clearTimeout(timeoutId);
+                    } catch (fetchError) {
+                        console.error('❌ Fetch error:', fetchError);
+                        if (fetchError.name === 'AbortError') {
+                            throw new Error('Превышено время ожидания ответа от сервера. Попробуйте еще раз.');
+                        } else if (fetchError.message && fetchError.message.includes('Failed to fetch')) {
+                            throw new Error('Не удалось подключиться к серверу. Проверьте интернет-соединение и попробуйте еще раз.');
+                        } else {
+                            throw new Error(fetchError.message || 'Ошибка при отправке запроса. Попробуйте еще раз.');
+                        }
+                    }
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('❌ Response error:', response.status, errorText);
+                        throw new Error(`Ошибка сервера (${response.status}): ${errorText.substring(0, 100)}`);
+                    }
+                    
+                    let data;
+                    try {
+                        data = await response.json();
+                    } catch (jsonError) {
+                        console.error('❌ JSON parse error:', jsonError);
+                        const text = await response.text();
+                        throw new Error(`Неверный ответ от сервера: ${text.substring(0, 100)}`);
+                    }
+                    
+                    if (data.success) {
+                        // Очищаем сохраненное время создания (заявка отправлена)
+                        localStorage.removeItem('payment_created_at');
+                        
+                        // Обновляем requestId из ответа, если он есть
+                        const responseId = data.data?.id || data.id;
+                        if (responseId) {
+                            requestId = responseId;
+                            console.log('✅ Request ID updated from response:', requestId);
+                        }
+                        
+                        // Формируем URL для страницы успеха
+                        const successParams = new URLSearchParams();
+                        if (requestId) successParams.append('request_id', requestId.toString());
+                        if (amount) successParams.append('amount', amount.toString());
+                        if (casinoId) successParams.append('bookmaker', casinoId.toString());
+                        
+                        const successUrl = `/success?${successParams.toString()}`;
+                        console.log('🔄 Redirecting to success page (update):', successUrl);
+                        console.log('📊 Redirect data:', { requestId, amount, casinoId });
+                        
+                        // Редирект на страницу успеха с небольшой задержкой для отладки
+                        setTimeout(() => {
+                            try {
+                                window.location.href = successUrl;
+                            } catch (e) {
+                                console.error('❌ Redirect error:', e);
+                                // Fallback: попробуем через location.replace
+                                window.location.replace(successUrl);
+                            }
+                        }, 100);
+                    } else {
+                        throw new Error(data.error || 'Не удалось обновить заявку');
+                    }
+                } else {
+                    console.log('📝 ========== CREATING NEW REQUEST ==========');
+                    console.log('📝 Creating NEW request (not updating existing)');
+                    // Создаем новую заявку
+                    // Преобразуем amount в число
+                    const amountNum = parseFloat(amount) || 0;
+                    console.log('💰 Amount:', amount, '→', amountNum);
+                    
+                    if (!amountNum || amountNum <= 0) {
+                        console.error('❌ Invalid amount:', amountNum);
+                        throw new Error('Неверная сумма оплаты');
+                    }
+                    
+                    console.log('📦 Preparing request data...');
+                    console.log('📦 Data before preparation:', {
+                        telegramUserId,
+                        casinoId,
+                        accountId,
+                        username,
+                        firstName,
+                        lastName,
+                        amountNum
+                    });
+                    
+                    // Подготовка данных с правильной обработкой пустых значений
+                    const requestData = {
+                        telegram_user_id: telegramUserId.toString().trim(), // Обязательно строка
+                        type: 'deposit',
+                        amount: amountNum, // Обязательно число
+                    };
+                    
+                    // Добавляем опциональные поля только если они не пустые
+                    if (casinoId && casinoId.trim() !== '') {
+                        requestData.bookmaker = casinoId.trim();
+                    }
+                    
+                    if (accountId && accountId.trim() !== '') {
+                        requestData.account_id = accountId.trim();
+                    }
+                    
+                    if (username && username.trim() !== '') {
+                        requestData.telegram_username = username.trim();
+                    }
+                    
+                    if (firstName && firstName.trim() !== '') {
+                        requestData.telegram_first_name = firstName.trim();
+                    }
+                    
+                    if (lastName && lastName.trim() !== '') {
+                        requestData.telegram_last_name = lastName.trim();
+                    }
+                    
+                    // Добавляем банк, если выбран
+                    if (selectedBank && selectedBank.trim() !== '') {
+                        requestData.bank = selectedBank.trim();
+                    }
+                    
+                    // Добавляем фото чека (base64 строка)
+                    if (receiptBase64 && receiptBase64.trim() !== '') {
+                        requestData.receipt_photo = receiptBase64.trim();
+                    }
+
+                    if (uncreatedRequestId) {
+                        requestData.uncreated_request_id = uncreatedRequestId;
+                    }
+                    
+                    console.log('📦 Request data prepared:', requestData);
+                    
+                    console.log('📤 Creating new request:', {
+                        telegram_user_id: requestData.telegram_user_id,
+                        type: requestData.type,
+                        amount: requestData.amount,
+                        amount_type: typeof requestData.amount,
+                        bookmaker: requestData.bookmaker,
+                        account_id: requestData.account_id,
+                        bank: requestData.bank,
+                        has_receipt: !!requestData.receipt_photo,
+                        receipt_length: requestData.receipt_photo ? requestData.receipt_photo.length : 0
+                    });
+                    
+                    console.log('📤 Full request data to send:', JSON.stringify(requestData, null, 2));
+                    console.log('📤 Sending to:', `${API_BASE_URL}/payment`);
+                    
+                    // Дополнительная проверка перед отправкой
+                    if (!requestData.telegram_user_id) {
+                        throw new Error('Отсутствует ID пользователя');
+                    }
+                    if (!requestData.amount || requestData.amount <= 0) {
+                        throw new Error('Неверная сумма оплаты');
+                    }
+                    if (!requestData.type) {
+                        throw new Error('Отсутствует тип заявки');
+                    }
+                    
+                    let response;
+                    try {
+                        // Создаем AbortController для таймаута
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 секунд таймаут
+                        
+                        console.log('📤 Sending POST to:', `${API_BASE_URL}/payment`);
+                        response = await fetch(`${API_BASE_URL}/payment`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(requestData),
+                            signal: controller.signal
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        console.log('📥 Response received:', {
+                            status: response.status,
+                            statusText: response.statusText,
+                            ok: response.ok
+                        });
+                    } catch (fetchError) {
+                        console.error('❌ Fetch error:', fetchError);
+                        console.error('❌ Fetch error details:', {
+                            name: fetchError.name,
+                            message: fetchError.message
+                        });
+                        if (fetchError.name === 'AbortError') {
+                            throw new Error('Превышено время ожидания ответа от сервера. Попробуйте еще раз.');
+                        } else if (fetchError.message && fetchError.message.includes('Failed to fetch')) {
+                            throw new Error('Не удалось подключиться к серверу. Проверьте интернет-соединение и попробуйте еще раз.');
+                        } else {
+                            throw new Error(fetchError.message || 'Ошибка при отправке запроса. Попробуйте еще раз.');
+                        }
+                    }
+                    
+                    console.log('📥 Response status:', response.status, response.statusText);
+                    
+                    let responseText = '';
+                    try {
+                        responseText = await response.text();
+                        console.log('📥 Response text:', responseText.substring(0, 500));
+                    } catch (e) {
+                        console.error('❌ Failed to read response text:', e);
+                    }
+                    
+                    if (!response.ok) {
+                        console.error('❌ Response error:', response.status, responseText);
+                        let errorMessage = `Ошибка сервера (${response.status})`;
+                        try {
+                            const errorData = JSON.parse(responseText);
+                            errorMessage = errorData.error || errorData.message || errorMessage;
+                        } catch (e) {
+                            errorMessage = responseText.substring(0, 200) || errorMessage;
+                        }
+                        throw new Error(errorMessage);
+                    }
+                    
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                        console.log('📥 Parsed response data:', data);
+                    } catch (jsonError) {
+                        console.error('❌ JSON parse error:', jsonError);
+                        throw new Error(`Неверный ответ от сервера: ${responseText.substring(0, 100)}`);
+                    }
+                    
+                    if (data.success) {
+                        // Очищаем сохраненное время создания (заявка отправлена)
+                        localStorage.removeItem('payment_created_at');
+                        
+                        // Сохраняем ID созданной заявки (пробуем разные варианты)
+                        requestId = data.data?.id || data.data?.transactionId || data.id || data.transactionId;
+                        console.log('✅ Request created successfully, ID:', requestId);
+                        console.log('✅ Full response data:', JSON.stringify(data, null, 2));
+                        
+                        // Проверяем, что заявка действительно создана
+                        if (!requestId) {
+                            console.error('❌ Warning: Request ID is missing in response!', data);
+                            // Пробуем извлечь ID из другого места
+                            if (data.data && typeof data.data === 'object') {
+                                requestId = data.data.id || data.data.requestId || data.data.request_id;
+                            }
+                        }
+                        
+                        // Формируем URL для страницы успеха
+                        const successParams = new URLSearchParams();
+                        if (requestId) successParams.append('request_id', requestId.toString());
+                        if (amount) successParams.append('amount', amount.toString());
+                        if (casinoId) successParams.append('bookmaker', casinoId.toString());
+                        
+                        const successUrl = `/success?${successParams.toString()}`;
+                        console.log('🔄 Redirecting to success page (create):', successUrl);
+                        console.log('📊 Redirect data:', { requestId, amount, casinoId });
+                        
+                        // Редирект на страницу успеха с небольшой задержкой для отладки
+                        setTimeout(() => {
+                            try {
+                                window.location.href = successUrl;
+                            } catch (e) {
+                                console.error('❌ Redirect error:', e);
+                                // Fallback: попробуем через location.replace
+                                window.location.replace(successUrl);
+                            }
+                        }, 100);
+                    } else {
+                        const errorMsg = data.error || data.message || 'Не удалось создать заявку';
+                        console.error('❌ Server returned error:', errorMsg);
+                        throw new Error(errorMsg);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error submitting payment:', error);
+                console.error('❌ Error details:', {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack,
+                    type: typeof error
+                });
+                
+                // Разблокируем кнопку
+                paidButton.disabled = false;
+                paidButton.classList.remove('loading');
+                
+                let errorMessage = 'Не удалось отправить заявку. Попробуйте еще раз.';
+                if (error.message) {
+                    errorMessage = error.message;
+                } else if (error.name === 'TypeError' && error.message && error.message.includes('fetch')) {
+                    errorMessage = 'Ошибка сети. Проверьте интернет-соединение и попробуйте еще раз.';
+                }
+                
+                if (tg) {
+                    tg.showPopup({
+                        title: 'Ошибка',
+                        message: errorMessage,
+                        buttons: [{ type: 'ok' }]
+                    });
+                } else {
+                    alert('Ошибка: ' + errorMessage);
+                }
+            }
+        };
+        
+        // Инициализация при загрузке страницы
+        if (tg && tg.initDataUnsafe?.user) {
+            console.log('✅ Telegram WebApp initialized');
+        } else {
+            console.warn('⚠️ Not in Telegram WebApp, but continuing anyway');
+        }
+        
+        // Инициализируем все компоненты (всегда, независимо от Telegram)
+        initReceiptUpload();
+        
+        // Загружаем настройки и затем инициализируем остальное
+        loadPaymentSettings().then(async () => {
+            await createUncreatedOnce();
+            setupBankButtons(); // Показываем банки после загрузки настроек
+            loadQR(); // Загружаем QR код
+        }).catch((error) => {
+            console.error('❌ Error initializing payment form:', error);
+            // В случае ошибки все равно показываем форму с настройками по умолчанию
+            setupBankButtons();
+            loadQR();
+        });
+    </script>
+</body>
+</html>

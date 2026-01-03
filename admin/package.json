@@ -1,0 +1,53 @@
+{
+  "name": "bingo-admin-nextjs",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "next lint",
+    "clean": "rm -rf .next",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "create-admin": "tsx scripts/create-admin.ts",
+    "update-casino-passwords": "tsx scripts/update-casino-passwords.ts",
+    "check-casino-config": "tsx scripts/check-casino-config.ts",
+    "test:operator-chat": "tsx scripts/test-operator-chat.ts",
+    "test:operator-chat-direct": "tsx scripts/test-chat-direct.ts",
+    "init:quick-replies": "tsx scripts/init-quick-replies.ts",
+    "start:email-watcher": "tsx scripts/start-email-watcher.ts",
+    "enable-autodeposit": "tsx scripts/enable-autodeposit.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0",
+    "@tanstack/react-query": "^5.56.2",
+    "@types/imap": "^0.8.42",
+    "bcryptjs": "^2.4.3",
+    "critters": "^0.0.23",
+    "imap": "^0.8.19",
+    "jsonwebtoken": "^9.0.2",
+    "mailparser": "^3.9.0",
+    "next": "14.2.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "20.11.30",
+    "@types/react": "18.2.66",
+    "@types/react-dom": "18.2.22",
+    "autoprefixer": "10.4.20",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.4",
+    "postcss": "8.4.47",
+    "prisma": "^5.18.0",
+    "tailwindcss": "3.4.10",
+    "tsx": "^4.7.0",
+    "typescript": "5.5.4"
+  }
+}
