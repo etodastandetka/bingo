@@ -496,9 +496,7 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
     
     await state.clear()
     
-    # Показываем главное меню после создания заявки или ошибки
-    from handlers.start import cmd_start
-    await cmd_start(message, state, bot)
+    # НЕ показываем главное меню автоматически - пользователь сам вернется через инлайн кнопку
 
 @router.message(F.text.in_(['❌ Операция отменена', '❌ Аракет жокко чыгарылды']))
 async def cancel_withdraw(message: Message, state: FSMContext, bot: Bot):
