@@ -688,14 +688,15 @@ export async function startWatcher(): Promise<void> {
     })
   })
   
-  // Периодическая проверка каждые 100ms для максимально быстрой обработки множественных платежей
+  // Периодическая проверка каждые 500ms для баланса между скоростью и нагрузкой
+  // 500ms достаточно быстро для обработки, но не создает слишком много параллельных вызовов
   const autoDepositCheckInterval = setInterval(() => {
     checkPendingRequestsForPayments().catch((error) => {
       console.warn('⚠️ Auto-deposit check failed:', error.message)
     })
-  }, 100) // Каждые 100ms для мгновенной обработки множественных платежей
+  }, 500) // Каждые 500ms для баланса между скоростью и нагрузкой
 
-  console.log('✅ Auto-deposit check started (immediate + every 100ms)')
+  console.log('✅ Auto-deposit check started (immediate + every 500ms)')
 
   while (true) {
     try {

@@ -14,12 +14,22 @@ interface MatchResult {
 // Set для отслеживания платежей, которые сейчас обрабатываются (предотвращает race condition)
 const processingPayments = new Set<number>()
 
+// Флаг для предотвращения параллельных вызовов checkPendingRequestsForPayments
+let isCheckingPendingRequests = false
+
 /**
  * Проверка всех pending заявок и поиск платежей для них
  * Вызывается каждые 100ms для мгновенного автопополнения
  * Обрабатываются все pending заявки без ограничения по времени
  */
 export async function checkPendingRequestsForPayments(): Promise<void> {
+  // Предотвращаем параллельные вызовы
+  if (isCheckingPendingRequests) {
+    return
+  }
+  
+  isCheckingPendingRequests = true
+  
   try {
     // Проверяем, включено ли автопополнение
     // Сначала проверяем BotConfiguration (новый способ), затем BotSetting (старый способ для совместимости)
@@ -175,6 +185,8 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
     await Promise.allSettled(processingPromises)
   } catch (error: any) {
     console.error(`❌ [Auto-Deposit Check] Error checking pending requests:`, error)
+  } finally {
+    isCheckingPendingRequests = false
   }
 }
 
@@ -188,7 +200,23 @@ export async function matchAndProcessPayment(
 ): Promise<MatchResult> {
   console.log(`🚀 [Auto-Deposit] matchAndProcessPayment called: paymentId=${paymentId}, amount=${amount}`)
   
-  // Проверяем, не обрабатывается ли этот платеж уже
+  // СНАЧАЛА проверяем в БД, может платеж уже обработан (быстрее чем проверка Set)
+  const dbPaymentCheck = await prisma.incomingPayment.findUnique({
+    where: { id: paymentId },
+    select: { isProcessed: true, requestId: true },
+  })
+  
+  if (dbPaymentCheck && (dbPaymentCheck.isProcessed || dbPaymentCheck.requestId !== null)) {
+    console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} already processed in DB (isProcessed: ${dbPaymentCheck.isProcessed}, requestId: ${dbPaymentCheck.requestId}), skipping`)
+    // Очищаем Set на случай если там остался старый запись
+    processingPayments.delete(paymentId)
+    return {
+      success: false,
+      message: 'Payment already processed',
+    }
+  }
+  
+  // Проверяем, не обрабатывается ли этот платеж уже (после проверки БД)
   if (processingPayments.has(paymentId)) {
     console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} is already being processed, skipping duplicate call`)
     return {
