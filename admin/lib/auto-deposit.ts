@@ -115,11 +115,11 @@ export async function checkPendingRequestsForPayments(): Promise<void> {
         },
       })
       
-      // Фильтруем вручную для точного сравнения (до 1 копейки)
+      // Фильтруем вручную для точного сравнения (до 2 копеек для учета ошибок округления Decimal)
       const exactMatchingPayments = matchingPayments.filter((payment) => {
         const paymentAmount = parseFloat(payment.amount.toString())
         const diff = Math.abs(paymentAmount - requestAmount)
-        return diff < 0.01 // Точность до 1 копейки
+        return diff < 0.02 // Точность до 2 копеек для учета возможных ошибок округления
       })
 
       console.log(`🔍 [Auto-Deposit Check] Found ${matchingPayments.length} potential matching payments (before exact filter), ${exactMatchingPayments.length} exact matches for request ${request.id}`)
@@ -252,10 +252,10 @@ export async function matchAndProcessPayment(
     }
     
     // Обрабатываем все заявки независимо от возраста
-    // Точное сравнение суммы (до 1 копейки)
+    // Точное сравнение суммы (до 2 копеек для учета ошибок округления Decimal)
     const reqAmount = parseFloat(req.amount.toString())
     const diff = Math.abs(reqAmount - amount)
-    const isMatch = diff < 0.01 // Точность до 1 копейки
+    const isMatch = diff < 0.02 // Точность до 2 копеек для учета возможных ошибок округления
     
     const requestAge = Date.now() - req.createdAt.getTime()
     const requestAgeMinutes = requestAge / (60 * 1000)

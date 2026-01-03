@@ -217,11 +217,32 @@ async function processEmail(
             console.log(`✅ IncomingPayment saved: ID ${incomingPayment.id}`)
 
             // Пытаемся найти совпадение и автоматически пополнить баланс
-            const matchResult = await matchAndProcessPayment(incomingPayment.id, amount)
+            let matchResult = await matchAndProcessPayment(incomingPayment.id, amount)
             if (matchResult.success) {
               console.log(`✅ Auto-deposit completed for payment ${incomingPayment.id}, request ${matchResult.requestId}`)
             } else {
-              console.log(`ℹ️ No matching request found for payment ${incomingPayment.id} (amount: ${amount})`)
+              console.log(`ℹ️ No matching request found for payment ${incomingPayment.id} (amount: ${amount}), will retry...`)
+              // Если заявка не найдена сразу, делаем несколько повторных попыток
+              // Это нужно на случай, если заявка создается одновременно или сразу после платежа
+              for (let attempt = 1; attempt <= 3; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, 300 * attempt)) // Задержка увеличивается: 300ms, 600ms, 900ms
+                matchResult = await matchAndProcessPayment(incomingPayment.id, amount)
+                if (matchResult.success) {
+                  console.log(`✅ Auto-deposit completed on retry ${attempt} for payment ${incomingPayment.id}, request ${matchResult.requestId}`)
+                  break
+                }
+              }
+              // Если все попытки не удались, запускаем общую проверку заявок
+              if (!matchResult.success) {
+                setTimeout(async () => {
+                  try {
+                    const { checkPendingRequestsForPayments } = await import('./auto-deposit')
+                    await checkPendingRequestsForPayments()
+                  } catch (error: any) {
+                    console.warn(`⚠️ Final retry check failed for payment ${incomingPayment.id}:`, error.message)
+                  }
+                }, 1000) // Финальная попытка через 1 секунду
+              }
             }
 
             // СРАЗУ помечаем письмо как прочитанное ПОСЛЕ успешной обработки
