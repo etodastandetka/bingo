@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { DatePicker } from '@/components/DatePicker'
 
 interface CasinoStats {
   depositsSum: number
@@ -58,11 +59,22 @@ export default function StatisticsPage() {
   const searchParams = useSearchParams()
   const [stats, setStats] = useState<StatisticsData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showCalendar, setShowCalendar] = useState(false)
-  const [selectedDates, setSelectedDates] = useState<Date[]>([])
-  const calendarRef = useRef<HTMLDivElement | null>(null)
-  const calendarContainerRef = useRef<HTMLDivElement | null>(null)
-  const fpInstanceRef = useRef<any>(null)
+  const [selectedDateRange, setSelectedDateRange] = useState<{ from: string; to: string } | string | null>(null)
+
+  // Инициализируем selectedDateRange из URL параметров
+  useEffect(() => {
+    const startDate = searchParams.get('startDate')
+    const endDate = searchParams.get('endDate')
+    const date = searchParams.get('date')
+    
+    if (startDate && endDate) {
+      setSelectedDateRange({ from: startDate, to: endDate })
+    } else if (date) {
+      setSelectedDateRange(date)
+    } else {
+      setSelectedDateRange(null)
+    }
+  }, [searchParams])
 
   const fetchStats = useCallback(async () => {
     setLoading(true)
@@ -120,125 +132,22 @@ export default function StatisticsPage() {
     }
   }, [searchParams, fetchStats])
 
-  useEffect(() => {
-    // Initialize flatpickr when calendar is shown
-    if (!showCalendar || !calendarContainerRef.current) return
-
-    const loadFlatpickr = async () => {
-      // Load CSS
-      const existingLink = document.querySelector('link[href*="flatpickr"]')
-      if (!existingLink) {
-        const link = document.createElement('link')
-        link.rel = 'stylesheet'
-        link.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css'
-        document.head.appendChild(link)
-      }
-
-      // Load JS
-      if (!(window as any).flatpickr) {
-        const script = document.createElement('script')
-        script.src = 'https://cdn.jsdelivr.net/npm/flatpickr'
-        script.onload = initFlatpickr
-        document.body.appendChild(script)
-      } else {
-        initFlatpickr()
-      }
-    }
-
-    const initFlatpickr = () => {
-      if (!(window as any).flatpickr || !calendarContainerRef.current) return
-
-      // Destroy old instance
-      if (fpInstanceRef.current) {
-        fpInstanceRef.current.destroy()
-        fpInstanceRef.current = null
-      }
-
-      const start = searchParams.get('startDate') || ''
-      const end = searchParams.get('endDate') || ''
-      const initialDates = start && end ? [start, end] : []
-      if (initialDates.length > 0) {
-        setSelectedDates(initialDates.map((d) => new Date(d)))
-      }
-
-      // Create temporary input for flatpickr
-      const tempInput = document.createElement('input')
-      tempInput.type = 'text'
-      tempInput.style.display = 'none'
-      calendarContainerRef.current.appendChild(tempInput)
-
-      fpInstanceRef.current = (window as any).flatpickr(tempInput, {
-        mode: 'range',
-        dateFormat: 'Y-m-d',
-        defaultDate: initialDates,
-        locale: {
-          rangeSeparator: ' — ',
-        },
-        inline: true,
-        appendTo: calendarContainerRef.current,
-        onChange: (dates: Date[]) => {
-          setSelectedDates(dates)
-        },
-        theme: 'dark',
-      })
-    }
-
-    loadFlatpickr()
-
-    return () => {
-      if (fpInstanceRef.current) {
-        fpInstanceRef.current.destroy()
-        fpInstanceRef.current = null
-      }
-    }
-  }, [showCalendar, searchParams])
-
-  const handleApplyDateRange = () => {
-    if (selectedDates.length === 2) {
-      const startDate = selectedDates[0].toISOString().split('T')[0]
-      const endDate = selectedDates[1].toISOString().split('T')[0]
+  const handleDateRangeChange = (value: { from: string; to: string } | string | null) => {
+    setSelectedDateRange(value)
+    
+    if (value && typeof value === 'object' && value.from && value.to) {
       const params = new URLSearchParams()
-      params.append('startDate', startDate)
-      params.append('endDate', endDate)
+      params.append('startDate', value.from)
+      params.append('endDate', value.to)
       router.push(`/dashboard/statistics?${params.toString()}`)
-      setShowCalendar(false)
-    } else if (selectedDates.length === 1) {
-      const date = selectedDates[0].toISOString().split('T')[0]
+    } else if (value && typeof value === 'string') {
       const params = new URLSearchParams()
-      params.append('date', date)
+      params.append('date', value)
       router.push(`/dashboard/statistics?${params.toString()}`)
-      setShowCalendar(false)
     } else {
       router.push('/dashboard/statistics')
-      setShowCalendar(false)
     }
   }
-
-  const handleClearDateRange = () => {
-    setSelectedDates([])
-    if (fpInstanceRef.current) {
-      fpInstanceRef.current.clear()
-    }
-    router.push('/dashboard/statistics')
-    setShowCalendar(false)
-  }
-
-  // Close calendar when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
-        setShowCalendar(false)
-      }
-    }
-
-    if (showCalendar) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showCalendar])
 
   if (loading) {
     return (
@@ -300,68 +209,14 @@ export default function StatisticsPage() {
         <div className="w-10"></div>
       </div>
 
-      {/* Date Range Picker with Calendar */}
-      <div className="mb-4 relative" ref={calendarRef}>
-        <div
-          onClick={() => setShowCalendar(!showCalendar)}
-          className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white cursor-pointer flex items-center justify-between hover:border-blue-500 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <span className="text-gray-300">
-              {stats.isDateRange && stats.startDate && stats.endDate
-                ? `${stats.startDate} — ${stats.endDate}`
-                : stats.date
-                ? stats.date
-                : 'Выберите период'}
-            </span>
-          </div>
-          <svg
-            className={`w-5 h-5 text-gray-400 transition-transform ${showCalendar ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-
-        {/* Calendar Dropdown */}
-        {showCalendar && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
-            <div className="p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span className="text-sm text-gray-400">Выберите период</span>
-              </div>
-              {/* Calendar container */}
-              <div ref={calendarContainerRef} className="mb-3"></div>
-              {selectedDates.length > 0 && (
-                <div className="text-xs text-gray-500 mb-3 text-center">
-                  Период выбран
-                </div>
-              )}
-              <div className="flex gap-2 pt-3 border-t border-gray-700">
-                <button
-                  onClick={handleApplyDateRange}
-                  className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-                >
-                  Применить
-                </button>
-                <button
-                  onClick={handleClearDateRange}
-                  className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-                >
-                  Сбросить
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+      {/* Date Range Picker */}
+      <div className="mb-4">
+        <DatePicker 
+          value={selectedDateRange || undefined} 
+          onChange={handleDateRangeChange} 
+          range={true}
+          placeholder="Выберите период"
+        />
       </div>
 
       {/* General Statistics Cards */}

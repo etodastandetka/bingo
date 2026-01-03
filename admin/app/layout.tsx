@@ -5,6 +5,25 @@ import ChunkErrorHandler from '@/components/ChunkErrorHandler'
 export const metadata: Metadata = {
   title: 'Bingo Admin Panel',
   description: 'Admin panel for Bingo bot management',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Bingo Admin',
+  },
+  icons: {
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+  },
+}
+
+export const viewport = {
+  themeColor: '#3b82f6',
 }
 
 export default function RootLayout({
@@ -15,6 +34,13 @@ export default function RootLayout({
   return (
     <html lang="ru" suppressHydrationWarning>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Bingo Admin" />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -274,6 +300,19 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         <ChunkErrorHandler />
         {children}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                  navigator.serviceWorker.register('/sw.js')
+                    .then((reg) => console.log('Service Worker registered', reg))
+                    .catch((err) => console.log('Service Worker registration failed', err));
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   )

@@ -22,11 +22,38 @@ export default function MenuPage() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
-      router.push('/login')
-      router.refresh()
+      // Очищаем все данные перед выходом
+      const response = await fetch('/api/auth/logout', { 
+        method: 'POST',
+        credentials: 'include'
+      })
+      
+      // Убеждаемся, что запрос выполнен
+      if (response.ok || response.status === 200) {
+        // Очищаем localStorage и sessionStorage
+        if (typeof window !== 'undefined') {
+          localStorage.clear()
+          sessionStorage.clear()
+        }
+        
+        // Перенаправляем на страницу логина
+        window.location.href = '/login'
+      } else {
+        // Даже если запрос не удался, все равно перенаправляем
+        if (typeof window !== 'undefined') {
+          localStorage.clear()
+          sessionStorage.clear()
+          window.location.href = '/login'
+        }
+      }
     } catch (error) {
       console.error('Logout error:', error)
+      // В случае ошибки все равно перенаправляем на логин
+      if (typeof window !== 'undefined') {
+        localStorage.clear()
+        sessionStorage.clear()
+        window.location.href = '/login'
+      }
     }
   }
 

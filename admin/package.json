@@ -19,7 +19,8 @@
     "test:operator-chat-direct": "tsx scripts/test-chat-direct.ts",
     "init:quick-replies": "tsx scripts/init-quick-replies.ts",
     "start:email-watcher": "tsx scripts/start-email-watcher.ts",
-    "enable-autodeposit": "tsx scripts/enable-autodeposit.ts"
+    "enable-autodeposit": "tsx scripts/enable-autodeposit.ts",
+    "generate-icons": "node scripts/generate-pwa-icons.js"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
@@ -42,6 +43,7 @@
     "@types/react": "18.2.66",
     "@types/react-dom": "18.2.22",
     "autoprefixer": "10.4.20",
+    "canvas": "^3.2.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.4",
     "postcss": "8.4.47",
