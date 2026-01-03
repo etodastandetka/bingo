@@ -277,6 +277,8 @@ async function processEmail(
 
 /**
  * Проверка всех непрочитанных писем (для первого запуска после перезапуска)
+ * Просто помечает все непрочитанные письма как прочитанные, не обрабатывая их
+ * Это ускоряет запуск и предотвращает обработку старых писем
  */
 async function checkAllUnreadEmails(settings: WatcherSettings): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -303,7 +305,7 @@ async function checkAllUnreadEmails(settings: WatcherSettings): Promise<void> {
         }
 
         // Ищем ВСЕ непрочитанные письма (без фильтра по дате)
-        console.log('🔍 Checking all unread emails (first run after restart)...')
+        console.log('🔍 Marking all unread emails as read (first run after restart)...')
         imap.search(['UNSEEN'], (err: Error | null, results?: number[]) => {
           if (err) {
             reject(err)
@@ -318,29 +320,22 @@ async function checkAllUnreadEmails(settings: WatcherSettings): Promise<void> {
             return
           }
 
-          console.log(`📬 Found ${results.length} unread email(s) - processing all...`)
+          console.log(`📬 Found ${results.length} unread email(s) - marking as read (skipping processing)...`)
 
-          const processSequentially = async () => {
-            for (const uid of results!) {
-              try {
-                await processEmail(imap, uid, settings)
-              } catch (error: any) {
-                console.error(`❌ Error processing email UID ${uid}:`, error.message)
-              }
+          // Просто помечаем все письма как прочитанные, не обрабатывая их
+          imap.setFlags(results, ['\\Seen'], (err: Error | null) => {
+            if (err) {
+              console.error(`❌ Error marking emails as read:`, err)
+              imap.end()
+              reject(err)
+              return
             }
-          }
-
-          processSequentially()
-            .then(() => {
-              consecutiveNetworkErrors = 0
-              console.log(`✅ Finished processing ${results.length} unread email(s)`)
-              imap.end()
-              resolve()
-            })
-            .catch((error) => {
-              imap.end()
-              reject(error)
-            })
+            
+            consecutiveNetworkErrors = 0
+            console.log(`✅ Marked ${results.length} unread email(s) as read (skipped processing)`)
+            imap.end()
+            resolve()
+          })
         })
       })
     })
@@ -369,7 +364,62 @@ async function checkAllUnreadEmails(settings: WatcherSettings): Promise<void> {
 }
 
 /**
- * Проверка новых писем (только за последние 15 минут)
+ * Проверка новых писем с использованием уже открытого соединения
+ * Это намного быстрее, чем создание нового соединения каждый раз
+ */
+async function checkEmailsWithConnection(imap: Imap, settings: WatcherSettings): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Используем уже открытое соединение imap
+    // Ищем непрочитанные письма за последние 30 минут
+    const thirtyMinutesAgo = new Date()
+    thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30)
+    const searchDate = [
+      'SINCE',
+      thirtyMinutesAgo.toISOString().split('T')[0].replace(/-/g, '-')
+    ]
+    
+    // Ищем только UNSEEN (непрочитанные) письма за последние 30 минут
+    imap.search(['UNSEEN', searchDate], (err: Error | null, results?: number[]) => {
+      if (err) {
+        reject(err)
+        return
+      }
+
+      if (!results || results.length === 0) {
+        resolve()
+        return
+      }
+
+      console.log(`📬 Found ${results.length} unread email(s) (since ${thirtyMinutesAgo.toISOString().split('T')[0]})`)
+
+      // Обрабатываем каждое письмо последовательно (не параллельно), чтобы избежать конфликтов
+      const processSequentially = async () => {
+        for (const uid of results!) {
+          try {
+            await processEmail(imap, uid, settings)
+          } catch (error: any) {
+            console.error(`❌ Error processing email UID ${uid}:`, error.message)
+            // Продолжаем обработку остальных писем даже при ошибке
+          }
+        }
+      }
+
+      processSequentially()
+        .then(() => {
+          // Сбрасываем счетчик при успешной обработке
+          consecutiveNetworkErrors = 0
+          resolve()
+        })
+        .catch((error) => {
+          reject(error)
+        })
+    })
+  })
+}
+
+/**
+ * Проверка новых писем (только за последние 30 минут)
+ * Создает новое соединение - используется только для одноразовых проверок
  */
 async function checkEmails(settings: WatcherSettings): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -523,11 +573,11 @@ async function startIdleModeWithTracking(settings: WatcherSettings): Promise<voi
         console.log('🔄 Starting IDLE mode (real-time monitoring)...')
         console.log('⏰ Watcher is now actively listening for new emails...')
 
-        // Слушаем события о новых письмах
+        // Слушаем события о новых письмах - используем уже открытое соединение
         imap.on('mail', async () => {
           console.log('📬 New email detected! Processing...')
           try {
-            await checkEmails(settings)
+            await checkEmailsWithConnection(imap, settings)
             // Сбрасываем счетчик при успешной обработке
             consecutiveNetworkErrors = 0
           } catch (error: any) {
@@ -568,7 +618,7 @@ async function startIdleModeWithTracking(settings: WatcherSettings): Promise<voi
               return
             }
             
-            await checkEmails(settings)
+            await checkEmailsWithConnection(imap, settings)
           } catch (error: any) {
             if (error.message === 'WALLET_CHANGED') {
               // Это не ошибка, а сигнал для переподключения
