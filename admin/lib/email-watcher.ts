@@ -481,6 +481,13 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
  * IDLE режим для реального времени (реакция на новые письма мгновенно)
  */
 async function startIdleMode(settings: WatcherSettings): Promise<void> {
+  return startIdleModeWithTracking(settings)
+}
+
+/**
+ * IDLE режим с отслеживанием соединения для возможности переподключения при смене активного кошелька
+ */
+async function startIdleModeWithTracking(settings: WatcherSettings): Promise<void> {
   return new Promise((resolve, reject) => {
     const imap = new Imap({
       user: settings.email,
@@ -496,6 +503,8 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
       authTimeout: 10000, // Таймаут авторизации 10 секунд
     })
 
+    // Сохраняем соединение и интервалы в глобальные переменные
+    currentImap = imap
     let idleInterval: NodeJS.Timeout | null = null
     let keepAliveInterval: NodeJS.Timeout | null = null
 
@@ -546,8 +555,25 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
         // Это почти как реальное время, но с небольшой задержкой
         idleInterval = setInterval(async () => {
           try {
+            // Проверяем, не изменились ли учетные данные активного кошелька
+            const newSettings = await getWatcherSettings()
+            if (newSettings.email !== settings.email || newSettings.password !== settings.password) {
+              console.log('🔄 Active wallet changed during polling! Reconnecting...')
+              if (idleInterval) clearInterval(idleInterval)
+              if (keepAliveInterval) clearInterval(keepAliveInterval)
+              imap.end()
+              // Выбрасываем специальную ошибку для переподключения
+              reject(new Error('WALLET_CHANGED'))
+              return
+            }
+            
             await checkEmails(settings)
           } catch (error: any) {
+            if (error.message === 'WALLET_CHANGED') {
+              // Это не ошибка, а сигнал для переподключения
+              reject(error)
+              return
+            }
             if (error.textCode === 'AUTHENTICATIONFAILED') {
               console.error('❌ Authentication failed in polling!')
               console.error('   Check email/password in active requisite')
@@ -579,6 +605,10 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
           }
         }, 5000) // Проверка каждые 5 секунд вместо 60
         
+        // Сохраняем интервалы в глобальные переменные
+        currentIdleInterval = idleInterval
+        currentKeepAliveInterval = keepAliveInterval
+        
         // Keepalive: каждые 29 минут проверяем соединение
         keepAliveInterval = setInterval(() => {
           if (imap && imap.state !== 'authenticated') {
@@ -597,6 +627,9 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
         console.error(`   Password: ${settings.password ? '✓ set' : '✗ missing'}`)
         if (idleInterval) clearInterval(idleInterval)
         if (keepAliveInterval) clearInterval(keepAliveInterval)
+        currentImap = null
+        currentIdleInterval = null
+        currentKeepAliveInterval = null
         reject(err)
       } else if ((err as any).code === 'ENOTFOUND' || (err as any).code === 'ETIMEDOUT' || (err as any).code === 'ECONNREFUSED') {
         // Сетевые ошибки - не критичные, логируем с rate limiting
@@ -616,6 +649,9 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
         consecutiveNetworkErrors = 0 // Сбрасываем при других ошибках
         if (idleInterval) clearInterval(idleInterval)
         if (keepAliveInterval) clearInterval(keepAliveInterval)
+        currentImap = null
+        currentIdleInterval = null
+        currentKeepAliveInterval = null
         reject(err)
       }
     })
@@ -624,6 +660,12 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
       console.log('⚠️ IMAP connection ended, reconnecting...')
       if (idleInterval) clearInterval(idleInterval)
       if (keepAliveInterval) clearInterval(keepAliveInterval)
+      // Очищаем глобальные переменные только если это текущее соединение
+      if (currentImap === imap) {
+        currentImap = null
+        currentIdleInterval = null
+        currentKeepAliveInterval = null
+      }
       resolve()
     })
 
@@ -658,6 +700,37 @@ async function checkTimeouts(): Promise<void> {
 
 // Флаг для отслеживания первого запуска после перезапуска
 let isFirstRun = true
+
+// Текущие учетные данные для отслеживания изменений
+let currentEmail: string | null = null
+let currentPassword: string | null = null
+let currentImap: Imap | null = null
+let currentIdleInterval: NodeJS.Timeout | null = null
+let currentKeepAliveInterval: NodeJS.Timeout | null = null
+
+/**
+ * Закрытие текущего IMAP соединения
+ */
+function closeCurrentConnection(): void {
+  if (currentIdleInterval) {
+    clearInterval(currentIdleInterval)
+    currentIdleInterval = null
+  }
+  if (currentKeepAliveInterval) {
+    clearInterval(currentKeepAliveInterval)
+    currentKeepAliveInterval = null
+  }
+  if (currentImap) {
+    try {
+      if (currentImap.state !== 'disconnected' && currentImap.state !== 'end') {
+        currentImap.end()
+      }
+    } catch (error) {
+      // Игнорируем ошибки при закрытии
+    }
+    currentImap = null
+  }
+}
 
 /**
  * Запуск watcher в режиме реального времени (IDLE)
@@ -704,6 +777,13 @@ export async function startWatcher(): Promise<void> {
 
       if (!settings.enabled) {
         console.log('⏸️ Autodeposit is disabled, waiting 30 seconds...')
+        // Закрываем соединение если оно открыто
+        if (currentEmail || currentPassword) {
+          console.log('🔌 Closing IMAP connection (autodeposit disabled)...')
+          closeCurrentConnection()
+          currentEmail = null
+          currentPassword = null
+        }
         await new Promise((resolve) => setTimeout(resolve, 30000))
         continue
       }
@@ -712,34 +792,80 @@ export async function startWatcher(): Promise<void> {
         console.warn('⚠️ IMAP credentials not configured!')
         console.warn('   Please set email and password in the active requisite (BotRequisite with isActive=true)')
         console.warn('   Waiting 30 seconds...')
+        // Закрываем соединение если оно открыто
+        if (currentEmail || currentPassword) {
+          console.log('🔌 Closing IMAP connection (credentials missing)...')
+          closeCurrentConnection()
+          currentEmail = null
+          currentPassword = null
+        }
         await new Promise((resolve) => setTimeout(resolve, 30000))
         continue
       }
 
-      console.log(`📧 Connecting to ${settings.imapHost} (${settings.email})...`)
-
-      // При первом запуске обрабатываем ВСЕ непрочитанные письма
-      if (isFirstRun) {
-        console.log('🔄 First run detected - processing all unread emails...')
+      // Проверяем, изменились ли учетные данные
+      const emailChanged = currentEmail !== settings.email
+      const passwordChanged = currentPassword !== settings.password
+      
+      if (emailChanged || passwordChanged) {
+        console.log('🔄 Active wallet changed! Reconnecting with new credentials...')
+        console.log(`   Old email: ${currentEmail || 'none'}`)
+        console.log(`   New email: ${settings.email}`)
+        
+        // Закрываем старое соединение
+        closeCurrentConnection()
+        
+        // Обновляем текущие учетные данные
+        currentEmail = settings.email
+        currentPassword = settings.password
+        
+        // Обрабатываем все непрочитанные письма с новыми учетными данными
+        console.log('🔄 Processing all unread emails with new wallet...')
         try {
           await checkAllUnreadEmails(settings)
-          console.log('✅ Finished processing all unread emails, switching to real-time mode...')
+          console.log('✅ Finished processing all unread emails with new wallet')
         } catch (error: any) {
-          console.error('❌ Error processing unread emails on first run:', error.message)
-          // Продолжаем работу даже если обработка непрочитанных писем не удалась
+          console.error('❌ Error processing unread emails with new wallet:', error.message)
+          // Продолжаем работу даже если обработка не удалась
         }
-        isFirstRun = false
+      } else if (!currentEmail && !currentPassword) {
+        // Первое подключение
+        currentEmail = settings.email
+        currentPassword = settings.password
+        
+        // При первом запуске обрабатываем ВСЕ непрочитанные письма
+        if (isFirstRun) {
+          console.log('🔄 First run detected - processing all unread emails...')
+          try {
+            await checkAllUnreadEmails(settings)
+            console.log('✅ Finished processing all unread emails, switching to real-time mode...')
+          } catch (error: any) {
+            console.error('❌ Error processing unread emails on first run:', error.message)
+            // Продолжаем работу даже если обработка непрочитанных писем не удалась
+          }
+          isFirstRun = false
+        }
       }
+
+      console.log(`📧 Connecting to ${settings.imapHost} (${settings.email})...`)
 
       // Запускаем IDLE режим (реальное время)
       try {
-        await startIdleMode(settings)
+        await startIdleModeWithTracking(settings)
       } catch (error: any) {
-        if (error.textCode === 'AUTHENTICATIONFAILED') {
+        if (error.message === 'WALLET_CHANGED') {
+          // Активный кошелек изменился - сразу переподключаемся без задержки
+          console.log('🔄 Wallet changed detected, reconnecting immediately...')
+          continue
+        } else if (error.textCode === 'AUTHENTICATIONFAILED') {
           console.error('❌ IMAP Authentication Failed!')
           console.error('   Please check email and password in the active requisite')
           console.error(`   Email: ${settings.email ? '✓ set' : '✗ missing'}`)
           console.error(`   Password: ${settings.password ? '✓ set' : '✗ missing'}`)
+          // Сбрасываем текущие учетные данные при ошибке аутентификации
+          currentEmail = null
+          currentPassword = null
+          closeCurrentConnection()
           console.error('   Waiting 60 seconds before retry...')
           await new Promise((resolve) => setTimeout(resolve, 60000))
         } else {
