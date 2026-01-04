@@ -672,39 +672,18 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             # Сохраняем ID сообщения с QR-кодом для возможности удаления и обновления
             await state.update_data(qr_message_id=qr_message.message_id)
             
-            # Создаем заявку со статусом pending при показе QR-кода (без фото чека)
+            # ВАЖНО: НЕ создаем заявку при показе QR кода
+            # Заявка будет создана только когда пользователь отправит фото чека
+            # Это предотвращает блокировку новых заявок
             pending_request_id = None
-            try:
-                pending_request_result = await APIClient.create_request(
-                    telegram_user_id=str(message.from_user.id),
-                    request_type='deposit',
-                    amount=amount_with_cents,
-                    bookmaker=casino_id,
-                    bank='omoney',  # По умолчанию omoney
-                    account_id=account_id,
-                    telegram_username=message.from_user.username,
-                    telegram_first_name=message.from_user.first_name,
-                    telegram_last_name=message.from_user.last_name,
-                    receipt_photo=None,  # Без фото чека - заявка будет pending
-                    bot_type=Config.BOT_TYPE
-                )
-                if pending_request_result.get('success') and pending_request_result.get('data', {}).get('id'):
-                    pending_request_id = pending_request_result.get('data', {}).get('id')
-                    await state.update_data(pending_request_id=str(pending_request_id))
-                    logger.info(f"[Deposit] Created pending request {pending_request_id} when showing QR code")
-            except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(f"Failed to create pending request: {e}")
-                # Продолжаем работу даже если не удалось создать заявку
             
             # Запускаем фоновую задачу для обновления таймера
             import logging
             logger = logging.getLogger(__name__)
             # Таймер обновляет только текст, без клавиатуры
-            # Передаем request_id для автоматического отклонения при истечении
-            timer_task = asyncio.create_task(update_qr_timer(bot, message.chat.id, qr_message.message_id, qr_created_at, timer_duration, lang, amount_with_cents, data.get("casino_name"), account_id, keyboard, state, str(pending_request_id) if pending_request_id else None))
-            logger.info(f"[Timer] Created timer task for message {qr_message.message_id}, chat {message.chat.id}, request_id={pending_request_id}")
+            # request_id не передаем, так как заявка еще не создана
+            timer_task = asyncio.create_task(update_qr_timer(bot, message.chat.id, qr_message.message_id, qr_created_at, timer_duration, lang, amount_with_cents, data.get("casino_name"), account_id, keyboard, state, None))
+            logger.info(f"[Timer] Created timer task for message {qr_message.message_id}, chat {message.chat.id}")
             
             # Добавляем обработку ошибок для задачи
             def timer_task_done(task):
@@ -823,7 +802,6 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
         account_id = data.get('account_id')
         amount = data.get('amount')
         bank_id = data.get('bank_id', 'omoney')  # По умолчанию omoney
-        pending_request_id = data.get('pending_request_id')
         
         if not all([casino_id, account_id, amount]):
             await message.answer(get_text(lang, 'deposit', 'error'))
@@ -832,53 +810,9 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
             await cmd_start(message, state, bot)
             return
         
-        # Если есть pending заявка - обновляем её, добавляя фото чека
-        # Если нет - создаем новую заявку с фото чека
-        if pending_request_id:
-            # Обновляем существующую pending заявку, добавляя фото чека
-            import aiohttp
-            import ssl
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-            async with aiohttp.ClientSession(connector=connector) as session:
-                api_url = Config.API_BASE_URL
-                if api_url.startswith('http://localhost'):
-                    try:
-                        async with session.put(
-                            f'{api_url}/payment',
-                            json={
-                                'id': pending_request_id,
-                                'receipt_photo': photo_base64_with_prefix,
-                            },
-                            timeout=aiohttp.ClientTimeout(total=5)
-                        ) as response:
-                            result = await response.json()
-                    except:
-                        api_url = Config.API_FALLBACK_URL
-                        async with session.put(
-                            f'{api_url}/payment',
-                            json={
-                                'id': pending_request_id,
-                                'receipt_photo': photo_base64_with_prefix,
-                            },
-                            timeout=aiohttp.ClientTimeout(total=5)
-                        ) as response:
-                            result = await response.json()
-                else:
-                    async with session.put(
-                        f'{api_url}/payment',
-                        json={
-                            'id': pending_request_id,
-                            'receipt_photo': photo_base64_with_prefix,
-                        },
-                        timeout=aiohttp.ClientTimeout(total=5)
-                    ) as response:
-                        result = await response.json()
-        else:
-            # Создаем новую заявку с фото чека
-            result = await APIClient.create_request(
+        # ВАЖНО: Создаем заявку только при отправке фото чека
+        # Заявка НЕ создается при показе QR кода, чтобы не блокировать новые заявки
+        result = await APIClient.create_request(
                 telegram_user_id=str(message.from_user.id),
                 request_type='deposit',
                 amount=amount,
