@@ -755,23 +755,8 @@ export default function RequestDetailPage() {
     }
   }
 
-  // Автоподгрузка поступлений в фоне, чтобы не сбрасывать выбор
-  useEffect(() => {
-    // Автоматический поиск для всех депозитов (не только pending/deferred)
-    const canAutoFetch =
-      request &&
-      request.requestType === 'deposit' &&
-      searchAmount.trim()
-
-    if (!canAutoFetch) return
-
-    const interval = setInterval(() => {
-      handleSearchPaymentsWithAmount(searchAmount)
-    }, 5000) // каждые 5 секунд
-
-    return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request?.id, request?.requestType, searchAmount, exactAmount, processedOnly])
+  // УБРАНО: Автоподгрузка поступлений в фоне - теперь поиск выполняется только по кнопке "Найти"
+  // Это предотвращает конфликты с ручным поиском пользователя
 
   const handleSearchPayments = async () => {
     if (!searchAmount.trim()) {

@@ -40,15 +40,15 @@ export async function GET(request: NextRequest) {
     const where: any = {}
 
     if (exactAmount) {
-      // Когда "Точная сумма" включена - ищем по целой части (например, все пополнения на 100.XX)
+      // Когда "Точная сумма" включена - ищем ТОЧНОЕ совпадение суммы (400.63 = 400.63)
+      where.amount = amountValue
+    } else {
+      // Когда "Точная сумма" выключена - ищем по целой части (например, все пополнения на 400.XX)
       const wholePart = Math.floor(amountValue)
       where.amount = {
         gte: wholePart,
         lt: wholePart + 1,
       }
-    } else {
-      // Когда "Точная сумма" выключена - ищем точное совпадение суммы
-      where.amount = amountValue
     }
 
     // Фильтр по обработанным: 
