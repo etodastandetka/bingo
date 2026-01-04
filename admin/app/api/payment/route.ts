@@ -981,7 +981,7 @@ export async function PUT(request: NextRequest) {
     const isNotProcessed = existingRequest.processedBy !== 'автопополнение'
     const hasNoProcessedPayments = !existingRequest.incomingPayments?.length
 
-    if (isFirstReceipt && isPendingDeposit && isNotProcessed && hasNoProcessedPayments) {
+    if (isFirstReceipt && isPendingDeposit && isNotProcessed && hasNoProcessedPayments && updatedRequest.amount) {
       const requestAmount = parseFloat(updatedRequest.amount.toString())
       console.log(`🔍 Payment API PUT - First receipt added, checking payments for request ${updatedRequest.id}, amount: ${requestAmount}`)
       
