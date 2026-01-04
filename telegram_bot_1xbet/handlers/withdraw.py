@@ -51,16 +51,25 @@ async def withdraw_start(message: Message, state: FSMContext):
     """Начало процесса вывода - автоматически выбираем 1xbet"""
     lang = await get_lang_from_state(state)
     
-    # Проверяем блокировку пользователя
+    # ВАЖНО: Проверяем блокировку пользователя СРАЗУ, до начала процесса
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
     try:
-        blocked_check = await APIClient.check_blocked(str(message.from_user.id))
+        blocked_check = await asyncio.wait_for(
+            APIClient.check_blocked(str(message.from_user.id)),
+            timeout=2.0  # Максимум 2 секунды на проверку
+        )
         if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
             blocked_data = blocked_check.get('data', {})
             blocked_message = blocked_data.get('message', 'Вы заблокированы')
             await message.answer(blocked_message)
             return
+    except asyncio.TimeoutError:
+        logger.warning(f"[Withdraw] Timeout checking blocked status for user {message.from_user.id}, continuing...")
+        # Продолжаем работу при таймауте
     except Exception as e:
-        print(f"Error checking blocked status: {e}")
+        logger.error(f"[Withdraw] Error checking blocked status: {e}")
         # Продолжаем работу, если проверка не удалась
     
     # Получаем настройки из админки
@@ -320,16 +329,25 @@ async def withdraw_account_id_received(message: Message, state: FSMContext, bot:
         await message.answer('❌ Пожалуйста, отправьте корректный ID счета (только цифры)')
         return
     
-    # Проверяем блокировку accountId
+    # ВАЖНО: Проверяем блокировку accountId с таймаутом для быстрой проверки
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
     try:
-        blocked_check = await APIClient.check_blocked(str(message.from_user.id), account_id)
+        blocked_check = await asyncio.wait_for(
+            APIClient.check_blocked(str(message.from_user.id), account_id),
+            timeout=2.0  # Максимум 2 секунды на проверку
+        )
         if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
             blocked_data = blocked_check.get('data', {})
             blocked_message = blocked_data.get('message', 'Аккаунт заблокирован')
             await message.answer(blocked_message)
             return
+    except asyncio.TimeoutError:
+        logger.warning(f"[Withdraw] Timeout checking blocked accountId for user {message.from_user.id}")
+        # Продолжаем работу при таймауте
     except Exception as e:
-        print(f"Error checking blocked accountId: {e}")
+        logger.error(f"[Withdraw] Error checking blocked accountId: {e}")
         # Продолжаем работу, если проверка не удалась
     
     await state.update_data(account_id=account_id)

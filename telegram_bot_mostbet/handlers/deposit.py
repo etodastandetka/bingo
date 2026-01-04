@@ -155,8 +155,30 @@ async def get_lang_from_state(state: FSMContext) -> str:
 @router.message(F.text.in_(['💰 Пополнить', '💰 Толтуруу']))
 async def deposit_start(message: Message, state: FSMContext):
     """Начало процесса пополнения - автоматически выбираем Mostbet"""
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Сохраняем язык перед очисткой состояния
     lang = await get_lang_from_state(state)
+    
+    # ВАЖНО: Проверяем блокировку пользователя СРАЗУ, до начала процесса
+    try:
+        blocked_check = await asyncio.wait_for(
+            APIClient.check_blocked(str(message.from_user.id)),
+            timeout=2.0  # Максимум 2 секунды на проверку
+        )
+        if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
+            blocked_data = blocked_check.get('data', {})
+            blocked_message = blocked_data.get('message', 'Вы заблокированы')
+            await message.answer(blocked_message)
+            return
+    except asyncio.TimeoutError:
+        logger.warning(f"[Deposit] Timeout checking blocked status for user {message.from_user.id}, continuing...")
+        # Продолжаем работу при таймауте
+    except Exception as e:
+        logger.error(f"[Deposit] Error checking blocked status: {e}")
+        # Продолжаем работу, если проверка не удалась
     
     # Очищаем предыдущее состояние (если была незавершенная операция)
     await state.clear()
@@ -288,6 +310,24 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
     if not account_id or not account_id.isdigit():
         await message.answer(get_text(lang, 'deposit', 'invalid_account_id'))
         return
+
+    # ВАЖНО: Проверяем блокировку accountId ПЕРЕД сохранением
+    try:
+        blocked_check = await asyncio.wait_for(
+            APIClient.check_blocked(str(message.from_user.id), account_id),
+            timeout=2.0  # Максимум 2 секунды на проверку
+        )
+        if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
+            blocked_data = blocked_check.get('data', {})
+            blocked_message = blocked_data.get('message', 'Аккаунт заблокирован')
+            await message.answer(blocked_message)
+            return
+    except asyncio.TimeoutError:
+        logger.warning(f"[Deposit] Timeout checking blocked accountId for user {message.from_user.id}")
+        # Продолжаем работу при таймауте
+    except Exception as e:
+        logger.error(f"[Deposit] Error checking blocked accountId: {e}")
+        # Продолжаем работу, если проверка не удалась
 
     # Получаем casino_id из state для сохранения
     data = await state.get_data()
