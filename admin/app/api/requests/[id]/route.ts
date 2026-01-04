@@ -2,21 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, createApiResponse } from '@/lib/api-helpers'
 import { sendNotificationToUser, formatDepositMessage, formatWithdrawMessage, formatRejectMessage, getAdminUsername, sendMainMenuToUser } from '@/lib/send-notification'
+import { formatDateTimeBishkek } from '@/lib/date-utils'
 
 // Отключаем кеширование для актуальных данных
 export const dynamic = 'force-dynamic'
 
-const formatDateTime = (value?: string | Date | null) => {
-  if (!value) return '—'
-  const d = value instanceof Date ? value : new Date(String(value))
-  if (Number.isNaN(d.getTime())) return '—'
-  const day = String(d.getDate()).padStart(2, '0')
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const year = d.getFullYear()
-  const hours = String(d.getHours()).padStart(2, '0')
-  const minutes = String(d.getMinutes()).padStart(2, '0')
-  return `${day}.${month}.${year} • ${hours}:${minutes}`
-}
+const formatDateTime = formatDateTimeBishkek
 
 async function sendOperatorMessage(userId: bigint, text: string) {
   try {
