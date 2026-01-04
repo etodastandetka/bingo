@@ -1511,7 +1511,7 @@ export default function RequestDetailPage() {
 
       {/* Ошибка казино (если есть) */}
       {request.casinoError && (
-        <div className="mx-4 mb-4 bg-red-900 bg-opacity-30 rounded-2xl p-4 border border-red-700">
+        <div className="mx-4 mb-4 bg-red-900 bg-opacity-30 rounded-2xl p-4 border border-red-700 relative z-[60]">
           <div className="flex items-start space-x-3">
             <div className="flex-shrink-0 mt-0.5">
               <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1520,7 +1520,7 @@ export default function RequestDetailPage() {
             </div>
             <div className="flex-1">
               <h3 className="text-base font-semibold text-red-400 mb-2">Ошибка казино</h3>
-              <p className="text-sm text-red-300 whitespace-pre-wrap">{request.casinoError}</p>
+              <p className="text-sm text-red-300 whitespace-pre-wrap break-words">{request.casinoError}</p>
             </div>
           </div>
         </div>
