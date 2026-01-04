@@ -300,7 +300,12 @@ class APIClient:
                     # Если ошибка запроса, возвращаем пустой словарь
                     return {}
             except Exception as e:
-                # При любой ошибке возвращаем пустой словарь (не логируем, чтобы не засорять логи)
+                # Логируем только критичные ошибки (не связанные с парсингом JSON)
+                # Ошибки парсинга JSON уже обработаны выше
+                if 'JSON' not in str(e) and 'mimetype' not in str(e).lower():
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"⚠️ Error in get_payment_settings (non-JSON error): {e}")
                 return {}
     
     @staticmethod
