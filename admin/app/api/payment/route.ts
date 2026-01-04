@@ -657,12 +657,20 @@ export async function POST(request: NextRequest) {
       // Проверяем существующие платежи при создании заявки
       // Это нужно на случай, если платеж был обработан email-watcher'ом ДО создания заявки
       if (validType === 'deposit' && amountDecimal) {
+        const requestAmount = parseFloat(amountDecimal.toString())
+        console.log(`🔍 Payment API - Checking for existing payments for request ${newRequest.id}, amount: ${requestAmount}`)
         try {
           const { checkAndProcessExistingPayment } = await import('@/lib/auto-deposit')
-          await checkAndProcessExistingPayment(newRequest.id, parseFloat(amountDecimal.toString()))
+          const result = await checkAndProcessExistingPayment(newRequest.id, requestAmount)
+          if (result) {
+            console.log(`✅ Payment API - Auto-deposit check completed for request ${newRequest.id}`)
+          } else {
+            console.log(`ℹ️ Payment API - No matching payments found for request ${newRequest.id}`)
+          }
         } catch (autoDepositError: any) {
           // Не блокируем создание заявки если автопополнение не сработало
           console.warn('⚠️ Payment API - Auto-deposit check failed (non-blocking):', autoDepositError.message)
+          console.warn('⚠️ Payment API - Auto-deposit check error stack:', autoDepositError.stack)
         }
       }
 

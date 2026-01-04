@@ -25,15 +25,21 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       },
     })
     
+    console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in last 10 minutes for request ${requestId}`)
+    
     // Фильтруем по точному совпадению суммы
     const exactMatches = matchingPayments.filter((payment) => {
       const paymentAmount = parseFloat(payment.amount.toString())
       const diff = Math.abs(paymentAmount - amount)
-      return diff < 0.01 // Точность до 1 копейки
+      const matches = diff < 0.01 // Точность до 1 копейки
+      if (matches) {
+        console.log(`✅ [Auto-Deposit] Exact match found: Payment ${payment.id} (${paymentAmount}) ≈ Request ${requestId} (${amount}), diff: ${diff.toFixed(4)}`)
+      }
+      return matches
     })
     
     if (exactMatches.length === 0) {
-      console.log(`ℹ️ [Auto-Deposit] No matching payments found for request ${requestId} (amount: ${amount})`)
+      console.log(`ℹ️ [Auto-Deposit] No matching payments found for request ${requestId} (amount: ${amount}, checked ${matchingPayments.length} payments)`)
       return null
     }
     
