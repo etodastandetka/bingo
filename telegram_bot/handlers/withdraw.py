@@ -506,14 +506,15 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
         return
     
     try:
-        # Определяем botType по букмекеру: если 1xbet - то '1xbet', если mostbet - то 'mostbet', иначе используем BOT_TYPE из конфига
+        # ВАЖНО: Используем ТОЛЬКО BOT_TYPE из конфига, НЕ определяем по букмекеру
+        # Если заявка создана в основном боте, botType должен быть 'main', даже если букмекер = '1xbet'
+        # Если заявка создана в 1xbet боте, botType будет '1xbet' (из Config.BOT_TYPE)
+        # Если заявка создана в mostbet боте, botType будет 'mostbet' (из Config.BOT_TYPE)
         bot_type = Config.BOT_TYPE
-        if casino_id:
-            casino_lower = casino_id.lower()
-            if casino_lower == '1xbet' or casino_lower == '1xcasino':
-                bot_type = '1xbet'
-            elif casino_lower == 'mostbet':
-                bot_type = 'mostbet'
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[Withdraw] Using botType from Config: {bot_type} (casino: {casino_id})")
         
         # Создаем заявку на вывод
         request_data = await APIClient.create_request(
@@ -529,7 +530,7 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
             telegram_last_name=message.from_user.last_name,
             receipt_photo=data.get('qr_photo'),
             withdrawal_code=withdrawal_code,
-            bot_type=bot_type,  # Передаем botType для правильной отправки уведомлений
+            bot_type=bot_type,  # Передаем botType из конфига (main/1xbet/mostbet)
         )
         
         # Проверяем, не вернулась ли существующая заявка (дубликат)
