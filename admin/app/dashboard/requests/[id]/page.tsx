@@ -403,7 +403,7 @@ export default function RequestDetailPage() {
     }
   }
 
-  const getStatusLabel = (status: string) => {
+  const getStatusLabel = (status: string, requestData?: RequestDetail | null) => {
     switch (status) {
       case 'pending':
         return 'Ожидает'
@@ -422,8 +422,18 @@ export default function RequestDetailPage() {
         return 'Ручная'
       case 'processing':
         return 'Обработка'
+      case 'api_error':
+        // Для api_error показываем ошибку из statusDetail или casinoError
+        return requestData?.statusDetail || requestData?.casinoError || 'Ошибка API'
       default:
-        return 'Неизвестно'
+        // Для неизвестного статуса показываем ошибку, если она есть
+        if (requestData?.casinoError) {
+          return requestData.casinoError.length > 50 ? requestData.casinoError.substring(0, 50) + '...' : requestData.casinoError
+        }
+        if (requestData?.statusDetail) {
+          return requestData.statusDetail.length > 50 ? requestData.statusDetail.substring(0, 50) + '...' : requestData.statusDetail
+        }
+        return status || 'Неизвестно'
     }
   }
 
@@ -1081,12 +1091,12 @@ export default function RequestDetailPage() {
           </div>
           <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
             <div className={`w-1.5 h-1.5 rounded-full ${
-              getStatusLabel(request.status) === 'Успешно' ? 'bg-blue-600' :
-              getStatusLabel(request.status) === 'Отклонено' ? 'bg-red-600' :
-              getStatusLabel(request.status) === 'Отложено' ? 'bg-orange-600' :
+              getStatusLabel(request.status, request) === 'Успешно' ? 'bg-blue-600' :
+              getStatusLabel(request.status, request) === 'Отклонено' ? 'bg-red-600' :
+              getStatusLabel(request.status, request) === 'Отложено' ? 'bg-orange-600' :
               'bg-yellow-600'
             }`}></div>
-            {getStatusLabel(request.status)}
+            {getStatusLabel(request.status, request)}
           </div>
         </div>
 
@@ -1400,8 +1410,9 @@ export default function RequestDetailPage() {
                 </div>
               )}
 
-      {/* Постоянные кнопки подтверждения / отмены выбора (для депозитов в ожидании/отложенных) */}
-      {(request.status === 'pending' || request.status === 'deferred') && request.requestType === 'deposit' && (
+      {/* Постоянные кнопки подтверждения / отмены выбора (для депозитов) */}
+      {/* Показываем кнопки для всех статусов, чтобы можно было обработать ошибки */}
+      {request.requestType === 'deposit' && (
         <div className="mx-4 mb-4 flex space-x-3">
                 <button
             onClick={() => {
@@ -1426,8 +1437,9 @@ export default function RequestDetailPage() {
             </div>
       )}
 
-      {/* Кнопки подтверждения / отклонения для выводов в ожидании/отложенных */}
-      {(request.status === 'pending' || request.status === 'deferred') && request.requestType === 'withdraw' && (
+      {/* Кнопки подтверждения / отклонения для выводов */}
+      {/* Показываем кнопки для всех статусов, чтобы можно было обработать ошибки */}
+      {request.requestType === 'withdraw' && (
         <div className="mx-4 mb-4 flex space-x-3">
           <button
             onClick={() => {
@@ -1588,12 +1600,12 @@ export default function RequestDetailPage() {
             <span className="text-sm text-gray-400">Статус:</span>
             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${getStatusColor(request.status)}`}>
               <div className={`w-1.5 h-1.5 rounded-full ${
-                getStatusLabel(request.status) === 'Успешно' ? 'bg-blue-600' :
-                getStatusLabel(request.status) === 'Отклонено' ? 'bg-red-600' :
-                getStatusLabel(request.status) === 'Отложено' ? 'bg-orange-600' :
+                getStatusLabel(request.status, request) === 'Успешно' ? 'bg-blue-600' :
+                getStatusLabel(request.status, request) === 'Отклонено' ? 'bg-red-600' :
+                getStatusLabel(request.status, request) === 'Отложено' ? 'bg-orange-600' :
                 'bg-yellow-600'
               }`}></div>
-              {getStatusLabel(request.status)}
+              {getStatusLabel(request.status, request)}
             </span>
           </div>
         </div>
