@@ -96,6 +96,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
 
   // Оптимизированный поиск заявок - минимум запросов для максимальной скорости
   // Ищем за последние 10 минут чтобы учесть возможные задержки
+  // Обрабатываем ВСЕ заявки без ограничений
   const matchingRequests = await prisma.request.findMany({
     where: {
       requestType: 'deposit',
@@ -103,7 +104,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       createdAt: { gte: tenMinutesAgo }, // Последние 10 минут
       incomingPayments: { none: { isProcessed: true } },
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { createdAt: 'asc' }, // Берем самые старые заявки (FIFO)
     select: {
       id: true,
       userId: true,
