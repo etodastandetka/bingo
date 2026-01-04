@@ -647,10 +647,12 @@ export async function POST(request: NextRequest) {
       }
 
       // Автопополнение вызывается ТОЛЬКО при создании заявки С ФОТО ЧЕКА
-      // Если заявка создана без фото чека (при показе QR кода) - автопополнение не вызывается
-      if (validType === 'deposit' && amountDecimal && processedPhoto) {
+      // ФОНОВОЕ АВТОПОПОЛНЕНИЕ: Проверяем наличие платежа для ВСЕХ заявок (с чеком и без)
+      // Это позволяет обрабатывать заявки без чека сразу при создании, если платеж уже есть
+      if (validType === 'deposit' && amountDecimal) {
         const requestAmount = parseFloat(amountDecimal.toString())
-        console.log(`🔍 Payment API - Checking for existing payments for request ${newRequest.id} with receipt photo, amount: ${requestAmount}`)
+        const hasReceipt = !!processedPhoto
+        console.log(`🔍 Payment API - Checking for existing payments for request ${newRequest.id} (${hasReceipt ? 'with' : 'without'} receipt photo), amount: ${requestAmount}`)
         
         // Функция для проверки и обработки платежей (вызывается сразу и через задержку)
         const checkPayment = async (attempt: number, delay: number = 0) => {
@@ -684,8 +686,6 @@ export async function POST(request: NextRequest) {
             console.warn(`⚠️ Payment API - Background payment check failed:`, err)
           })
         }
-      } else if (validType === 'deposit' && !processedPhoto) {
-        console.log(`ℹ️ Payment API - Request ${newRequest.id} created without receipt photo, skipping auto-deposit`)
       }
 
       const response = NextResponse.json(

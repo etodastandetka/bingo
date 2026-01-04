@@ -189,8 +189,8 @@ async function processEmail(
 
             console.log(`✅ IncomingPayment saved: ID ${incomingPayment.id}`)
 
-            // НОВАЯ ЛОГИКА: Ищем pending заявку с такой же суммой и вызываем автопополнение
-            // Это нужно на случай, если платеж пришел ПОСЛЕ создания заявки с фото чека
+            // ФОНОВОЕ АВТОПОПОЛНЕНИЕ: Ищем ВСЕ pending заявки с такой же суммой и вызываем автопополнение
+            // Это обрабатывает заявки как с фото чека, так и без него, чтобы они не появлялись в дашборде
             // ОГРАНИЧИВАЕМ количество записей для производительности (максимум 20 заявок)
             const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
             const matchingRequests = await prisma.request.findMany({
@@ -198,36 +198,47 @@ async function processEmail(
                 requestType: 'deposit',
                 status: 'pending',
                 createdAt: { gte: tenMinutesAgo },
-                photoFileUrl: { not: null }, // Только заявки с фото чека
+                // Убираем фильтр по photoFileUrl - обрабатываем ВСЕ заявки (с чеком и без)
               },
-              orderBy: { createdAt: 'desc' },
+              orderBy: { createdAt: 'asc' }, // Берем самую старую заявку (FIFO)
               take: 20, // Ограничиваем количество для производительности
               select: {
                 id: true,
                 amount: true,
+                incomingPayments: {
+                  select: { isProcessed: true },
+                },
               },
             })
 
-            // Фильтруем по точному совпадению суммы (как в auto-deposit.ts)
+            // Фильтруем по точному совпадению суммы и проверяем, что нет обработанных платежей
             const exactMatch = matchingRequests.find((req) => {
               if (!req.amount) return false
+              
+              // Пропускаем заявки, у которых уже есть обработанный платеж
+              const hasProcessedPayment = req.incomingPayments?.some(p => p.isProcessed === true)
+              if (hasProcessedPayment) {
+                return false
+              }
+              
               const reqAmount = parseFloat(req.amount.toString())
               const diff = Math.abs(reqAmount - amount)
               return diff < 0.01 // Точность до 1 копейки
             })
 
             if (exactMatch) {
-              console.log(`✅ Found pending request ${exactMatch.id} with matching amount ${amount}, calling auto-deposit`)
-              // Вызываем автопополнение для найденной заявки
-              try {
-                const { matchAndProcessPayment } = await import('./auto-deposit')
-                await matchAndProcessPayment(incomingPayment.id, amount)
-                console.log(`✅ Auto-deposit called for payment ${incomingPayment.id} → request ${exactMatch.id}`)
-              } catch (autoDepositError: any) {
-                console.error(`❌ Error calling auto-deposit for payment ${incomingPayment.id}:`, autoDepositError.message)
-              }
+              console.log(`✅ [Background Auto-Deposit] Found pending request ${exactMatch.id} with matching amount ${amount}, processing in background`)
+              // Вызываем автопополнение для найденной заявки в фоне (не блокируем обработку других писем)
+              const { matchAndProcessPayment } = await import('./auto-deposit')
+              matchAndProcessPayment(incomingPayment.id, amount)
+                .then(() => {
+                  console.log(`✅ [Background Auto-Deposit] Successfully processed payment ${incomingPayment.id} → request ${exactMatch.id}`)
+                })
+                .catch((autoDepositError: any) => {
+                  console.error(`❌ [Background Auto-Deposit] Error processing payment ${incomingPayment.id} → request ${exactMatch.id}:`, autoDepositError.message)
+                })
             } else {
-              console.log(`ℹ️ No pending request with receipt photo found with amount ${amount}, payment saved: ID ${incomingPayment.id}`)
+              console.log(`ℹ️ No pending request found with amount ${amount}, payment saved: ID ${incomingPayment.id}`)
             }
 
             // Письмо уже помечено как прочитанное выше, просто завершаем
