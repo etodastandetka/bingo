@@ -179,6 +179,99 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
 
     if (!depositResult.success) {
       const errorMessage = depositResult.message || 'Deposit failed'
+      
+      // ВАЖНО: Если депозит уже был проведен - это успешный результат, а не ошибка
+      const isAlreadyProcessed = errorMessage.toLowerCase().includes('уже был проведен') || 
+                                  errorMessage.toLowerCase().includes('already processed') ||
+                                  errorMessage.toLowerCase().includes('повторить платеж')
+      
+      if (isAlreadyProcessed) {
+        console.log(`✅ [Auto-Deposit] Deposit already processed for request ${request.id}, marking as success`)
+        // Помечаем заявку как успешную, так как депозит уже был проведен
+        // Это означает, что заявка уже обработана ранее
+        try {
+          await prisma.request.update({
+            where: { id: request.id },
+            data: {
+              status: 'autodeposit_success',
+              statusDetail: null,
+              processedBy: 'автопополнение' as any,
+              processedAt: new Date(),
+              updatedAt: new Date(),
+            } as any,
+          })
+          console.log(`✅ [Auto-Deposit] Request ${request.id} marked as autodeposit_success (deposit already processed)`)
+          
+          // Помечаем платеж как обработанный
+          try {
+            await prisma.incomingPayment.update({
+              where: { id: paymentId },
+              data: {
+                requestId: request.id,
+                isProcessed: true,
+              },
+            })
+          } catch (paymentError) {
+            console.warn(`⚠️ [Auto-Deposit] Failed to mark payment ${paymentId} as processed:`, paymentError)
+          }
+          
+          // Отправляем уведомление пользователю
+          try {
+            const fullRequest = await prisma.request.findUnique({
+              where: { id: request.id },
+              select: {
+                userId: true,
+                botType: true,
+                amount: true,
+                bookmaker: true,
+                accountId: true,
+              },
+            })
+            
+            if (fullRequest && fullRequest.userId) {
+              const { formatDepositMessage, getAdminUsername, sendMessageWithMainMenuButton } = await import('./send-notification')
+              
+              const amount = parseFloat(fullRequest.amount?.toString() || '0')
+              const casino = fullRequest.bookmaker || 'Неизвестно'
+              const accountId = fullRequest.accountId || ''
+              const processingTime = '1s'
+              const lang = 'ru'
+              
+              const adminUsername = await getAdminUsername()
+              const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
+              
+              let botType = fullRequest.botType || null
+              if (!botType && fullRequest.bookmaker) {
+                const bookmakerLower = fullRequest.bookmaker.toLowerCase()
+                if (bookmakerLower.includes('mostbet')) {
+                  botType = 'mostbet'
+                } else if (bookmakerLower.includes('1xbet') || bookmakerLower.includes('xbet')) {
+                  botType = '1xbet'
+                }
+              }
+              
+              await sendMessageWithMainMenuButton(
+                fullRequest.userId,
+                notificationMessage,
+                botType ? null : fullRequest.bookmaker,
+                botType
+              )
+            }
+          } catch (notificationError) {
+            console.warn(`⚠️ [Auto-Deposit] Failed to send notification:`, notificationError)
+          }
+          
+          return {
+            requestId: request.id,
+            success: true,
+          }
+        } catch (dbError: any) {
+          console.error(`❌ [Auto-Deposit] Failed to mark request as success:`, dbError.message)
+          throw new Error(`Failed to update request status: ${dbError.message}`)
+        }
+      }
+      
+      // Для других ошибок обрабатываем как обычно
       console.error(`❌ [Auto-Deposit] Deposit failed: ${errorMessage}`)
       
       // Сохраняем ошибку в БД для отображения в админке
