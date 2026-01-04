@@ -77,8 +77,11 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
             if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
                 blocked_data = blocked_check.get('data', {})
                 blocked_message = blocked_data.get('message', 'Вы заблокированы')
-                await message.answer(blocked_message)
-                logger.info(f"[Start] User {message.from_user.id} is blocked")
+                try:
+                    await message.answer(blocked_message)
+                    logger.info(f"[Start] User {message.from_user.id} is blocked")
+                except Exception as send_error:
+                    logger.error(f"[Start] Failed to send blocked message to user {message.from_user.id}: {send_error}", exc_info=True)
                 return
         except asyncio.TimeoutError:
             logger.warning(f"[Start] Timeout checking blocked status for user {message.from_user.id}, continuing...")
@@ -96,8 +99,11 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
             )
             if settings.get('pause', False):
                 maintenance_message = settings.get('maintenance_message', get_text(lang, 'start', 'bot_paused'))
-                await message.answer(maintenance_message)
-                logger.info(f"[Start] Bot is paused, sent maintenance message to user {message.from_user.id}")
+                try:
+                    await message.answer(maintenance_message)
+                    logger.info(f"[Start] Bot is paused, sent maintenance message to user {message.from_user.id}")
+                except Exception as send_error:
+                    logger.error(f"[Start] Failed to send maintenance message to user {message.from_user.id}: {send_error}", exc_info=True)
                 return
         except asyncio.TimeoutError:
             logger.warning(f"[Start] Timeout getting payment settings for user {message.from_user.id}, continuing with defaults...")
@@ -134,8 +140,11 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
                         )]
                     ])
                     
-                    await message.answer(subscribe_text, reply_markup=keyboard)
-                    logger.info(f"[Start] User {message.from_user.id} not subscribed, sent subscription message")
+                    try:
+                        await message.answer(subscribe_text, reply_markup=keyboard)
+                        logger.info(f"[Start] User {message.from_user.id} not subscribed, sent subscription message")
+                    except Exception as send_error:
+                        logger.error(f"[Start] Failed to send subscription message to user {message.from_user.id}: {send_error}", exc_info=True)
                     return
             except asyncio.TimeoutError:
                 logger.warning(f"[Start] Timeout checking subscription for user {message.from_user.id}, continuing...")
@@ -169,8 +178,16 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
             resize_keyboard=True
         )
         
-        await message.answer(text, reply_markup=keyboard)
-        logger.info(f"[Start] Sent main menu to user {message.from_user.id}")
+        try:
+            await message.answer(text, reply_markup=keyboard)
+            logger.info(f"[Start] Sent main menu to user {message.from_user.id}")
+        except Exception as send_error:
+            logger.error(f"[Start] Failed to send message to user {message.from_user.id}: {send_error}", exc_info=True)
+            # Пытаемся отправить простое сообщение без клавиатуры
+            try:
+                await message.answer("Привет! Используйте кнопки меню для навигации.")
+            except Exception as fallback_error:
+                logger.error(f"[Start] Failed to send fallback message: {fallback_error}")
     except Exception as e:
         logger.error(f"[Start] Critical error in cmd_start for user {message.from_user.id}: {e}", exc_info=True)
         # Пытаемся отправить сообщение об ошибке
