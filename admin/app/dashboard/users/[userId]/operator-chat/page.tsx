@@ -384,8 +384,16 @@ export default function OperatorChatPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return ''
+    
     const date = new Date(dateString)
+    
+    // Проверяем, что дата валидна
+    if (isNaN(date.getTime())) {
+      return ''
+    }
+    
     const today = new Date()
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
