@@ -147,20 +147,27 @@ async def set_operator_chat_status(user_id: int, is_closed: bool):
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
             api_url = Config.API_BASE_URL
+            # Убираем '/api' из конца, если он есть, чтобы избежать двойного '/api/api/'
+            if api_url.endswith('/api'):
+                api_url = api_url[:-4]
 
             async def do_patch(url: str):
+                full_url = f'{url}/api/public/open-operator-chat'
+                logger.info(f"🔗 PATCH {full_url} for user {user_id}, isClosed={is_closed}")
                 try:
                     async with session.patch(
-                        f'{url}/public/open-operator-chat',
+                        full_url,
                         json={'userId': str(user_id), 'isClosed': is_closed},
                         headers={'x-operator-token': service_token},
                         timeout=aiohttp.ClientTimeout(total=5)
                     ) as response:
+                        response_text = await response.text()
+                        logger.info(f"📥 Response status: {response.status}, body: {response_text[:200]}")
                         if response.status == 200:
                             return True
-                        logger.warning(f"⚠️ set_operator_chat_status: status {response.status}")
+                        logger.warning(f"⚠️ set_operator_chat_status: status {response.status}, response: {response_text[:200]}")
                 except Exception as e:
-                    logger.info(f"ℹ️ set_operator_chat_status failed for {url}: {e}")
+                    logger.error(f"❌ set_operator_chat_status failed for {full_url}: {e}", exc_info=True)
                 return False
 
             # Сначала локальный
@@ -170,6 +177,8 @@ async def set_operator_chat_status(user_id: int, is_closed: bool):
                 # fallback на прод
                 from config import Config
                 api_url = Config.API_FALLBACK_URL
+                if api_url.endswith('/api'):
+                    api_url = api_url[:-4]
 
             return await do_patch(api_url)
     except Exception as e:
@@ -230,21 +239,14 @@ async def handle_start(message: Message, bot: Bot):
     else:
         logger.error(f"❌ Failed to save /start message for user {user_id}: {result}")
 
-    # Проверяем текущий статус чата
-    is_closed = await get_operator_chat_status(user_id)
-    logger.info(f"📊 Current chat status for user {user_id}: {'closed' if is_closed else 'open'}")
-    
-    # Если чат закрыт, открываем его при /start
-    # Это нужно, чтобы при следующем /start чат попал в открытые
-    if is_closed:
-        logger.info(f"🔓 Chat is closed for user {user_id}, opening it...")
-        opened = await set_operator_chat_status(user_id, is_closed=False)
-        if opened:
-            logger.info(f"✅ Operator chat opened for user {user_id}")
-        else:
-            logger.warning(f"⚠️ Failed to open operator chat for user {user_id}")
+    # Всегда открываем чат при /start, чтобы он попал в открытые
+    # Это нужно, чтобы при /start чат всегда попадал в открытые, даже если он был закрыт
+    logger.info(f"🔓 Opening chat for user {user_id} on /start command...")
+    opened = await set_operator_chat_status(user_id, is_closed=False)
+    if opened:
+        logger.info(f"✅ Operator chat opened for user {user_id}")
     else:
-        logger.info(f"ℹ️ Chat is already open for user {user_id}, no action needed")
+        logger.warning(f"⚠️ Failed to open operator chat for user {user_id}, but continuing...")
     
     # Проверяем, есть ли уже сообщения (кроме /start)
     has_messages = await check_existing_messages(user_id)
