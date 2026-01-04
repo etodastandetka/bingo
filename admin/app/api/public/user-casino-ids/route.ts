@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createApiResponse } from '@/lib/api-helpers'
+import { ensureUserExists } from '@/lib/sync-user'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,6 +85,9 @@ export async function POST(request: NextRequest) {
     const userIdBigInt = BigInt(userId)
     const dataType = `casino_account_id_${casinoId.toLowerCase()}`
     const normalizedAccountId = accountId.trim()
+
+    // Убеждаемся, что пользователь существует перед сохранением данных
+    await ensureUserExists(userIdBigInt)
 
     // Сохраняем или обновляем ID
     await prisma.botUserData.upsert({
