@@ -52,9 +52,14 @@ export async function POST(request: NextRequest) {
     } else {
       // Для других ботов находим пользователей по заявкам с соответствующим botType
       const requests = await prisma.request.findMany({
-        where: {
-          botType: botType === 'main' ? { in: ['main', null] } : botType
-        },
+        where: botType === 'main' 
+          ? {
+              OR: [
+                { botType: 'main' },
+                { botType: null }
+              ]
+            }
+          : { botType: botType },
         select: { userId: true },
         distinct: ['userId']
       })
