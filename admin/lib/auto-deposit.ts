@@ -5,6 +5,7 @@ import { prisma } from './prisma'
  * Используется когда заявка создается ПОСЛЕ того, как платеж уже был обработан email-watcher'ом
  */
 export async function checkAndProcessExistingPayment(requestId: number, amount: number) {
+  const startTime = Date.now()
   console.log(`🔍 [Auto-Deposit] checkAndProcessExistingPayment called: requestId=${requestId}, amount=${amount}`)
   
   try {
@@ -51,9 +52,15 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     console.log(`💸 [Auto-Deposit] Processing existing payment ${payment.id} for request ${requestId}`)
     
     // Вызываем стандартную функцию автопополнения
-    return await matchAndProcessPayment(payment.id, amount)
+    const result = await matchAndProcessPayment(payment.id, amount)
+    const elapsedMs = Date.now() - startTime
+    const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
+    console.log(`⏱️ [Auto-Deposit] checkAndProcessExistingPayment completed in ${elapsedSeconds}s for request ${requestId}`)
+    return result
   } catch (error: any) {
-    console.error(`❌ [Auto-Deposit] Error checking existing payments for request ${requestId}:`, error.message)
+    const elapsedMs = Date.now() - startTime
+    const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
+    console.error(`❌ [Auto-Deposit] Error checking existing payments for request ${requestId} (${elapsedSeconds}s):`, error.message)
     return null
   }
 }
@@ -65,6 +72,7 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
  * ВАЖНО: Гарантирует что статус заявки ОБЯЗАТЕЛЬНО обновится на autodeposit_success
  */
 export async function matchAndProcessPayment(paymentId: number, amount: number) {
+  const startTime = Date.now()
   console.log(`🔍 [Auto-Deposit] matchAndProcessPayment called: paymentId=${paymentId}, amount=${amount}`)
   
   // Ищем заявки на пополнение со статусом pending за последние 10 минут
@@ -321,12 +329,18 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       console.error(`❌ Error sending notification for request ${request.id}:`, notificationError)
     }
 
+    const totalElapsedMs = Date.now() - startTime
+    const totalElapsedSeconds = (totalElapsedMs / 1000).toFixed(2)
+    console.log(`⏱️ [Auto-Deposit] Total processing time: ${totalElapsedSeconds}s for payment ${paymentId} → request ${request.id}`)
+    
     return {
       requestId: request.id,
       success: true,
     }
   } catch (error: any) {
-    console.error(`❌ [Auto-Deposit] FAILED for request ${request.id}:`, error.message)
+    const elapsedMs = Date.now() - startTime
+    const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
+    console.error(`❌ [Auto-Deposit] FAILED for request ${request.id} (${elapsedSeconds}s):`, error.message)
     throw error
   }
 }
