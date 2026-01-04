@@ -22,8 +22,8 @@ ssl_context.verify_mode = ssl.CERT_NONE
 
 # Приветственные сообщения
 WELCOME_MESSAGES = {
-    'ru': '👋 Добро пожаловать в чат поддержки!\n\nНапишите ваш вопрос, и мы обязательно вам поможем.',
-    'ky': '👋 Колдоо кызматына кош келиңиз!\n\nСурооңузду жазсаңыз, биз сизге жардам беребиз.',
+    'ru': 'Здравствуйте!\n\nОператор ответит вам в течение 24 часов.\n\nЕсли у вас возникли проблемы с пополнением или выводом средств, пожалуйста, сразу отправьте чек, ID и код — это ускорит обработку обращения.',
+    'ky': 'Саламатсызбы!\n\nОператор 24 саат ичинде жооп берет.\n\nЭгер сизде каражат кошуу же чыгаруу менен көйгөйлөр болсо, сураныч, дароо чек, ID жана кодду жөнөтүңүз — бул тилкемди иштетүүнү тездетет.',
 }
 
 async def save_message_to_db(
@@ -99,6 +99,45 @@ async def save_message_to_db(
     except Exception as e:
         logger.error(f"❌ Error saving message to DB: {e}", exc_info=True)
         return None
+
+async def get_operator_chat_status(user_id: int) -> bool:
+    """Получить текущий статус операторского чата (True = закрыт, False = открыт)"""
+    try:
+        service_token = os.getenv('OPERATOR_SERVICE_TOKEN', 'dev-operator-token')
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            api_url = Config.API_BASE_URL
+            
+            async def do_get(url: str):
+                try:
+                    async with session.get(
+                        f'{url}/public/open-operator-chat?userId={user_id}',
+                        headers={'x-operator-token': service_token},
+                        timeout=aiohttp.ClientTimeout(total=3)
+                    ) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data.get('success') and data.get('data'):
+                                is_closed = data.get('data', {}).get('isClosed', False)
+                                return is_closed
+                except Exception as e:
+                    logger.info(f"ℹ️ get_operator_chat_status failed for {url}: {e}")
+                return None  # Неизвестно
+            
+            # Сначала локальный
+            if api_url.startswith('http://localhost'):
+                result = await do_get(api_url)
+                if result is not None:
+                    return result
+                # fallback на прод
+                from config import Config
+                api_url = Config.API_FALLBACK_URL
+            
+            result = await do_get(api_url)
+            return result if result is not None else False  # По умолчанию считаем открытым
+    except Exception as e:
+        logger.error(f"❌ Error getting operator chat status: {e}", exc_info=True)
+        return False  # По умолчанию считаем открытым
 
 async def set_operator_chat_status(user_id: int, is_closed: bool):
     """Открыть/закрыть операторский чат для пользователя (нужно, чтобы /start выводил чат в открытые)."""
@@ -191,12 +230,21 @@ async def handle_start(message: Message, bot: Bot):
     else:
         logger.error(f"❌ Failed to save /start message for user {user_id}: {result}")
 
-    # Открываем чат, если он был закрыт, чтобы вернуть его в список открытых в админке
-    opened = await set_operator_chat_status(user_id, is_closed=False)
-    if opened:
-        logger.info(f"🔓 Operator chat opened for user {user_id}")
+    # Проверяем текущий статус чата
+    is_closed = await get_operator_chat_status(user_id)
+    logger.info(f"📊 Current chat status for user {user_id}: {'closed' if is_closed else 'open'}")
+    
+    # Если чат закрыт, открываем его при /start
+    # Это нужно, чтобы при следующем /start чат попал в открытые
+    if is_closed:
+        logger.info(f"🔓 Chat is closed for user {user_id}, opening it...")
+        opened = await set_operator_chat_status(user_id, is_closed=False)
+        if opened:
+            logger.info(f"✅ Operator chat opened for user {user_id}")
+        else:
+            logger.warning(f"⚠️ Failed to open operator chat for user {user_id}")
     else:
-        logger.warning(f"⚠️ Failed to open operator chat for user {user_id}")
+        logger.info(f"ℹ️ Chat is already open for user {user_id}, no action needed")
     
     # Проверяем, есть ли уже сообщения (кроме /start)
     has_messages = await check_existing_messages(user_id)

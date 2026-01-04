@@ -24,14 +24,29 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '50')
 
-    const messages = await prisma.chatMessage.findMany({
-      where: { 
-        userId,
-        botType: 'operator'
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    })
+    const [messages, chatStatus] = await Promise.all([
+      prisma.chatMessage.findMany({
+        where: { 
+          userId,
+          botType: 'operator'
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      prisma.botUserData.findUnique({
+        where: {
+          userId_dataType: {
+            userId,
+            dataType: 'operator_chat_status',
+          },
+        },
+        select: {
+          dataValue: true,
+        },
+      }),
+    ])
+
+    const isClosed = chatStatus?.dataValue === 'closed'
 
     return NextResponse.json(
       createApiResponse({
@@ -40,6 +55,7 @@ export async function GET(
           userId: msg.userId.toString(),
           telegramMessageId: msg.telegramMessageId?.toString(),
         })),
+        isClosed,
       })
     )
   } catch (error: any) {
