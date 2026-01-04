@@ -266,8 +266,12 @@ class APIClient:
                                 # Проверяем Content-Type перед парсингом JSON
                                 content_type = response.headers.get('Content-Type', '')
                                 if 'application/json' in content_type:
-                                    data = await response.json()
-                                    return data if data.get('success') else {}
+                                    try:
+                                        data = await response.json()
+                                        return data if data.get('success') else {}
+                                    except Exception as json_error:
+                                        # Если ошибка парсинга JSON, возвращаем пустой словарь
+                                        return {}
                                 else:
                                     # Если не JSON, возвращаем пустой словарь
                                     return {}
@@ -275,20 +279,28 @@ class APIClient:
                         # Если локальный недоступен, используем fallback из конфига
                         api_url = Config.API_FALLBACK_URL
                 
-                async with session.get(
-                    f'{api_url}/public/payment-settings',
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
-                    # Проверяем Content-Type перед парсингом JSON
-                    content_type = response.headers.get('Content-Type', '')
-                    if 'application/json' in content_type:
-                        data = await response.json()
-                        return data if data.get('success') else {}
-                    else:
-                        # Если не JSON, возвращаем пустой словарь
-                        return {}
+                try:
+                    async with session.get(
+                        f'{api_url}/public/payment-settings',
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as response:
+                        # Проверяем Content-Type перед парсингом JSON
+                        content_type = response.headers.get('Content-Type', '')
+                        if 'application/json' in content_type:
+                            try:
+                                data = await response.json()
+                                return data if data.get('success') else {}
+                            except Exception as json_error:
+                                # Если ошибка парсинга JSON, возвращаем пустой словарь
+                                return {}
+                        else:
+                            # Если не JSON, возвращаем пустой словарь
+                            return {}
+                except Exception as e:
+                    # Если ошибка запроса, возвращаем пустой словарь
+                    return {}
             except Exception as e:
-                print(f"Error fetching payment settings: {e}")
+                # При любой ошибке возвращаем пустой словарь (не логируем, чтобы не засорять логи)
                 return {}
     
     @staticmethod
