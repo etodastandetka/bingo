@@ -41,17 +41,9 @@ export async function POST(
       },
     })
 
-    // Уведомление пользователю через основной бот (не оператор-бот)
+    // Уведомление пользователю через оператор-бот при отправке на проверку
     try {
-      const { sendMessageWithMainMenuButton, getBotTypeByUserLastMessage } = await import('@/lib/send-notification')
-      
-      // Определяем botType по последнему сообщению пользователя
-      let botType: string | null = null
-      try {
-        botType = await getBotTypeByUserLastMessage(updated.userId, updated.createdAt)
-      } catch (error) {
-        console.warn('Failed to get botType, using bookmaker:', error)
-      }
+      const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
       
       const amount = updated.amount?.toString() || '0'
       const accountId = updated.accountId || '—'
@@ -64,15 +56,17 @@ export async function POST(
         `Время проверки до 3х часов`,
       ].join('\n')
       
+      // При отправке на проверку используем оператор-бот (botType = 'operator')
       await sendMessageWithMainMenuButton(
         updated.userId,
         notificationMessage,
         updated.bookmaker,
-        botType
+        'operator' // Всегда используем оператор-бот при отправке на проверку
       )
-      console.log(`✅ Notification sent to user ${updated.userId.toString()} about request ${updated.id} sent to review`)
+      console.log(`✅ Notification sent to user ${updated.userId.toString()} about request ${updated.id} sent to review via operator bot`)
     } catch (error: any) {
-      console.error('Failed to send review notification:', error)
+      console.error('❌ Failed to send review notification:', error)
+      console.error('Error details:', error.message, error.stack)
       // Не прерываем выполнение, если уведомление не отправилось
     }
 

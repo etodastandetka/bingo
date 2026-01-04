@@ -42,6 +42,7 @@ export async function getBotTypeByUserLastMessage(
 /**
  * Определяет токен бота по botType
  * main -> BOT_TOKEN
+ * operator -> OPERATOR_BOT_TOKEN
  * mostbet -> BOT_TOKEN_MOSTBET
  * 1xbet -> BOT_TOKEN_1XBET
  */
@@ -49,6 +50,15 @@ export function getBotTokenByBotType(botType: string | null | undefined): string
   if (botType) {
     const normalized = botType.toLowerCase()
     console.log(`[getBotTokenByBotType] BotType: "${botType}", normalized: "${normalized}"`)
+
+    if (normalized === 'operator') {
+      const token = process.env.OPERATOR_BOT_TOKEN || null
+      console.log(`[getBotTokenByBotType] Matched Operator, using OPERATOR_BOT_TOKEN: ${token ? 'configured' : 'NOT configured'}`)
+      if (!token) {
+        console.error(`❌ [getBotTokenByBotType] OPERATOR_BOT_TOKEN is NOT configured in environment variables!`)
+      }
+      return token
+    }
 
     if (normalized === 'mostbet') {
       const token = process.env.BOT_TOKEN_MOSTBET || process.env.BOT_TOKEN || null

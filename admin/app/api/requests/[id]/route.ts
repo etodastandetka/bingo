@@ -383,17 +383,9 @@ export async function PATCH(
           }
           // Для обычных заявок (не операторских) notificationMessage отправится в основной бот ниже
         } else if (body.status === 'pending' && updatedRequest.statusDetail === 'pending_check') {
-          // Статус "на проверке" (если выставляется через PATCH) - отправляем через основной бот
+          // Статус "на проверке" (если выставляется через PATCH) - отправляем через оператор-бот
           try {
-            const { sendMessageWithMainMenuButton, getBotTypeByUserLastMessage } = await import('@/lib/send-notification')
-            
-            // Определяем botType по последнему сообщению пользователя
-            let botType: string | null = null
-            try {
-              botType = await getBotTypeByUserLastMessage(updatedRequest.userId, updatedRequest.createdAt)
-            } catch (error) {
-              console.warn('Failed to get botType, using bookmaker:', error)
-            }
+            const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
             
             const amount = updatedRequest.amount?.toString() || '0'
             const accountId = updatedRequest.accountId || '—'
@@ -406,15 +398,17 @@ export async function PATCH(
               `Время проверки до 3х часов`,
             ].join('\n')
             
+            // При отправке на проверку используем оператор-бот (botType = 'operator')
             await sendMessageWithMainMenuButton(
               updatedRequest.userId,
               notificationMessage,
               updatedRequest.bookmaker,
-              botType
+              'operator' // Всегда используем оператор-бот при отправке на проверку
             )
-            console.log(`✅ Notification sent to user ${updatedRequest.userId.toString()} about request ${updatedRequest.id} sent to review`)
+            console.log(`✅ Notification sent to user ${updatedRequest.userId.toString()} about request ${updatedRequest.id} sent to review via operator bot`)
           } catch (error: any) {
-            console.error('Failed to send review notification:', error)
+            console.error('❌ Failed to send review notification:', error)
+            console.error('Error details:', error.message, error.stack)
             // Не прерываем выполнение, если уведомление не отправилось
           }
         }
