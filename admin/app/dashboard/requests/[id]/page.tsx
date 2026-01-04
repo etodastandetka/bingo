@@ -152,11 +152,12 @@ export default function RequestDetailPage() {
               setSelectedBookmaker(data.data.bookmaker)
             }
             
-            // Автоматически запускаем поиск пополнений по сумме из заявки (поле поиска остается пустым)
+            // Автоматически запускаем поиск пополнений по сумме из заявки и заполняем поле поиска
             if (data.data.requestType === 'deposit' && data.data.amount) {
               const amount = parseFloat(data.data.amount)
               if (!isNaN(amount) && amount > 0) {
-                // Автоматически запускаем поиск пополнений, но НЕ заполняем поле поиска
+                // Заполняем поле поиска и автоматически запускаем поиск пополнений
+                setSearchAmount(amount.toString())
                 setTimeout(() => {
                   handleSearchPaymentsWithAmount(amount.toString())
                 }, 500)
@@ -756,9 +757,9 @@ export default function RequestDetailPage() {
 
   // Автоподгрузка поступлений в фоне, чтобы не сбрасывать выбор
   useEffect(() => {
+    // Автоматический поиск для всех депозитов (не только pending/deferred)
     const canAutoFetch =
       request &&
-      (request.status === 'pending' || request.status === 'deferred') &&
       request.requestType === 'deposit' &&
       searchAmount.trim()
 
@@ -770,7 +771,7 @@ export default function RequestDetailPage() {
 
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request?.id, request?.status, request?.requestType, searchAmount, exactAmount, processedOnly])
+  }, [request?.id, request?.requestType, searchAmount, exactAmount, processedOnly])
 
   const handleSearchPayments = async () => {
     if (!searchAmount.trim()) {
@@ -1324,8 +1325,8 @@ export default function RequestDetailPage() {
 
       {/* Верхние кнопки подтверждения/отклонения скрыты */}
 
-      {/* Поиск и найденные пополнения — в одном блоке */}
-      {(request.status === 'pending' || request.status === 'deferred') && request.requestType === 'deposit' && (
+      {/* Поиск и найденные пополнения — в одном блоке (всегда виден для депозитов) */}
+      {request.requestType === 'deposit' && (
         <div className="mx-4 mb-4 bg-gray-800 rounded-2xl p-4 border border-gray-700 space-y-4">
           <div className="flex space-x-2">
               <div className="flex-1 relative">
