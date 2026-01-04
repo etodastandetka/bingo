@@ -48,6 +48,31 @@ export async function GET(
 
     const isClosed = chatStatus?.dataValue === 'closed'
 
+    // ВАЖНО: Отмечаем все сообщения как прочитанные при открытии чата оператором
+    // Сохраняем время последнего прочтения в BotUserData
+    try {
+      await prisma.botUserData.upsert({
+        where: {
+          userId_dataType: {
+            userId,
+            dataType: 'operator_last_read_at',
+          },
+        },
+        update: {
+          dataValue: new Date().toISOString(),
+        },
+        create: {
+          userId,
+          dataType: 'operator_last_read_at',
+          dataValue: new Date().toISOString(),
+        },
+      })
+      console.log(`✅ Marked messages as read for user ${userId.toString()}`)
+    } catch (error) {
+      console.error('Error marking messages as read:', error)
+      // Не прерываем выполнение, если не удалось отметить как прочитанное
+    }
+
     return NextResponse.json(
       createApiResponse({
         messages: messages.map(msg => ({

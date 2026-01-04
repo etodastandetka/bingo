@@ -160,38 +160,70 @@ export async function GET(request: NextRequest) {
       .filter((item: { userId: any, lastOpMsg: { userId: any, createdAt: Date } | null }) => !item.lastOpMsg)
       .map((item: { userId: any, lastOpMsg: { userId: any, createdAt: Date } | null }) => BigInt(item.userId))
 
+    // Получаем время последнего прочтения оператором для всех пользователей
+    const lastReadTimes = await prisma.botUserData.findMany({
+      where: {
+        userId: { in: [...userIdsWithLastOpMsg.map((item: { userId: bigint }) => item.userId), ...userIdsWithoutLastOpMsg] },
+        dataType: 'operator_last_read_at',
+      },
+      select: {
+        userId: true,
+        dataValue: true,
+      },
+    })
+    
+    const lastReadTimeMap = new Map(
+      lastReadTimes.map(lr => [lr.userId.toString(), lr.dataValue ? new Date(lr.dataValue) : null])
+    )
+
     // Подсчет для пользователей с последним сообщением оператора
     const unreadCountsWithLastMsg = await Promise.all(
       userIdsWithLastOpMsg.map(async (item: { userId: bigint, lastOpMsgTime: Date }) => {
         const { userId, lastOpMsgTime } = item
+        const userIdStr = userId.toString()
+        const lastReadAt = lastReadTimeMap.get(userIdStr)
+        
+        // Используем время последнего прочтения, если оно позже последнего сообщения оператора
+        const readSince = lastReadAt && lastReadAt > lastOpMsgTime ? lastReadAt : lastOpMsgTime
+        
         const count = await prisma.chatMessage.count({
           where: {
             userId,
             botType: 'operator',
             direction: 'in',
             createdAt: {
-              gt: lastOpMsgTime,
+              gt: readSince,
             },
           },
         })
-        return { userId: userId.toString(), count }
+        return { userId: userIdStr, count }
       })
     )
 
     // Подсчет для пользователей без последнего сообщения оператора
     const unreadCountsWithoutLastMsg = userIdsWithoutLastOpMsg.length > 0
-      ? await prisma.chatMessage.groupBy({
-          by: ['userId'],
-          where: {
-            userId: { in: userIdsWithoutLastOpMsg },
-            botType: 'operator',
-            direction: 'in',
-          },
-          _count: {
-            id: true,
-          },
-        }).then(results => 
-          results.map(r => ({ userId: r.userId.toString(), count: r._count.id }))
+      ? await Promise.all(
+          userIdsWithoutLastOpMsg.map(async (userId: bigint) => {
+            const userIdStr = userId.toString()
+            const lastReadAt = lastReadTimeMap.get(userIdStr)
+            
+            const whereClause: any = {
+              userId,
+              botType: 'operator',
+              direction: 'in',
+            }
+            
+            // Если есть время последнего прочтения, считаем только сообщения после него
+            if (lastReadAt) {
+              whereClause.createdAt = { gt: lastReadAt }
+            }
+            
+            const count = await prisma.chatMessage.count({
+              where: whereClause,
+            })
+            
+            return { userId: userIdStr, count }
+          })
         )
       : []
 

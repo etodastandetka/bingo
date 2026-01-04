@@ -226,6 +226,8 @@ export default function OperatorChatPage() {
 
   const fetchChatData = async () => {
     try {
+      // При загрузке чата автоматически отмечаем сообщения как прочитанные
+      // Это происходит в API endpoint GET /api/users/[userId]/operator-chat
       const [chatRes, userRes, photoRes] = await Promise.all([
         fetch(`/api/users/${params.userId}/operator-chat`),
         fetch(`/api/users/${params.userId}`),
