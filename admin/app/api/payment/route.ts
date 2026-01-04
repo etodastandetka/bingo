@@ -651,18 +651,38 @@ export async function POST(request: NextRequest) {
       if (validType === 'deposit' && amountDecimal && processedPhoto) {
         const requestAmount = parseFloat(amountDecimal.toString())
         console.log(`🔍 Payment API - Checking for existing payments for request ${newRequest.id} with receipt photo, amount: ${requestAmount}`)
-        try {
-          const { checkAndProcessExistingPayment } = await import('@/lib/auto-deposit')
-          const result = await checkAndProcessExistingPayment(newRequest.id, requestAmount)
-          if (result) {
-            console.log(`✅ Payment API - Auto-deposit check completed for request ${newRequest.id}`)
-          } else {
-            console.log(`ℹ️ Payment API - No matching payments found for request ${newRequest.id}`)
+        
+        // Функция для проверки и обработки платежей (вызывается сразу и через задержку)
+        const checkPayment = async (attempt: number, delay: number = 0) => {
+          if (delay > 0) {
+            await new Promise(resolve => setTimeout(resolve, delay))
           }
-        } catch (autoDepositError: any) {
-          // Не блокируем создание заявки если автопополнение не сработало
-          console.warn('⚠️ Payment API - Auto-deposit check failed (non-blocking):', autoDepositError.message)
-          console.warn('⚠️ Payment API - Auto-deposit check error stack:', autoDepositError.stack)
+          
+          try {
+            const { checkAndProcessExistingPayment } = await import('@/lib/auto-deposit')
+            const result = await checkAndProcessExistingPayment(newRequest.id, requestAmount)
+            if (result) {
+              console.log(`✅ Payment API - Auto-deposit check completed for request ${newRequest.id} (attempt ${attempt})`)
+              return true
+            } else {
+              console.log(`ℹ️ Payment API - No matching payments found for request ${newRequest.id} (attempt ${attempt})`)
+              return false
+            }
+          } catch (autoDepositError: any) {
+            console.warn(`⚠️ Payment API - Auto-deposit check failed (attempt ${attempt}):`, autoDepositError.message)
+            return false
+          }
+        }
+        
+        // Проверяем сразу
+        const immediateResult = await checkPayment(1, 0)
+        
+        // Если не нашли сразу, проверяем еще раз через 3 секунды (платеж может прийти с задержкой)
+        if (!immediateResult) {
+          // Запускаем повторную проверку в фоне (не блокируем ответ)
+          checkPayment(2, 3000).catch(err => {
+            console.warn(`⚠️ Payment API - Background payment check failed:`, err)
+          })
         }
       } else if (validType === 'deposit' && !processedPhoto) {
         console.log(`ℹ️ Payment API - Request ${newRequest.id} created without receipt photo, skipping auto-deposit`)
@@ -907,17 +927,38 @@ export async function PUT(request: NextRequest) {
     if (receipt_photo !== undefined && updatedRequest.requestType === 'deposit' && updatedRequest.status === 'pending' && updatedRequest.amount) {
       const requestAmount = parseFloat(updatedRequest.amount.toString())
       console.log(`🔍 Payment API PUT - Checking for existing payments for request ${updatedRequest.id} after adding receipt photo, amount: ${requestAmount}`)
-      try {
-        const { checkAndProcessExistingPayment } = await import('@/lib/auto-deposit')
-        const result = await checkAndProcessExistingPayment(updatedRequest.id, requestAmount)
-        if (result) {
-          console.log(`✅ Payment API PUT - Auto-deposit check completed for request ${updatedRequest.id}`)
-        } else {
-          console.log(`ℹ️ Payment API PUT - No matching payments found for request ${updatedRequest.id}`)
+      
+      // Функция для проверки и обработки платежей (вызывается сразу и через задержку)
+      const checkPayment = async (attempt: number, delay: number = 0) => {
+        if (delay > 0) {
+          await new Promise(resolve => setTimeout(resolve, delay))
         }
-      } catch (autoDepositError: any) {
-        // Не блокируем обновление заявки если автопополнение не сработало
-        console.warn('⚠️ Payment API PUT - Auto-deposit check failed (non-blocking):', autoDepositError.message)
+        
+        try {
+          const { checkAndProcessExistingPayment } = await import('@/lib/auto-deposit')
+          const result = await checkAndProcessExistingPayment(updatedRequest.id, requestAmount)
+          if (result) {
+            console.log(`✅ Payment API PUT - Auto-deposit check completed for request ${updatedRequest.id} (attempt ${attempt})`)
+            return true
+          } else {
+            console.log(`ℹ️ Payment API PUT - No matching payments found for request ${updatedRequest.id} (attempt ${attempt})`)
+            return false
+          }
+        } catch (autoDepositError: any) {
+          console.warn(`⚠️ Payment API PUT - Auto-deposit check failed (attempt ${attempt}):`, autoDepositError.message)
+          return false
+        }
+      }
+      
+      // Проверяем сразу
+      const immediateResult = await checkPayment(1, 0)
+      
+      // Если не нашли сразу, проверяем еще раз через 3 секунды (платеж может прийти с задержкой)
+      if (!immediateResult) {
+        // Запускаем повторную проверку в фоне (не блокируем ответ)
+        checkPayment(2, 3000).catch(err => {
+          console.warn(`⚠️ Payment API PUT - Background payment check failed:`, err)
+        })
       }
     }
 

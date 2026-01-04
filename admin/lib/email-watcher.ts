@@ -189,8 +189,8 @@ async function processEmail(
 
             console.log(`✅ IncomingPayment saved: ID ${incomingPayment.id}`)
 
-            // НОВАЯ ЛОГИКА: Только помечаем письмо как прочитанное, если есть pending заявка с такой же суммой
-            // Автопополнение НЕ вызывается здесь - оно вызывается только при создании заявки с фото чека
+            // НОВАЯ ЛОГИКА: Ищем pending заявку с такой же суммой и вызываем автопополнение
+            // Это нужно на случай, если платеж пришел ПОСЛЕ создания заявки с фото чека
             // ОГРАНИЧИВАЕМ количество записей для производительности (максимум 20 заявок)
             const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
             const matchingRequests = await prisma.request.findMany({
@@ -198,6 +198,7 @@ async function processEmail(
                 requestType: 'deposit',
                 status: 'pending',
                 createdAt: { gte: tenMinutesAgo },
+                photoFileUrl: { not: null }, // Только заявки с фото чека
               },
               orderBy: { createdAt: 'desc' },
               take: 20, // Ограничиваем количество для производительности
@@ -216,9 +217,17 @@ async function processEmail(
             })
 
             if (exactMatch) {
-              console.log(`✅ Found pending request ${exactMatch.id} with matching amount ${amount}, marking email as read`)
+              console.log(`✅ Found pending request ${exactMatch.id} with matching amount ${amount}, calling auto-deposit`)
+              // Вызываем автопополнение для найденной заявки
+              try {
+                const { matchAndProcessPayment } = await import('./auto-deposit')
+                await matchAndProcessPayment(incomingPayment.id, amount)
+                console.log(`✅ Auto-deposit called for payment ${incomingPayment.id} → request ${exactMatch.id}`)
+              } catch (autoDepositError: any) {
+                console.error(`❌ Error calling auto-deposit for payment ${incomingPayment.id}:`, autoDepositError.message)
+              }
             } else {
-              console.log(`ℹ️ No pending request found with amount ${amount}, marking email as read anyway`)
+              console.log(`ℹ️ No pending request with receipt photo found with amount ${amount}, payment saved: ID ${incomingPayment.id}`)
             }
 
             // Письмо уже помечено как прочитанное выше, просто завершаем
