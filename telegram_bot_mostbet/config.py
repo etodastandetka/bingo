@@ -25,7 +25,7 @@ domains_config = load_domains_config()
 
 class Config:
     # Токен для бота Mostbet (используйте BOT_TOKEN_MOSTBET или общий BOT_TOKEN)
-    BOT_TOKEN = os.getenv('BOT_TOKEN_MOSTBET', os.getenv('BOT_TOKEN', '8429532056:AAHtQb0cuwwYhYLJI9bIi--_EYdFNeJXGNo'))
+    BOT_TOKEN = os.getenv('BOT_TOKEN_MOSTBET', os.getenv('BOT_TOKEN', '8287395036:AAEL938E9CGhD93cqNql_q1ej-VxoDmamf8'))
     OPERATOR_BOT_TOKEN = os.getenv('OPERATOR_BOT_TOKEN', '7958632748:AAH478HkHt2czFo7dxCoyFSgqH_zVLzDJ98')
     BOT_TYPE = 'mostbet'  # Тип бота для определения правильного токена при отправке уведомлений
     
