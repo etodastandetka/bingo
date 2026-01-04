@@ -26,6 +26,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ВАЖНО: Сначала автоматически отклоняем истекшие заявки (старше 5 минут без фото)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+    const expiredRequests = await prisma.request.findMany({
+      where: {
+        userId: userIdBigInt,
+        requestType: 'deposit',
+        status: {
+          in: ['pending', 'pending_check']
+        },
+        createdAt: {
+          lt: fiveMinutesAgo // Старше 5 минут
+        },
+        photoFileUrl: null, // Без фото чека
+      },
+      select: {
+        id: true,
+      },
+    })
+
+    // Автоматически отклоняем истекшие заявки
+    if (expiredRequests.length > 0) {
+      await prisma.request.updateMany({
+        where: {
+          id: {
+            in: expiredRequests.map(r => r.id)
+          }
+        },
+        data: {
+          status: 'rejected',
+          statusDetail: 'Таймер истек',
+          processedAt: new Date(),
+          updatedAt: new Date(),
+        } as any,
+      })
+      console.log(`⏰ Auto-rejected ${expiredRequests.length} expired deposit request(s) for user ${userIdBigInt}`)
+    }
+
     // Проверяем активные заявки на пополнение (оптимизированный запрос без сортировки)
     // Используем findFirst без orderBy для максимальной скорости
     const activeDepositRequest = await prisma.request.findFirst({

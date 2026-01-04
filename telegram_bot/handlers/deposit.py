@@ -18,7 +18,7 @@ router = Router()
 # Словарь для отслеживания активных таймеров (чтобы можно было их остановить)
 active_timers = {}
 
-async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: int, duration: int, lang: str, amount: float, casino: str, account_id: str, keyboard, state: FSMContext = None):
+async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: int, duration: int, lang: str, amount: float, casino: str, account_id: str, keyboard, state: FSMContext = None, request_id: str = None):
     """Фоновая задача для обновления таймера в сообщении с QR кодом"""
     timer_key = f"{chat_id}_{message_id}"
     active_timers[timer_key] = True
@@ -37,6 +37,40 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
             if remaining <= 0:
                 # Таймер истек
                 logger.info(f"[Timer] Expired for message {message_id}, deleting message and returning to main menu")
+                
+                # ВАЖНО: Отклоняем заявку при истечении таймера
+                if request_id:
+                    try:
+                        from api_client import APIClient
+                        reject_result = await APIClient.update_request(
+                            request_id=request_id,
+                            status='rejected',
+                            status_detail='Таймер истек'
+                        )
+                        if reject_result.get('success'):
+                            logger.info(f"[Timer] Auto-rejected request {request_id} due to timer expiration")
+                        else:
+                            logger.warning(f"[Timer] Failed to reject request {request_id}: {reject_result.get('error')}")
+                    except Exception as e:
+                        logger.error(f"[Timer] Error rejecting request {request_id}: {e}")
+                elif state:
+                    # Пытаемся получить request_id из state
+                    try:
+                        data = await state.get_data()
+                        pending_request_id = data.get('pending_request_id') or data.get('request_id')
+                        if pending_request_id:
+                            from api_client import APIClient
+                            reject_result = await APIClient.update_request(
+                                request_id=str(pending_request_id),
+                                status='rejected',
+                                status_detail='Таймер истек'
+                            )
+                            if reject_result.get('success'):
+                                logger.info(f"[Timer] Auto-rejected request {pending_request_id} due to timer expiration")
+                            else:
+                                logger.warning(f"[Timer] Failed to reject request {pending_request_id}: {reject_result.get('error')}")
+                    except Exception as e:
+                        logger.warning(f"[Timer] Could not reject request from state: {e}")
                 
                 # Удаляем сообщение с QR-кодом
                 try:
@@ -638,23 +672,8 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             # Сохраняем ID сообщения с QR-кодом для возможности удаления и обновления
             await state.update_data(qr_message_id=qr_message.message_id)
             
-            # Запускаем фоновую задачу для обновления таймера
-            import logging
-            logger = logging.getLogger(__name__)
-            # Таймер обновляет только текст, без клавиатуры
-            timer_task = asyncio.create_task(update_qr_timer(bot, message.chat.id, qr_message.message_id, qr_created_at, timer_duration, lang, amount_with_cents, data.get("casino_name"), account_id, keyboard, state))
-            logger.info(f"[Timer] Created timer task for message {qr_message.message_id}, chat {message.chat.id}")
-            
-            # Добавляем обработку ошибок для задачи
-            def timer_task_done(task):
-                try:
-                    task.result()
-                except Exception as e:
-                    logger.error(f"[Timer] Timer task failed for message {qr_message.message_id}: {e}")
-            
-            timer_task.add_done_callback(timer_task_done)
-            
             # Создаем заявку со статусом pending при показе QR-кода (без фото чека)
+            pending_request_id = None
             try:
                 pending_request_result = await APIClient.create_request(
                     telegram_user_id=str(message.from_user.id),
@@ -678,6 +697,23 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to create pending request: {e}")
                 # Продолжаем работу даже если не удалось создать заявку
+            
+            # Запускаем фоновую задачу для обновления таймера
+            import logging
+            logger = logging.getLogger(__name__)
+            # Таймер обновляет только текст, без клавиатуры
+            # Передаем request_id для автоматического отклонения при истечении
+            timer_task = asyncio.create_task(update_qr_timer(bot, message.chat.id, qr_message.message_id, qr_created_at, timer_duration, lang, amount_with_cents, data.get("casino_name"), account_id, keyboard, state, str(pending_request_id) if pending_request_id else None))
+            logger.info(f"[Timer] Created timer task for message {qr_message.message_id}, chat {message.chat.id}, request_id={pending_request_id}")
+            
+            # Добавляем обработку ошибок для задачи
+            def timer_task_done(task):
+                try:
+                    task.result()
+                except Exception as e:
+                    logger.error(f"[Timer] Timer task failed for message {qr_message.message_id}: {e}")
+            
+            timer_task.add_done_callback(timer_task_done)
             
             # Сразу переходим в состояние ожидания чека (без выбора банка)
             # Текст про отправку чека уже есть в caption сообщения с QR
