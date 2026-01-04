@@ -97,7 +97,8 @@ async def save_message_to_db(
                     logger.error(f"❌ API returned status {response.status}: {result}")
                     return None
     except Exception as e:
-        logger.error(f"❌ Error saving message to DB: {e}", exc_info=True)
+        # Тихая обработка ошибок - логируем только как warning, чтобы не засорять логи
+        logger.warning(f"⚠️ Error saving message to DB: {e}")
         return None
 
 async def get_operator_chat_status(user_id: int) -> bool:
