@@ -73,12 +73,20 @@ async def save_message_to_db(
                         json=data,
                         timeout=aiohttp.ClientTimeout(total=3)
                     ) as response:
-                        result = await response.json()
-                        logger.info(f"✅ Local API response: status={response.status}, result={result}")
-                        if response.status == 200 and result.get('success'):
-                            return result
+                        # Проверяем Content-Type перед парсингом JSON
+                        content_type = response.headers.get('Content-Type', '')
+                        if 'application/json' in content_type:
+                            try:
+                                result = await response.json()
+                                logger.info(f"✅ Local API response: status={response.status}, result={result}")
+                                if response.status == 200 and result.get('success'):
+                                    return result
+                                else:
+                                    logger.warning(f"⚠️ Local API returned status {response.status} or not successful, trying next")
+                            except Exception:
+                                logger.warning(f"⚠️ Failed to parse JSON from local API, trying next")
                         else:
-                            logger.warning(f"⚠️ Local API returned status {response.status} or not successful, trying next")
+                            logger.warning(f"⚠️ Local API returned non-JSON response, trying next")
                 except Exception as e:
                     logger.info(f"ℹ️ Local API {local_api_url} not available: {e}, trying next")
             
@@ -89,12 +97,22 @@ async def save_message_to_db(
                 json=data,
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
-                result = await response.json()
-                logger.info(f"✅ Production API response: status={response.status}, result={result}")
-                if response.status == 200 and result.get('success'):
-                    return result
+                # Проверяем Content-Type перед парсингом JSON
+                content_type = response.headers.get('Content-Type', '')
+                if 'application/json' in content_type:
+                    try:
+                        result = await response.json()
+                        logger.info(f"✅ Production API response: status={response.status}, result={result}")
+                        if response.status == 200 and result.get('success'):
+                            return result
+                        else:
+                            logger.warning(f"⚠️ API returned status {response.status}: {result}")
+                            return None
+                    except Exception:
+                        logger.warning(f"⚠️ Failed to parse JSON from production API")
+                        return None
                 else:
-                    logger.error(f"❌ API returned status {response.status}: {result}")
+                    logger.warning(f"⚠️ Production API returned non-JSON response")
                     return None
     except Exception as e:
         # Тихая обработка ошибок - логируем только как warning, чтобы не засорять логи
