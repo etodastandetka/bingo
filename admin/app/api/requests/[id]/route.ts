@@ -313,7 +313,7 @@ export async function PATCH(
             )
           }
 
-          // Если это операторская заявка (была на проверке) - отправляем в оператор-бот и в основной бот с кнопкой
+          // Если это операторская заявка (была на проверке) - отправляем в оператор-бот и в основной бот БЕЗ кнопки
           if (isOperatorRequest) {
             sendOperatorMessage(
               updatedRequest.userId,
@@ -326,7 +326,7 @@ export async function PATCH(
               ].join('\n')
             )
             
-            // Для операторских заявок отправляем сообщение в правильный бот
+            // Для операторских заявок отправляем сообщение в правильный бот БЕЗ инлайн кнопки
             // Используем botType из заявки для определения правильного бота
             let botType = (updatedRequest as any).botType || (currentRequest as any).botType || null
             
@@ -340,19 +340,11 @@ export async function PATCH(
               }
             }
             
-            if (currentRequest.requestType === 'withdraw' && notificationMessage) {
-              // Отправляем финальное сообщение С инлайн кнопкой "Главное меню"
-              const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
-              sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
+            if (notificationMessage) {
+              // Отправляем сообщение БЕЗ инлайн кнопки "Главное меню"
+              sendNotificationToUser(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, null, botType)
                 .catch((error) => {
-                  console.error('Failed to send withdrawal notification for operator request:', error)
-                })
-            } else if (currentRequest.requestType === 'deposit' && notificationMessage) {
-              // Для пополнения отправляем с кнопкой в правильный бот
-              const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
-              sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
-                .catch((error) => {
-                  console.error('Failed to send deposit notification for operator request:', error)
+                  console.error('Failed to send notification for operator request:', error)
                 })
             }
           }
@@ -398,11 +390,12 @@ export async function PATCH(
               `Время проверки до 3х часов`,
             ].join('\n')
             
-            // При отправке на проверку используем оператор-бот (botType = 'operator')
-            await sendMessageWithMainMenuButton(
+            // При отправке на проверку используем оператор-бот (botType = 'operator') БЕЗ инлайн кнопки
+            await sendNotificationToUser(
               updatedRequest.userId,
               notificationMessage,
               updatedRequest.bookmaker,
+              null,
               'operator' // Всегда используем оператор-бот при отправке на проверку
             )
             console.log(`✅ Notification sent to user ${updatedRequest.userId.toString()} about request ${updatedRequest.id} sent to review via operator bot`)
