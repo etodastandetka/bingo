@@ -63,18 +63,41 @@ async def save_message_to_db(
                         json=data,
                         timeout=aiohttp.ClientTimeout(total=2)
                     ) as response:
-                        return await response.json()
-                except:
+                        # Проверяем Content-Type перед парсингом JSON
+                        content_type = response.headers.get('Content-Type', '')
+                        if 'application/json' in content_type:
+                            try:
+                                return await response.json()
+                            except Exception:
+                                return None
+                        else:
+                            # Если не JSON, возвращаем None (тихая ошибка)
+                            return None
+                except Exception:
                     from config import Config
                     api_url = Config.API_FALLBACK_URL
             
-            async with session.post(
-                f'{api_url}/chat-message',
-                json=data
-            ) as response:
-                return await response.json()
+            try:
+                async with session.post(
+                    f'{api_url}/chat-message',
+                    json=data,
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as response:
+                    # Проверяем Content-Type перед парсингом JSON
+                    content_type = response.headers.get('Content-Type', '')
+                    if 'application/json' in content_type:
+                        try:
+                            return await response.json()
+                        except Exception:
+                            return None
+                    else:
+                        # Если не JSON, возвращаем None (тихая ошибка)
+                        return None
+            except Exception:
+                # При любой ошибке возвращаем None (тихая ошибка)
+                return None
     except Exception as e:
-        print(f"Error saving message to DB: {e}")
+        # Тихая обработка ошибок - не логируем, чтобы не засорять логи
         return None
 
 @router.message(F.text)
