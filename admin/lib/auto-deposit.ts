@@ -264,7 +264,9 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       throw new Error(`Failed to update request status: current status is ${verifyRequest?.status}`)
     }
     
-    console.log(`✅ [Auto-Deposit] SUCCESS: Request ${request.id} → autodeposit_success (verified)`)
+    const elapsedMs = Date.now() - startTime
+    const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
+    console.log(`✅ [Auto-Deposit] SUCCESS: Request ${request.id} → autodeposit_success (verified) in ${elapsedSeconds}s`)
 
     // Отправляем уведомление пользователю в правильный бот с правильным текстом
     try {
