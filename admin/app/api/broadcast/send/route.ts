@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     requireAuth(request)
 
     const body = await request.json()
-    const { message } = body
+    const { message, botType = 'main' } = body
 
     if (!message || !message.trim()) {
       return NextResponse.json(
@@ -19,21 +19,55 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const botToken = process.env.BOT_TOKEN
+    // Получаем токен бота на основе botType
+    const { getBotTokenByBotType } = await import('@/lib/send-notification')
+    const botToken = getBotTokenByBotType(botType)
 
     if (!botToken) {
       return NextResponse.json(
-        createApiResponse(null, 'BOT_TOKEN not configured'),
+        createApiResponse(null, `BOT_TOKEN for ${botType} not configured`),
         { status: 500 }
       )
     }
 
-    // Получаем всех пользователей
-    const users = await prisma.botUser.findMany({
-      select: {
-        userId: true,
-      },
-    })
+    // Получаем пользователей для выбранного бота
+    let users: Array<{ userId: bigint }> = []
+
+    if (botType === 'operator') {
+      // Для оператор-бота используем всех пользователей или тех, кто общался с оператором
+      const operatorUsers = await prisma.chatMessage.findMany({
+        where: { botType: 'operator' },
+        select: { userId: true },
+        distinct: ['userId']
+      })
+      
+      if (operatorUsers.length > 0) {
+        users = operatorUsers.map(u => ({ userId: u.userId }))
+      } else {
+        // Если нет операторских сообщений, используем всех пользователей
+        users = await prisma.botUser.findMany({
+          select: { userId: true },
+        })
+      }
+    } else {
+      // Для других ботов находим пользователей по заявкам с соответствующим botType
+      const requests = await prisma.request.findMany({
+        where: {
+          botType: botType === 'main' ? { in: ['main', null] } : botType
+        },
+        select: { userId: true },
+        distinct: ['userId']
+      })
+      
+      users = requests.map(r => ({ userId: r.userId }))
+      
+      // Если нет заявок для этого бота, используем всех пользователей (fallback)
+      if (users.length === 0) {
+        users = await prisma.botUser.findMany({
+          select: { userId: true },
+        })
+      }
+    }
 
     if (users.length === 0) {
       return NextResponse.json(
@@ -75,7 +109,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Сохраняем в историю рассылок
-    const broadcastTitle = `Рассылка ${successCount} пользователям - ${new Date().toLocaleString('ru-RU')}`
+    const botName = botType === 'main' ? 'Основной бот' :
+                    botType === '1xbet' ? '1xbet бот' :
+                    botType === 'mostbet' ? 'Mostbet бот' :
+                    'Оператор-бот'
+    const broadcastTitle = `Рассылка в ${botName} - ${successCount} пользователям - ${new Date().toLocaleString('ru-RU')}`
     await prisma.broadcastMessage.create({
       data: {
         title: broadcastTitle,

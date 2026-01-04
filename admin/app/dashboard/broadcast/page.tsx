@@ -17,6 +17,8 @@ export default function BroadcastPage() {
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [totalUsers, setTotalUsers] = useState(0)
+  const [selectedBot, setSelectedBot] = useState<string>('main') // Выбранный бот
+  const [botStats, setBotStats] = useState<Record<string, number>>({}) // Статистика по ботам
 
   useEffect(() => {
     fetchHistory()
@@ -34,15 +36,28 @@ export default function BroadcastPage() {
       const data = await response.json()
       if (data.success && data.data) {
         setTotalUsers(data.data.totalUsers || 0)
+        setBotStats(data.data.botStats || {})
+        // Обновляем totalUsers на основе выбранного бота
+        const botUsers = data.data.botStats?.[selectedBot] || 0
+        setTotalUsers(botUsers)
       } else {
         console.error('API returned error:', data.error || 'Unknown error')
         setTotalUsers(0)
+        setBotStats({})
       }
     } catch (error) {
       console.error('Failed to fetch stats:', error)
       setTotalUsers(0)
+      setBotStats({})
     }
   }
+  
+  // Обновляем количество получателей при изменении выбранного бота
+  useEffect(() => {
+    if (botStats[selectedBot] !== undefined) {
+      setTotalUsers(botStats[selectedBot])
+    }
+  }, [selectedBot, botStats])
 
   const fetchHistory = async () => {
     setLoading(true)
@@ -75,7 +90,12 @@ export default function BroadcastPage() {
       return
     }
 
-    if (!confirm(`Вы уверены, что хотите отправить это сообщение всем ${totalUsers} пользователям бота?`)) {
+    const botName = selectedBot === 'main' ? 'основного бота' : 
+                    selectedBot === '1xbet' ? '1xbet бота' :
+                    selectedBot === 'mostbet' ? 'mostbet бота' :
+                    'оператор-бота'
+    
+    if (!confirm(`Вы уверены, что хотите отправить это сообщение всем ${totalUsers} пользователям ${botName}?`)) {
       return
     }
 
@@ -84,7 +104,7 @@ export default function BroadcastPage() {
       const response = await fetch('/api/broadcast/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, botType: selectedBot }),
       })
 
       const data = await response.json()
@@ -137,6 +157,19 @@ export default function BroadcastPage() {
         </div>
 
         <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Выберите бот для рассылки
+          </label>
+          <select
+            value={selectedBot}
+            onChange={(e) => setSelectedBot(e.target.value)}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+          >
+            <option value="main">Основной бот</option>
+            <option value="1xbet">1xbet бот</option>
+            <option value="mostbet">Mostbet бот</option>
+            <option value="operator">Оператор-бот</option>
+          </select>
           <div className="bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white">
             <div className="flex items-center justify-between">
               <span className="text-sm">Получателей: {totalUsers}</span>
@@ -222,4 +255,5 @@ export default function BroadcastPage() {
     </div>
   )
 }
+
 
