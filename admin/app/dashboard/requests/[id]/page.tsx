@@ -161,6 +161,10 @@ export default function RequestDetailPage() {
                 // Заполняем поле поиска только один раз
                 setSearchAmount(amount.toString())
                 searchAmountInitializedRef.current = true // Помечаем, что сумма установлена
+                // Автоматически запускаем поиск поступлений при первой загрузке
+                setTimeout(() => {
+                  handleSearchPaymentsWithAmount(amount.toString())
+                }, 500)
               }
             }
             
