@@ -48,12 +48,17 @@ export async function PATCH(request: NextRequest) {
     const token = request.headers.get('x-operator-token')
     const expected = process.env.OPERATOR_SERVICE_TOKEN || 'dev-operator-token'
 
+    console.log(`[open-operator-chat PATCH] Received request, token: ${token ? token.substring(0, 10) + '...' : 'missing'}, expected: ${expected ? expected.substring(0, 10) + '...' : 'missing'}`)
+
     if (!expected || !token || token !== expected) {
+      console.error(`[open-operator-chat PATCH] Unauthorized! Token mismatch. Expected: ${expected}, Got: ${token}`)
       return NextResponse.json(createApiResponse(null, 'Unauthorized'), { status: 401 })
     }
 
     const body = await request.json()
     const { userId, isClosed } = body || {}
+
+    console.log(`[open-operator-chat PATCH] Body: userId=${userId}, isClosed=${isClosed}`)
 
     if (!userId) {
       return NextResponse.json(createApiResponse(null, 'User ID is required'), { status: 400 })
@@ -61,7 +66,7 @@ export async function PATCH(request: NextRequest) {
 
     const userIdBigInt = BigInt(userId)
 
-    await prisma.botUserData.upsert({
+    const result = await prisma.botUserData.upsert({
       where: {
         userId_dataType: {
           userId: userIdBigInt,
@@ -78,9 +83,11 @@ export async function PATCH(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(createApiResponse({ success: true }))
+    console.log(`[open-operator-chat PATCH] Successfully updated chat status for user ${userId}: ${result.dataValue}`)
+
+    return NextResponse.json(createApiResponse({ success: true, dataValue: result.dataValue }))
   } catch (error: any) {
-    console.error('open-operator-chat error:', error)
+    console.error('[open-operator-chat PATCH] Error:', error)
     return NextResponse.json(createApiResponse(null, error.message || 'Failed to update chat status'), { status: 500 })
   }
 }

@@ -235,6 +235,22 @@ async def handle_start(message: Message, bot: Bot):
     logger.info(f"🚀 /start command from user {user_id} (@{message.from_user.username})")
     logger.info(f"📩 Message details: id={message.message_id}, text={message.text}")
     
+    # ВАЖНО: Сначала открываем чат, чтобы он сразу попал в открытые
+    # Это нужно, чтобы при /start чат всегда попадал в открытые, даже если он был закрыт
+    logger.info(f"🔓 Opening chat for user {user_id} on /start command (BEFORE saving message)...")
+    opened = await set_operator_chat_status(user_id, is_closed=False)
+    if opened:
+        logger.info(f"✅ Operator chat opened for user {user_id}")
+    else:
+        logger.warning(f"⚠️ Failed to open operator chat for user {user_id}, retrying...")
+        # Повторная попытка через 1 секунду
+        await asyncio.sleep(1)
+        opened = await set_operator_chat_status(user_id, is_closed=False)
+        if opened:
+            logger.info(f"✅ Operator chat opened for user {user_id} on retry")
+        else:
+            logger.error(f"❌ Failed to open operator chat for user {user_id} even after retry")
+    
     # Создаем/обновляем пользователя в БД при первом обращении
     result = await save_message_to_db(
         user_id=user_id,
@@ -252,15 +268,13 @@ async def handle_start(message: Message, bot: Bot):
         logger.info(f"✅ /start message saved for user {user_id}: {result}")
     else:
         logger.error(f"❌ Failed to save /start message for user {user_id}: {result}")
-
-    # Всегда открываем чат при /start, чтобы он попал в открытые
-    # Это нужно, чтобы при /start чат всегда попадал в открытые, даже если он был закрыт
-    logger.info(f"🔓 Opening chat for user {user_id} on /start command...")
-    opened = await set_operator_chat_status(user_id, is_closed=False)
-    if opened:
-        logger.info(f"✅ Operator chat opened for user {user_id}")
-    else:
-        logger.warning(f"⚠️ Failed to open operator chat for user {user_id}, but continuing...")
+    
+    # Открываем чат еще раз после сохранения сообщения (на всякий случай)
+    if not opened:
+        logger.info(f"🔓 Opening chat for user {user_id} on /start command (AFTER saving message)...")
+        opened = await set_operator_chat_status(user_id, is_closed=False)
+        if opened:
+            logger.info(f"✅ Operator chat opened for user {user_id} after message save")
     
     # Проверяем, есть ли уже сообщения (кроме /start)
     has_messages = await check_existing_messages(user_id)
