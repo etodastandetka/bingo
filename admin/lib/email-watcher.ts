@@ -6,7 +6,7 @@ import Imap from 'imap'
 import { simpleParser } from 'mailparser'
 import { prisma } from './prisma'
 import { parseEmailByBank } from './email-parsers'
-import { matchAndProcessPayment } from './auto-deposit'
+// Убрали импорт matchAndProcessPayment - автопополнение теперь вызывается только при создании заявки с фото чека
 
 interface WatcherSettings {
   enabled: boolean
@@ -94,22 +94,26 @@ async function processEmail(
               console.log(`📨 Email preview: ${preview}...`)
             }
 
+            // КРИТИЧЕСКИ ВАЖНО: Помечаем письмо как прочитанное СРАЗУ после получения
+            // Это предотвращает повторную обработку одного и того же письма
+            // Делаем это ДО обработки, чтобы письмо не попало снова в непрочитанные
+            imap.setFlags(uid, ['\\Seen'], (err: Error | null) => {
+              if (err) {
+                console.error(`❌ Error marking email as seen (before processing):`, err)
+              } else {
+                console.log(`✅ Email UID ${uid} marked as read (before processing to prevent duplicates)`)
+              }
+            })
+
             // ВАЖНО: Проверяем дату письма - если письмо старше 7 дней, сразу помечаем как прочитанное
             // (увеличено до 7 дней, чтобы обрабатывать письма, которые пришли недавно)
             const emailDate = parsed.date || new Date()
             const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
             
             if (emailDate < sevenDaysAgo) {
-              console.log(`⚠️ Email UID ${uid} is too old (${emailDate.toISOString()}), marking as read without processing`)
-              // Используем setFlags вместо addFlags для более надежной установки флага
-              imap.setFlags(uid, ['\\Seen'], (err: Error | null) => {
-                if (err) {
-                  console.error(`❌ Error marking old email as seen:`, err)
-                } else {
-                  console.log(`✅ Old email UID ${uid} marked as read (skipped)`)
-                }
-                resolve()
-              })
+              console.log(`⚠️ Email UID ${uid} is too old (${emailDate.toISOString()}), skipping processing`)
+              // Письмо уже помечено как прочитанное выше, просто завершаем
+              resolve()
               return
             }
 
@@ -130,16 +134,9 @@ async function processEmail(
             } else {
               console.log(`   No amount pattern found`)
             }
-            // Помечаем как прочитанное, даже если не смогли распарсить
-            // Используем setFlags вместо addFlags для более надежной установки флага
-            imap.setFlags(uid, ['\\Seen'], (err: Error | null) => {
-              if (err) {
-                console.error(`❌ Error marking unparseable email as seen:`, err)
-              } else {
-                console.log(`✅ Unparseable email UID ${uid} marked as read`)
-              }
-              resolve()
-            })
+            // Письмо уже помечено как прочитанное выше, просто завершаем
+            console.log(`⚠️ Could not parse email (UID: ${uid}), skipping`)
+            resolve()
             return
           }
 
@@ -157,6 +154,7 @@ async function processEmail(
             // ВАЖНО: Проверяем, не существует ли уже такой платеж (по сумме, дате и банку)
             // Это предотвращает дубликаты при повторной обработке писем
             // Увеличиваем окно поиска до ±10 минут для более надежной проверки
+            // ОГРАНИЧИВАЕМ поиск только необработанными платежами для производительности
             const existingPayment = await prisma.incomingPayment.findFirst({
               where: {
                 amount: amount,
@@ -165,23 +163,16 @@ async function processEmail(
                   gte: new Date(paymentDate.getTime() - 10 * 60000), // ±10 минут
                   lte: new Date(paymentDate.getTime() + 10 * 60000),
                 },
+                // Проверяем как обработанные, так и необработанные (для надежности)
               },
+              orderBy: { createdAt: 'desc' },
             })
 
             if (existingPayment) {
               console.log(`⚠️ Payment already exists: ID ${existingPayment.id}, amount: ${amount}, date: ${paymentDate.toISOString()}`)
-              console.log(`   Skipping duplicate payment. Marking email as read immediately.`)
-              
-              // СРАЗУ помечаем письмо как прочитанное, чтобы не обрабатывать его снова
-              // Используем setFlags вместо addFlags для более надежной установки флага
-              imap.setFlags(uid, ['\\Seen'], (err: Error | null) => {
-                if (err) {
-                  console.error(`❌ Error marking email as seen:`, err)
-                } else {
-                  console.log(`✅ Email UID ${uid} marked as read (duplicate skipped)`)
-                }
-                resolve()
-              })
+              console.log(`   Skipping duplicate payment. Email already marked as read.`)
+              // Письмо уже помечено как прочитанное выше, просто завершаем
+              resolve()
               return
             }
 
@@ -198,22 +189,41 @@ async function processEmail(
 
             console.log(`✅ IncomingPayment saved: ID ${incomingPayment.id}`)
 
-            // Пытаемся найти совпадение и автоматически пополнить баланс
-            // Используем оптимизированную функцию из auto-deposit.ts (ищет за последние 5 минут, быстрее)
-            await matchAndProcessPayment(incomingPayment.id, amount)
-
-            // СРАЗУ помечаем письмо как прочитанное ПОСЛЕ успешной обработки
-            // Это критично важно, чтобы не обрабатывать письмо повторно
-            // Используем setFlags вместо addFlags для более надежной установки флага
-            imap.setFlags(uid, ['\\Seen'], (err: Error | null) => {
-              if (err) {
-                console.error(`❌ Error marking email as seen:`, err)
-                // Даже при ошибке помечания как прочитанное, считаем обработку завершенной
-              } else {
-                console.log(`✅ Email UID ${uid} marked as read (payment saved: ID ${incomingPayment.id})`)
-              }
-              resolve()
+            // НОВАЯ ЛОГИКА: Только помечаем письмо как прочитанное, если есть pending заявка с такой же суммой
+            // Автопополнение НЕ вызывается здесь - оно вызывается только при создании заявки с фото чека
+            // ОГРАНИЧИВАЕМ количество записей для производительности (максимум 20 заявок)
+            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+            const matchingRequests = await prisma.request.findMany({
+              where: {
+                requestType: 'deposit',
+                status: 'pending',
+                createdAt: { gte: tenMinutesAgo },
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 20, // Ограничиваем количество для производительности
+              select: {
+                id: true,
+                amount: true,
+              },
             })
+
+            // Фильтруем по точному совпадению суммы (как в auto-deposit.ts)
+            const exactMatch = matchingRequests.find((req) => {
+              if (!req.amount) return false
+              const reqAmount = parseFloat(req.amount.toString())
+              const diff = Math.abs(reqAmount - amount)
+              return diff < 0.01 // Точность до 1 копейки
+            })
+
+            if (exactMatch) {
+              console.log(`✅ Found pending request ${exactMatch.id} with matching amount ${amount}, marking email as read`)
+            } else {
+              console.log(`ℹ️ No pending request found with amount ${amount}, marking email as read anyway`)
+            }
+
+            // Письмо уже помечено как прочитанное выше, просто завершаем
+            console.log(`✅ Payment saved: ID ${incomingPayment.id}, email UID ${uid} already marked as read`)
+            resolve()
           } catch (error: any) {
             console.error(`❌ Error processing email (UID: ${uid}):`, error)
             reject(error)

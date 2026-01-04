@@ -558,16 +558,8 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      if (uncreated_request_id) {
-        const uncreatedIdNum = parseInt(uncreated_request_id, 10)
-        if (!Number.isNaN(uncreatedIdNum)) {
-          // @ts-ignore prisma client needs regenerate after schema change
-          await prisma.uncreatedRequest.updateMany({
-            where: { id: uncreatedIdNum },
-            data: { status: 'converted', createdRequestId: newRequest.id },
-          })
-        }
-      }
+      // Убрали обработку uncreated_request_id, так как теперь создаем заявку сразу при показе QR кода
+      // Если в будущем понадобится - можно вернуть
 
       const successData = {
         id: newRequest.id,
@@ -654,11 +646,11 @@ export async function POST(request: NextRequest) {
         addLog('success', `✅ Статус заявки исправлен на 'pending' (ID: ${verifyRequest.id})`)
       }
 
-      // Проверяем существующие платежи при создании заявки
-      // Это нужно на случай, если платеж был обработан email-watcher'ом ДО создания заявки
-      if (validType === 'deposit' && amountDecimal) {
+      // Автопополнение вызывается ТОЛЬКО при создании заявки С ФОТО ЧЕКА
+      // Если заявка создана без фото чека (при показе QR кода) - автопополнение не вызывается
+      if (validType === 'deposit' && amountDecimal && processedPhoto) {
         const requestAmount = parseFloat(amountDecimal.toString())
-        console.log(`🔍 Payment API - Checking for existing payments for request ${newRequest.id}, amount: ${requestAmount}`)
+        console.log(`🔍 Payment API - Checking for existing payments for request ${newRequest.id} with receipt photo, amount: ${requestAmount}`)
         try {
           const { checkAndProcessExistingPayment } = await import('@/lib/auto-deposit')
           const result = await checkAndProcessExistingPayment(newRequest.id, requestAmount)
@@ -672,6 +664,8 @@ export async function POST(request: NextRequest) {
           console.warn('⚠️ Payment API - Auto-deposit check failed (non-blocking):', autoDepositError.message)
           console.warn('⚠️ Payment API - Auto-deposit check error stack:', autoDepositError.stack)
         }
+      } else if (validType === 'deposit' && !processedPhoto) {
+        console.log(`ℹ️ Payment API - Request ${newRequest.id} created without receipt photo, skipping auto-deposit`)
       }
 
       const response = NextResponse.json(
@@ -907,6 +901,25 @@ export async function PUT(request: NextRequest) {
       where: { id: parseInt(id) },
       data: updateData,
     })
+
+    // Автопополнение вызывается ТОЛЬКО при добавлении фото чека к pending заявке
+    // Это происходит когда пользователь отправляет фото чека после показа QR кода
+    if (receipt_photo !== undefined && updatedRequest.requestType === 'deposit' && updatedRequest.status === 'pending' && updatedRequest.amount) {
+      const requestAmount = parseFloat(updatedRequest.amount.toString())
+      console.log(`🔍 Payment API PUT - Checking for existing payments for request ${updatedRequest.id} after adding receipt photo, amount: ${requestAmount}`)
+      try {
+        const { checkAndProcessExistingPayment } = await import('@/lib/auto-deposit')
+        const result = await checkAndProcessExistingPayment(updatedRequest.id, requestAmount)
+        if (result) {
+          console.log(`✅ Payment API PUT - Auto-deposit check completed for request ${updatedRequest.id}`)
+        } else {
+          console.log(`ℹ️ Payment API PUT - No matching payments found for request ${updatedRequest.id}`)
+        }
+      } catch (autoDepositError: any) {
+        // Не блокируем обновление заявки если автопополнение не сработало
+        console.warn('⚠️ Payment API PUT - Auto-deposit check failed (non-blocking):', autoDepositError.message)
+      }
+    }
 
     const response = NextResponse.json(
       createApiResponse({

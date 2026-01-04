@@ -13,12 +13,25 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     // 10 минут - больше чем 5 минут в matchAndProcessPayment, чтобы учесть задержки
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
     
+    // ОПТИМИЗАЦИЯ: Фильтруем по сумме прямо в БД (приблизительно)
+    // Используем диапазон ±0.1 для учета округлений, затем фильтруем точно в памяти
+    const amountMin = amount - 0.1
+    const amountMax = amount + 0.1
+    
+    // ОГРАНИЧИВАЕМ количество записей для производительности
+    // За 10 минут вряд ли будет больше 50 необработанных платежей с такой суммой
+    // Если платеж был недавно, он будет среди последних (отсортированных по дате)
     const matchingPayments = await prisma.incomingPayment.findMany({
       where: {
         isProcessed: false,
         paymentDate: { gte: tenMinutesAgo },
+        amount: {
+          gte: amountMin,
+          lte: amountMax,
+        },
       },
       orderBy: { paymentDate: 'desc' },
+      take: 50, // Уменьшено до 50, так как уже фильтруем по сумме в БД
       select: {
         id: true,
         amount: true,
@@ -26,9 +39,9 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       },
     })
     
-    console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in last 10 minutes for request ${requestId}`)
+    console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in last 10 minutes (amount range: ${amountMin}-${amountMax}) for request ${requestId}`)
     
-    // Фильтруем по точному совпадению суммы
+    // Фильтруем по точному совпадению суммы (до 1 копейки)
     const exactMatches = matchingPayments.filter((payment) => {
       const paymentAmount = parseFloat(payment.amount.toString())
       const diff = Math.abs(paymentAmount - amount)

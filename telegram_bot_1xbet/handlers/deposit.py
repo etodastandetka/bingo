@@ -608,25 +608,30 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             
             timer_task.add_done_callback(timer_task_done)
             
-            # Создаем несозданную заявку при показе QR-кода
+            # Создаем заявку со статусом pending при показе QR-кода (без фото чека)
             try:
-                uncreated_result = await APIClient.create_uncreated_request(
+                pending_request_result = await APIClient.create_request(
                     telegram_user_id=str(message.from_user.id),
-                    bookmaker=casino_id,
-                    account_id=account_id,
+                    request_type='deposit',
                     amount=amount_with_cents,
+                    bookmaker=casino_id,
+                    bank='omoney',  # По умолчанию omoney
+                    account_id=account_id,
                     telegram_username=message.from_user.username,
                     telegram_first_name=message.from_user.first_name,
                     telegram_last_name=message.from_user.last_name,
+                    receipt_photo=None,  # Без фото чека - заявка будет pending
+                    bot_type=Config.BOT_TYPE
                 )
-                if uncreated_result.get('success') and uncreated_result.get('data', {}).get('id'):
-                    uncreated_id = uncreated_result.get('data', {}).get('id')
-                    await state.update_data(uncreated_request_id=str(uncreated_id))
+                if pending_request_result.get('success') and pending_request_result.get('data', {}).get('id'):
+                    pending_request_id = pending_request_result.get('data', {}).get('id')
+                    await state.update_data(pending_request_id=str(pending_request_id))
+                    logger.info(f"[Deposit] Created pending request {pending_request_id} when showing QR code")
             except Exception as e:
                 import logging
                 logger = logging.getLogger(__name__)
-                logger.warning(f"Failed to create uncreated request: {e}")
-                # Продолжаем работу даже если не удалось создать несозданную заявку
+                logger.warning(f"Failed to create pending request: {e}")
+                # Продолжаем работу даже если не удалось создать заявку
             
             # Сразу переходим в состояние ожидания чека (без выбора банка)
             # Текст про отправку чека уже есть в caption сообщения с QR
@@ -736,7 +741,7 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
         account_id = data.get('account_id')
         amount = data.get('amount')
         bank_id = data.get('bank_id', 'omoney')  # По умолчанию omoney
-        uncreated_request_id = data.get('uncreated_request_id')
+        pending_request_id = data.get('pending_request_id')
         
         if not all([casino_id, account_id, amount]):
             await message.answer(get_text(lang, 'deposit', 'error'))
@@ -745,22 +750,65 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
             await cmd_start(message, state, bot)
             return
         
-        # Создаем заявку через API (конвертирует несозданную заявку если есть uncreated_request_id)
-        # Передаем botType из конфига, чтобы API знал, из какого бота была создана заявка
-        result = await APIClient.create_request(
-            telegram_user_id=str(message.from_user.id),
-            request_type='deposit',
-            amount=amount,
-            bookmaker=casino_id,
-            bank=bank_id,
-            account_id=account_id,
-            telegram_username=message.from_user.username,
-            telegram_first_name=message.from_user.first_name,
-            telegram_last_name=message.from_user.last_name,
-            receipt_photo=photo_base64_with_prefix,
-            uncreated_request_id=uncreated_request_id,
-            bot_type=Config.BOT_TYPE
-        )
+        # Если есть pending заявка - обновляем её, добавляя фото чека
+        # Если нет - создаем новую заявку с фото чека
+        if pending_request_id:
+            # Обновляем существующую pending заявку, добавляя фото чека
+            import aiohttp
+            import ssl
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                api_url = Config.API_BASE_URL
+                if api_url.startswith('http://localhost'):
+                    try:
+                        async with session.put(
+                            f'{api_url}/payment',
+                            json={
+                                'id': pending_request_id,
+                                'receipt_photo': photo_base64_with_prefix,
+                            },
+                            timeout=aiohttp.ClientTimeout(total=5)
+                        ) as response:
+                            result = await response.json()
+                    except:
+                        api_url = Config.API_FALLBACK_URL
+                        async with session.put(
+                            f'{api_url}/payment',
+                            json={
+                                'id': pending_request_id,
+                                'receipt_photo': photo_base64_with_prefix,
+                            },
+                            timeout=aiohttp.ClientTimeout(total=5)
+                        ) as response:
+                            result = await response.json()
+                else:
+                    async with session.put(
+                        f'{api_url}/payment',
+                        json={
+                            'id': pending_request_id,
+                            'receipt_photo': photo_base64_with_prefix,
+                        },
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        result = await response.json()
+        else:
+            # Создаем новую заявку с фото чека
+            result = await APIClient.create_request(
+                telegram_user_id=str(message.from_user.id),
+                request_type='deposit',
+                amount=amount,
+                bookmaker=casino_id,
+                bank=bank_id,
+                account_id=account_id,
+                telegram_username=message.from_user.username,
+                telegram_first_name=message.from_user.first_name,
+                telegram_last_name=message.from_user.last_name,
+                receipt_photo=photo_base64_with_prefix,
+                bot_type=Config.BOT_TYPE
+            )
         
         if result.get('success') and result.get('data'):
             # Заявка создана успешно
@@ -777,14 +825,18 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
                         casino=casino_name)
             )
             
-            # Сохраняем ID сообщения в заявке через API
+            # Сохраняем ID сообщения в заявке через API (в фоне, не блокируя ответ пользователю)
             if request_id and request_created_msg.message_id:
-                try:
-                    await APIClient.update_request_message_id(request_id, request_created_msg.message_id)
-                except Exception as e:
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.warning(f"Failed to save request message ID: {e}")
+                async def save_message_id_background():
+                    try:
+                        await APIClient.update_request_message_id(request_id, request_created_msg.message_id)
+                    except Exception as e:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"Failed to save request message ID: {e}")
+                
+                # Запускаем в фоне, не ждем завершения
+                asyncio.create_task(save_message_id_background())
             # НЕ возвращаем главное меню и НЕ очищаем state
             # Главное меню вернется только когда деньги зачислятся или заявка отменится
         else:

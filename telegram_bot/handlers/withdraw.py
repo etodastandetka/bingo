@@ -580,14 +580,19 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
             # Отправляем сообщение о создании заявки и сохраняем его ID
             request_created_msg = await message.answer(success_message)
             
-            # Сохраняем ID сообщения в заявке через API
+            # Сохраняем ID сообщения в заявке через API (в фоне, не блокируя ответ пользователю)
             if request_id and request_created_msg.message_id:
-                try:
-                    await APIClient.update_request_message_id(request_id, request_created_msg.message_id)
-                except Exception as e:
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.warning(f"Failed to save request message ID: {e}")
+                async def save_message_id_background():
+                    try:
+                        await APIClient.update_request_message_id(request_id, request_created_msg.message_id)
+                    except Exception as e:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"Failed to save request message ID: {e}")
+                
+                # Запускаем в фоне, не ждем завершения
+                import asyncio
+                asyncio.create_task(save_message_id_background())
         else:
             await message.answer(get_text(lang, 'withdraw', 'error'))
         

@@ -350,22 +350,32 @@ class APIClient:
         async with aiohttp.ClientSession(connector=connector) as session:
             # Пробуем сначала локальный API, если не доступен - используем продакшн
             api_url = Config.API_BASE_URL
+            # Убираем /api из конца URL если есть, так как добавляем его в путь
+            if api_url.endswith('/api'):
+                api_url = api_url[:-4]
+            elif api_url.endswith('/api/'):
+                api_url = api_url[:-5]
+            
             if api_url.startswith('http://localhost'):
                 try:
                     async with session.patch(
                         f'{api_url}/api/requests/{request_id}/message-id',
                         json={'message_id': message_id},
-                        timeout=aiohttp.ClientTimeout(total=5)
+                        timeout=aiohttp.ClientTimeout(total=3)
                     ) as response:
                         return await response.json()
                 except:
                     # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
+                    if api_url.endswith('/api'):
+                        api_url = api_url[:-4]
+                    elif api_url.endswith('/api/'):
+                        api_url = api_url[:-5]
             
             async with session.patch(
                 f'{api_url}/api/requests/{request_id}/message-id',
                 json={'message_id': message_id},
-                timeout=aiohttp.ClientTimeout(total=10)
+                timeout=aiohttp.ClientTimeout(total=3)
             ) as response:
                 return await response.json()
     
