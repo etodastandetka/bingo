@@ -169,6 +169,16 @@ export default function RequestsPage() {
 
       <div className="mb-4 flex items-center space-x-2">
         <button
+          onClick={() => setFilter({ ...filter, status: undefined })}
+          className={`flex-1 px-4 py-3 rounded-xl font-medium text-sm transition-all ${
+            !filter.status
+              ? 'bg-blue-500 text-white shadow-lg'
+              : 'bg-gray-900 text-gray-300'
+          }`}
+        >
+          Все
+        </button>
+        <button
           onClick={() => setFilter({ ...filter, status: 'pending' })}
           className={`flex-1 px-4 py-3 rounded-xl font-medium text-sm transition-all ${
             filter.status === 'pending'

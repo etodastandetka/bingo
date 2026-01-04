@@ -24,9 +24,10 @@ export async function GET(request: NextRequest) {
       // Статус 'left' не существует в БД, это специальный фильтр для UI
       where.status = status
     } else if (status === 'left') {
-      // Для "Оставленные" фильтруем все кроме pending
+      // Для "Оставленные" фильтруем все кроме pending - включая autodeposit_success
       where.status = { not: 'pending' }
     }
+    // Если нет фильтра по статусу - показываем ВСЕ заявки (включая autodeposit_success)
 
     // Убрали лишние логи и запросы для оптимизации
 
