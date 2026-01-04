@@ -7,7 +7,8 @@ module.exports = {
       args: 'start',
       env: {
         NODE_ENV: 'production',
-        PORT: 3001
+        PORT: 3001,
+        BOT_TOKEN: '8237611656:AAG3A0PqOqBtIYDzl-MiXRbSgClRE0Rs5Ko'
       },
       error_file: './logs/admin-error.log',
       out_file: './logs/admin-out.log',
@@ -25,7 +26,8 @@ module.exports = {
       interpreter: 'python3',
       interpreter_args: '-u',
       env: {
-        PYTHONUNBUFFERED: '1'
+        PYTHONUNBUFFERED: '1',
+        BOT_TOKEN: '8237611656:AAG3A0PqOqBtIYDzl-MiXRbSgClRE0Rs5Ko'
       },
       error_file: './logs/bot-error.log',
       out_file: './logs/bot-out.log',
