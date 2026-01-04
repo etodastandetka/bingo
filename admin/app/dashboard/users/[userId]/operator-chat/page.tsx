@@ -1421,6 +1421,119 @@ export default function OperatorChatPage() {
         </div>
       )}
 
+      {/* Модальное окно для просмотра изображения в полном размере */}
+      {imageModalOpen && imageModalUrl && (
+        <div 
+          className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center p-4"
+          onClick={() => {
+            setImageModalOpen(false)
+            setImageZoom(1)
+            setImagePosition({ x: 0, y: 0 })
+          }}
+        >
+          <div 
+            className="relative w-full h-full flex items-center justify-center"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Кнопка закрытия */}
+            <button
+              onClick={() => {
+                setImageModalOpen(false)
+                setImageZoom(1)
+                setImagePosition({ x: 0, y: 0 })
+              }}
+              className="absolute top-4 right-4 z-10 text-white hover:text-gray-300 bg-gray-800 bg-opacity-50 rounded-full p-2 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Кнопки управления зумом */}
+            <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setImageZoom(prev => Math.min(prev + 0.25, 5))
+                }}
+                className="text-white hover:text-gray-300 bg-gray-800 bg-opacity-50 rounded-full p-2 transition-colors"
+                title="Увеличить"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setImageZoom(prev => Math.max(prev - 0.25, 0.5))
+                }}
+                className="text-white hover:text-gray-300 bg-gray-800 bg-opacity-50 rounded-full p-2 transition-colors"
+                title="Уменьшить"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                </svg>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setImageZoom(1)
+                  setImagePosition({ x: 0, y: 0 })
+                }}
+                className="text-white hover:text-gray-300 bg-gray-800 bg-opacity-50 rounded-full p-2 transition-colors"
+                title="Сбросить"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Изображение */}
+            <div
+              className="w-full h-full overflow-hidden flex items-center justify-center"
+              onWheel={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const delta = e.deltaY > 0 ? -0.1 : 0.1
+                setImageZoom(prev => Math.max(0.5, Math.min(5, prev + delta)))
+              }}
+              onMouseDown={(e) => {
+                if (imageZoom > 1) {
+                  e.stopPropagation()
+                  setIsDragging(true)
+                  setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y })
+                }
+              }}
+              onMouseMove={(e) => {
+                if (isDragging && imageZoom > 1) {
+                  e.stopPropagation()
+                  setImagePosition({
+                    x: e.clientX - dragStart.x,
+                    y: e.clientY - dragStart.y
+                  })
+                }
+              }}
+              onMouseUp={() => setIsDragging(false)}
+              onMouseLeave={() => setIsDragging(false)}
+            >
+              <img
+                src={imageModalUrl}
+                alt="Full size"
+                className="max-w-full max-h-full object-contain transition-transform duration-200"
+                style={{
+                  transform: `scale(${imageZoom}) translate(${imagePosition.x / imageZoom}px, ${imagePosition.y / imageZoom}px)`,
+                  cursor: imageZoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+                }}
+                draggable={false}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         @keyframes slide-up {
           from {
