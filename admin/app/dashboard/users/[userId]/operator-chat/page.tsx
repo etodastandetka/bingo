@@ -76,6 +76,12 @@ export default function OperatorChatPage() {
   const [reviewModalIsUncreated, setReviewModalIsUncreated] = useState(false)
   const [reviewModalLoading, setReviewModalLoading] = useState(false)
   const [toastNotification, setToastNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [imageModalOpen, setImageModalOpen] = useState(false)
+  const [imageModalUrl, setImageModalUrl] = useState<string | null>(null)
+  const [imageZoom, setImageZoom] = useState(1)
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
@@ -861,7 +867,13 @@ export default function OperatorChatPage() {
                             <img 
                               src={message.mediaUrl} 
                               alt="Photo" 
-                              className="w-full max-h-64 object-cover rounded-lg"
+                              className="w-full max-h-64 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => {
+                                setImageModalUrl(message.mediaUrl || null)
+                                setImageModalOpen(true)
+                                setImageZoom(1)
+                                setImagePosition({ x: 0, y: 0 })
+                              }}
                             />
                           ) : message.messageType === 'video' ? (
                             <video 
