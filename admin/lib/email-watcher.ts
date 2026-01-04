@@ -190,7 +190,8 @@ async function processEmail(
             console.log(`✅ IncomingPayment saved: ID ${incomingPayment.id}`)
 
             // ФОНОВОЕ АВТОПОПОЛНЕНИЕ: Ищем ВСЕ pending заявки с такой же суммой и вызываем автопополнение
-            // Это обрабатывает заявки как с фото чека, так и без него, чтобы они не появлялись в дашборде
+            // Это обрабатывает заявки как с фото чека, так и без него
+            // Заявки без чека не показываются в дашборде, но автопополнение работает для них в фоне
             // ОГРАНИЧИВАЕМ количество записей для производительности (максимум 20 заявок)
             const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
             const matchingRequests = await prisma.request.findMany({
@@ -198,13 +199,14 @@ async function processEmail(
                 requestType: 'deposit',
                 status: 'pending',
                 createdAt: { gte: tenMinutesAgo },
-                // Убираем фильтр по photoFileUrl - обрабатываем ВСЕ заявки (с чеком и без)
+                // Обрабатываем ВСЕ заявки (с чеком и без) - автопополнение работает в фоне
               },
               orderBy: { createdAt: 'asc' }, // Берем самую старую заявку (FIFO)
               take: 20, // Ограничиваем количество для производительности
               select: {
                 id: true,
                 amount: true,
+                photoFileUrl: true, // Проверяем наличие чека для логирования
                 incomingPayments: {
                   select: { isProcessed: true },
                 },
@@ -227,12 +229,14 @@ async function processEmail(
             })
 
             if (exactMatch) {
-              console.log(`✅ [Background Auto-Deposit] Found pending request ${exactMatch.id} with matching amount ${amount}, processing in background`)
+              const hasReceipt = !!exactMatch.photoFileUrl
+              console.log(`✅ [Background Auto-Deposit] Found pending request ${exactMatch.id} with matching amount ${amount} (${hasReceipt ? 'with' : 'without'} receipt), processing in background`)
               // Вызываем автопополнение для найденной заявки в фоне (не блокируем обработку других писем)
+              // Работает для заявок с чеком и без - заявки без чека не показываются в дашборде, но обрабатываются
               const { matchAndProcessPayment } = await import('./auto-deposit')
               matchAndProcessPayment(incomingPayment.id, amount)
                 .then(() => {
-                  console.log(`✅ [Background Auto-Deposit] Successfully processed payment ${incomingPayment.id} → request ${exactMatch.id}`)
+                  console.log(`✅ [Background Auto-Deposit] Successfully processed payment ${incomingPayment.id} → request ${exactMatch.id} (${hasReceipt ? 'with receipt' : 'without receipt'})`)
                 })
                 .catch((autoDepositError: any) => {
                   console.error(`❌ [Background Auto-Deposit] Error processing payment ${incomingPayment.id} → request ${exactMatch.id}:`, autoDepositError.message)

@@ -646,9 +646,8 @@ export async function POST(request: NextRequest) {
         addLog('success', `✅ Статус заявки исправлен на 'pending' (ID: ${verifyRequest.id})`)
       }
 
-      // Автопополнение вызывается ТОЛЬКО при создании заявки С ФОТО ЧЕКА
       // ФОНОВОЕ АВТОПОПОЛНЕНИЕ: Проверяем наличие платежа для ВСЕХ заявок (с чеком и без)
-      // Это позволяет обрабатывать заявки без чека сразу при создании, если платеж уже есть
+      // Заявки без чека не показываются в дашборде, но автопополнение работает для них в фоне
       if (validType === 'deposit' && amountDecimal) {
         const requestAmount = parseFloat(amountDecimal.toString())
         const hasReceipt = !!processedPhoto
@@ -664,10 +663,10 @@ export async function POST(request: NextRequest) {
             const { checkAndProcessExistingPayment } = await import('@/lib/auto-deposit')
             const result = await checkAndProcessExistingPayment(newRequest.id, requestAmount)
             if (result) {
-              console.log(`✅ Payment API - Auto-deposit check completed for request ${newRequest.id} (attempt ${attempt})`)
+              console.log(`✅ Payment API - Auto-deposit check completed for request ${newRequest.id} (attempt ${attempt}, ${hasReceipt ? 'with receipt' : 'without receipt'})`)
               return true
             } else {
-              console.log(`ℹ️ Payment API - No matching payments found for request ${newRequest.id} (attempt ${attempt})`)
+              console.log(`ℹ️ Payment API - No matching payments found for request ${newRequest.id} (attempt ${attempt}, ${hasReceipt ? 'with receipt' : 'without receipt'})`)
               return false
             }
           } catch (autoDepositError: any) {
@@ -680,6 +679,7 @@ export async function POST(request: NextRequest) {
         const immediateResult = await checkPayment(1, 0)
         
         // Если не нашли сразу, проверяем еще раз через 3 секунды (платеж может прийти с задержкой)
+        // Для заявок без чека это особенно важно - платеж может прийти позже
         if (!immediateResult) {
           // Запускаем повторную проверку в фоне (не блокируем ответ)
           checkPayment(2, 3000).catch(err => {
