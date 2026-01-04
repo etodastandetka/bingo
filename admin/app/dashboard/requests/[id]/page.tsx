@@ -154,12 +154,13 @@ export default function RequestDetailPage() {
               setSelectedBookmaker(data.data.bookmaker)
             }
             
-            // Автоматически заполняем поле поиска ТОЛЬКО при первой загрузке (если поле пустое)
-            if (isFirstLoad && data.data.requestType === 'deposit' && data.data.amount && !searchAmount.trim()) {
+            // Автоматически заполняем поле поиска ТОЛЬКО один раз при первой загрузке
+            if (!searchAmountInitializedRef.current && data.data.requestType === 'deposit' && data.data.amount) {
               const amount = parseFloat(data.data.amount)
               if (!isNaN(amount) && amount > 0) {
-                // Заполняем поле поиска только при первой загрузке
+                // Заполняем поле поиска только один раз
                 setSearchAmount(amount.toString())
+                searchAmountInitializedRef.current = true // Помечаем, что сумма установлена
               }
             }
             
