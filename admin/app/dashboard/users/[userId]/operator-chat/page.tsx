@@ -143,7 +143,9 @@ export default function OperatorChatPage() {
   }
 
   const handleQuickReplyClick = (text: string) => {
-    setNewMessage(text)
+    // Добавляем '>' в начало, если его нет (форматирование ответа в Telegram)
+    const formattedText = text.trim().startsWith('>') ? text.trim() : `> ${text.trim()}`
+    setNewMessage(formattedText)
     setShowQuickReplies(false)
   }
 
