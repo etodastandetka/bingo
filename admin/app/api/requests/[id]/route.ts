@@ -327,18 +327,11 @@ export async function PATCH(
             )
             
             // Для операторских заявок отправляем сообщение в правильный бот БЕЗ инлайн кнопки
-            // Используем botType из заявки для определения правильного бота
-            let botType = (updatedRequest as any).botType || (currentRequest as any).botType || null
+            // ВАЖНО: Используем ТОЛЬКО botType из заявки, НЕ определяем из bookmaker
+            // Если заявка создана в основном боте, но bookmaker = "1xbet", уведомление должно идти в основной бот
+            let botType = (updatedRequest as any).botType || (currentRequest as any).botType || 'main'
             
-            // Если botType не найден, пытаемся определить из bookmaker
-            if (!botType && updatedRequest.bookmaker) {
-              const bookmakerLower = updatedRequest.bookmaker.toLowerCase()
-              if (bookmakerLower.includes('mostbet')) {
-                botType = 'mostbet'
-              } else if (bookmakerLower.includes('1xbet') || bookmakerLower.includes('xbet')) {
-                botType = '1xbet'
-              }
-            }
+            console.log(`[Operator Request] Using botType from request: ${botType} (not from bookmaker ${updatedRequest.bookmaker})`)
             
             if (notificationMessage) {
               // Отправляем сообщение БЕЗ инлайн кнопки "Главное меню"
@@ -408,21 +401,15 @@ export async function PATCH(
 
         // Отправляем уведомление в правильный бот только если это не операторская заявка
         // и есть сообщение для отправки
-        // Бот определяется на основе botType из заявки (приоритет) или bookmaker (fallback)
+        // ВАЖНО: Бот определяется ТОЛЬКО на основе botType из заявки, НЕ из bookmaker
+        // Если заявка создана в основном боте, но bookmaker = "1xbet", уведомление должно идти в основной бот
         if (notificationMessage && !isOperatorRequest) {
           // Получаем botType из заявки для правильной отправки уведомлений
           // Сначала проверяем updatedRequest, затем currentRequest
-          let botType = (updatedRequest as any).botType || (currentRequest as any).botType || null
+          // Если botType не найден, используем 'main' (основной бот) по умолчанию
+          let botType = (updatedRequest as any).botType || (currentRequest as any).botType || 'main'
           
-          // Если botType не найден, пытаемся определить из bookmaker
-          if (!botType && updatedRequest.bookmaker) {
-            const bookmakerLower = updatedRequest.bookmaker.toLowerCase()
-            if (bookmakerLower.includes('mostbet')) {
-              botType = 'mostbet'
-            } else if (bookmakerLower.includes('1xbet') || bookmakerLower.includes('xbet')) {
-              botType = '1xbet'
-            }
-          }
+          console.log(`[Request Update] Using botType from request: ${botType} (bookmaker: ${updatedRequest.bookmaker})`)
           
           // Для отклоненных заявок отправляем новое сообщение с кнопкой "Главное меню" (НЕ удаляем старое сообщение)
           if (['rejected', 'declined'].includes(body.status)) {
