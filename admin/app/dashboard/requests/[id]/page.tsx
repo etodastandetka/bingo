@@ -689,21 +689,14 @@ export default function RequestDetailPage() {
 
       if (data.success) {
         const incoming = data.data.payments || []
-        setSimilarPayments((prev) => {
-          // индекс по id для быстрого обновления
-          const byId = new Map<number, any>()
-          prev.forEach((p) => byId.set(p.id, p))
-          incoming.forEach((p: any) => byId.set(p.id, { ...byId.get(p.id), ...p }))
-          // итоговый список: обновлённые предыдущие + новые
-          const merged = Array.from(byId.values())
-          // сортируем по времени (если есть createdAt/paymentDate)
-          merged.sort((a: any, b: any) => {
-            const da = new Date(a.paymentDate || a.createdAt || 0).getTime()
-            const db = new Date(b.paymentDate || b.createdAt || 0).getTime()
-            return db - da
-          })
-          return merged
+        // ЗАМЕНЯЕМ список полностью, а не объединяем со старым
+        // Это гарантирует, что показываются только результаты текущего поиска
+        const sortedPayments = [...incoming].sort((a: any, b: any) => {
+          const da = new Date(a.paymentDate || a.createdAt || 0).getTime()
+          const db = new Date(b.paymentDate || b.createdAt || 0).getTime()
+          return db - da
         })
+        setSimilarPayments(sortedPayments)
         // Не сбрасываем выбор, если выбранный платеж ещё существует
         const stillExists = selectedPaymentId && incoming.some((p: any) => p.id === selectedPaymentId)
         if (!stillExists) {

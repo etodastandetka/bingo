@@ -40,8 +40,14 @@ export async function GET(request: NextRequest) {
     const where: any = {}
 
     if (exactAmount) {
-      // Когда "Точная сумма" включена - ищем ТОЧНОЕ совпадение суммы (400.63 = 400.63)
-      where.amount = amountValue
+      // Когда "Точная сумма" включена - ищем ТОЧНОЕ совпадение суммы (500.52 = 500.52)
+      // Используем диапазон с минимальной погрешностью для точного сравнения Decimal
+      // Decimal(10, 2) хранит 2 знака после запятой, поэтому погрешность 0.001 достаточна
+      const tolerance = 0.001
+      where.amount = {
+        gte: amountValue - tolerance,
+        lte: amountValue + tolerance,
+      }
     } else {
       // Когда "Точная сумма" выключена - ищем по целой части (например, все пополнения на 400.XX)
       const wholePart = Math.floor(amountValue)
