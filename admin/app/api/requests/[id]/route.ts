@@ -395,12 +395,15 @@ export async function PATCH(
               console.warn('Failed to get botType, using bookmaker:', error)
             }
             
+            const amount = updatedRequest.amount?.toString() || '0'
+            const accountId = updatedRequest.accountId || '—'
+            
             const notificationMessage = [
-              `📨 Оператор отправил вашу заявку #${updatedRequest.id} на проверку.`,
-              `💰 Сумма: ${updatedRequest.amount?.toString() || '0'}`,
-              `🟡 Статус: На проверке`,
-              `🗓 Создано: ${formatDateTime(updatedRequest.createdAt)}`,
-              `⏳ Отправлено на проверку: ${formatDateTime(new Date())}`,
+              `Оператор отправил на проверку вашу заявку`,
+              `Сумма: ${amount} KGS`,
+              `ID: ${accountId}`,
+              ``,
+              `Время проверки до 3х часов`,
             ].join('\n')
             
             await sendMessageWithMainMenuButton(
