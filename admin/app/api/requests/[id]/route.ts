@@ -424,26 +424,13 @@ export async function PATCH(
             }
           }
           
-          // Для отклоненных заявок удаляем старое сообщение и отправляем новое с кнопкой "Главное меню"
+          // Для отклоненных заявок отправляем новое сообщение с кнопкой "Главное меню" (НЕ удаляем старое сообщение)
           if (['rejected', 'declined'].includes(body.status)) {
-            const { deleteRequestCreatedMessage, sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
-            
-            // Сначала удаляем старое сообщение "Ваша заявка отправлена" если оно есть
-            const request = await prisma.request.findUnique({
-              where: { id: updatedRequest.id },
-              select: { requestCreatedMessageId: true },
-            })
-            
-            if (request?.requestCreatedMessageId) {
-              await deleteRequestCreatedMessage(currentRequest.userId, request.requestCreatedMessageId, updatedRequest.bookmaker, botType)
-              await prisma.request.update({
-                where: { id: updatedRequest.id },
-                data: { requestCreatedMessageId: null },
-              })
-            }
+            const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
             
             // Отправляем сообщение об отклонении с инлайн кнопкой "Главное меню"
             // Используем botType из заявки для определения правильного бота
+            // НЕ удаляем старое сообщение "Ваша заявка отправлена" - оно должно остаться
             sendMessageWithMainMenuButton(currentRequest.userId, notificationMessage, updatedRequest.bookmaker, botType)
               .catch((error) => {
                 console.error('Failed to send rejection notification:', error)
