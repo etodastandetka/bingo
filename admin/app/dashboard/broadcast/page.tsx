@@ -126,13 +126,34 @@ export default function BroadcastPage() {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A'
-    const date = new Date(dateString)
-    const day = date.getDate().toString().padStart(2, '0')
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    const year = date.getFullYear()
-    const hours = date.getHours().toString().padStart(2, '0')
-    const minutes = date.getMinutes().toString().padStart(2, '0')
-    return `${day}.${month}.${year} • ${hours}:${minutes}`
+    
+    try {
+      const date = new Date(dateString)
+      if (Number.isNaN(date.getTime())) return 'N/A'
+      
+      // Форматируем в бишкекском времени (UTC+6, Asia/Bishkek)
+      const formatter = new Intl.DateTimeFormat('ru-RU', {
+        timeZone: 'Asia/Bishkek',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+      
+      const parts = formatter.formatToParts(date)
+      const day = parts.find(p => p.type === 'day')?.value || '00'
+      const month = parts.find(p => p.type === 'month')?.value || '00'
+      const year = parts.find(p => p.type === 'year')?.value || '0000'
+      const hours = parts.find(p => p.type === 'hour')?.value || '00'
+      const minutes = parts.find(p => p.type === 'minute')?.value || '00'
+      
+      return `${day}.${month}.${year} • ${hours}:${minutes}`
+    } catch (error) {
+      console.error('Error formatting date:', error)
+      return 'N/A'
+    }
   }
 
   return (

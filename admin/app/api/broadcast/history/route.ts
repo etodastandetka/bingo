@@ -31,8 +31,8 @@ export async function GET(request: NextRequest) {
             id: b.id,
             title: b.title,
             message: b.message,
-            sentAt: b.sentAt,
-            createdAt: b.createdAt,
+            sentAt: b.sentAt ? b.sentAt.toISOString() : null,
+            createdAt: b.createdAt.toISOString(),
             sentCount,
           }
         }),
