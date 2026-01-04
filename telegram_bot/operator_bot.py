@@ -143,6 +143,7 @@ async def set_operator_chat_status(user_id: int, is_closed: bool):
     """Открыть/закрыть операторский чат для пользователя (нужно, чтобы /start выводил чат в открытые)."""
     try:
         service_token = os.getenv('OPERATOR_SERVICE_TOKEN', 'dev-operator-token')
+        expected_token = os.getenv('OPERATOR_SERVICE_TOKEN', 'dev-operator-token')
 
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
@@ -154,18 +155,31 @@ async def set_operator_chat_status(user_id: int, is_closed: bool):
             async def do_patch(url: str):
                 full_url = f'{url}/api/public/open-operator-chat'
                 logger.info(f"🔗 PATCH {full_url} for user {user_id}, isClosed={is_closed}")
+                logger.info(f"🔑 Using token: {service_token[:10]}... (length: {len(service_token)})")
                 try:
                     async with session.patch(
                         full_url,
                         json={'userId': str(user_id), 'isClosed': is_closed},
                         headers={'x-operator-token': service_token},
-                        timeout=aiohttp.ClientTimeout(total=5)
+                        timeout=aiohttp.ClientTimeout(total=10)
                     ) as response:
-                        response_text = await response.text()
-                        logger.info(f"📥 Response status: {response.status}, body: {response_text[:200]}")
                         if response.status == 200:
+                            try:
+                                response_json = await response.json()
+                                logger.info(f"✅ Response JSON: {response_json}")
+                            except:
+                                response_text = await response.text()
+                                logger.info(f"✅ Response text: {response_text[:500]}")
                             return True
-                        logger.warning(f"⚠️ set_operator_chat_status: status {response.status}, response: {response_text[:200]}")
+                        else:
+                            response_text = await response.text()
+                            logger.info(f"📥 Response status: {response.status}, body: {response_text[:500]}")
+                            if response.status == 401:
+                                logger.error(f"❌ Unauthorized! Check OPERATOR_SERVICE_TOKEN. Expected: {expected_token[:10]}..., Got: {service_token[:10]}...")
+                            else:
+                                logger.warning(f"⚠️ set_operator_chat_status: status {response.status}, response: {response_text[:500]}")
+                except asyncio.TimeoutError:
+                    logger.error(f"❌ Timeout connecting to {full_url}")
                 except Exception as e:
                     logger.error(f"❌ set_operator_chat_status failed for {full_url}: {e}", exc_info=True)
                 return False
@@ -290,6 +304,14 @@ async def handle_text(message: Message, bot: Bot):
     
     logger.info(f"💬 Processing text message from user {user_id}: {text[:50] if text else 'None'}")
     
+    # Открываем чат при любом сообщении от пользователя
+    logger.info(f"🔓 Opening chat for user {user_id} on text message...")
+    opened = await set_operator_chat_status(user_id, is_closed=False)
+    if opened:
+        logger.info(f"✅ Operator chat opened for user {user_id}")
+    else:
+        logger.warning(f"⚠️ Failed to open operator chat for user {user_id}, but continuing...")
+    
     # Сохраняем сообщение пользователя в БД
     result = await save_message_to_db(
         user_id=user_id,
@@ -311,6 +333,14 @@ async def handle_text(message: Message, bot: Bot):
 async def handle_photo(message: Message, bot: Bot):
     """Обработка фото"""
     user_id = message.from_user.id
+    
+    # Открываем чат при любом сообщении от пользователя
+    logger.info(f"🔓 Opening chat for user {user_id} on photo message...")
+    opened = await set_operator_chat_status(user_id, is_closed=False)
+    if opened:
+        logger.info(f"✅ Operator chat opened for user {user_id}")
+    else:
+        logger.warning(f"⚠️ Failed to open operator chat for user {user_id}, but continuing...")
     
     # Получаем URL фото
     photo = message.photo[-1]  # Берем фото наибольшего размера
@@ -334,6 +364,14 @@ async def handle_photo(message: Message, bot: Bot):
 async def handle_video(message: Message, bot: Bot):
     """Обработка видео"""
     user_id = message.from_user.id
+    
+    # Открываем чат при любом сообщении от пользователя
+    logger.info(f"🔓 Opening chat for user {user_id} on video message...")
+    opened = await set_operator_chat_status(user_id, is_closed=False)
+    if opened:
+        logger.info(f"✅ Operator chat opened for user {user_id}")
+    else:
+        logger.warning(f"⚠️ Failed to open operator chat for user {user_id}, but continuing...")
     
     # Получаем URL видео
     video = message.video
