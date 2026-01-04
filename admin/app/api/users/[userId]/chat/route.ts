@@ -43,6 +43,14 @@ export async function GET(
       })
     )
   } catch (error: any) {
+    // Если ошибка авторизации - это не критично, логируем как предупреждение
+    if (error.message === 'Unauthorized') {
+      console.warn('Chat history API: Unauthorized (this is expected for bot requests)')
+      return NextResponse.json(
+        createApiResponse(null, 'Unauthorized'),
+        { status: 401 }
+      )
+    }
     console.error('Chat history API error:', error)
     return NextResponse.json(
       createApiResponse(null, error.message || 'Failed to fetch chat history'),
