@@ -188,11 +188,11 @@ async def set_operator_chat_status(user_id: int, is_closed: bool):
             if api_url.startswith('http://localhost'):
                 if await do_patch(api_url):
                     return True
-                # fallback на прод
-                from config import Config
-                api_url = Config.API_FALLBACK_URL
-                if api_url.endswith('/api'):
-                    api_url = api_url[:-4]
+                # fallback на прод - используем Config, который уже импортирован в начале файла
+                fallback_url = Config.API_FALLBACK_URL
+                if fallback_url.endswith('/api'):
+                    fallback_url = fallback_url[:-4]
+                return await do_patch(fallback_url)
 
             return await do_patch(api_url)
     except Exception as e:
