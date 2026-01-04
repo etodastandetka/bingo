@@ -79,6 +79,7 @@ export async function GET(
           ...msg,
           userId: msg.userId.toString(),
           telegramMessageId: msg.telegramMessageId?.toString(),
+          createdAt: msg.createdAt.toISOString(), // Явно преобразуем Date в ISO строку
         })),
         isClosed,
       })
