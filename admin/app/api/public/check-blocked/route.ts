@@ -35,52 +35,64 @@ export async function POST(request: NextRequest) {
 
     // Проверка блокировки по accountId (ID казино) - ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
     if (accountId) {
-      // ОПТИМИЗАЦИЯ: Используем один запрос с JOIN вместо множественных запросов
-      // Находим всех заблокированных пользователей, которые использовали этот accountId
-      const blockedUsersWithAccountId = await prisma.request.findMany({
+      // ОПТИМИЗАЦИЯ: Сначала находим всех пользователей, которые использовали этот accountId
+      const requestsWithAccountId = await prisma.request.findMany({
         where: {
           accountId: accountId.toString(),
-          user: {
-            isActive: false, // Только заблокированные пользователи
-          },
         },
         select: {
           userId: true,
         },
         distinct: ['userId'],
-        take: 1, // Нам нужен только один результат для проверки
       })
 
-      // Если найден хотя бы один заблокированный пользователь с этим accountId
-      if (blockedUsersWithAccountId.length > 0) {
-        // АВТОМАТИЧЕСКАЯ БЛОКИРОВКА: блокируем текущего пользователя, который пытается использовать заблокированный accountId
-        try {
-          await prisma.botUser.upsert({
-            where: { userId: userIdBigInt },
-            update: {
-              isActive: false,
-            },
-            create: {
-              userId: userIdBigInt,
-              username: null,
-              firstName: null,
-              lastName: null,
-              language: 'ru',
-              isActive: false,
-            },
-          })
-          console.log(`🔒 Auto-blocked user ${userId.toString()} for using blocked accountId ${accountId}`)
-        } catch (error) {
-          console.error('Error auto-blocking user:', error)
-        }
+      if (requestsWithAccountId.length > 0) {
+        // Получаем userId всех пользователей, которые использовали этот accountId
+        const userIds = requestsWithAccountId.map(req => req.userId)
+        
+        // Проверяем, есть ли среди них заблокированные пользователи
+        const blockedUsers = await prisma.botUser.findMany({
+          where: {
+            userId: { in: userIds },
+            isActive: false,
+          },
+          select: {
+            userId: true,
+          },
+          take: 1, // Нам нужен только один результат для проверки
+        })
 
-        return NextResponse.json(
-          createApiResponse({
-            blocked: true,
-            reason: 'accountId',
-            message: 'Аккаунт заблокирован',
-          })
-        )
+        // Если найден хотя бы один заблокированный пользователь с этим accountId
+        if (blockedUsers.length > 0) {
+          // АВТОМАТИЧЕСКАЯ БЛОКИРОВКА: блокируем текущего пользователя, который пытается использовать заблокированный accountId
+          try {
+            await prisma.botUser.upsert({
+              where: { userId: userIdBigInt },
+              update: {
+                isActive: false,
+              },
+              create: {
+                userId: userIdBigInt,
+                username: null,
+                firstName: null,
+                lastName: null,
+                language: 'ru',
+                isActive: false,
+              },
+            })
+            console.log(`🔒 Auto-blocked user ${userId.toString()} for using blocked accountId ${accountId}`)
+          } catch (error) {
+            console.error('Error auto-blocking user:', error)
+          }
+
+          return NextResponse.json(
+            createApiResponse({
+              blocked: true,
+              reason: 'accountId',
+              message: 'Аккаунт заблокирован',
+            })
+          )
+        }
       }
     }
 
