@@ -359,10 +359,8 @@ export async function PATCH(
           }
           // Для обычных заявок (не операторских) notificationMessage отправится в основной бот ниже
         } else if (body.status === 'pending' && updatedRequest.statusDetail === 'pending_check') {
-          // Статус "на проверке" (если выставляется через PATCH) - отправляем через оператор-бот
+          // Статус "на проверке" (если выставляется через PATCH) - отправляем через оператор-бот БЕЗ инлайн кнопки
           try {
-            const { sendMessageWithMainMenuButton } = await import('@/lib/send-notification')
-            
             const amount = updatedRequest.amount?.toString() || '0'
             const accountId = updatedRequest.accountId || '—'
             
@@ -379,10 +377,10 @@ export async function PATCH(
               updatedRequest.userId,
               notificationMessage,
               updatedRequest.bookmaker,
-              null,
+              null, // requestId = null, без редактирования сообщений
               'operator' // Всегда используем оператор-бот при отправке на проверку
             )
-            console.log(`✅ Notification sent to user ${updatedRequest.userId.toString()} about request ${updatedRequest.id} sent to review via operator bot`)
+            console.log(`✅ Notification sent to user ${updatedRequest.userId.toString()} about request ${updatedRequest.id} sent to review via operator bot (without inline button)`)
           } catch (error: any) {
             console.error('❌ Failed to send review notification:', error)
             console.error('Error details:', error.message, error.stack)
