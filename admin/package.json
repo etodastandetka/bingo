@@ -21,6 +21,7 @@
     "init:quick-replies": "tsx scripts/init-quick-replies.ts",
     "start:email-watcher": "tsx scripts/start-email-watcher.ts",
     "enable-autodeposit": "tsx scripts/enable-autodeposit.ts",
+    "delete-pending-requests": "tsx scripts/delete-pending-requests.ts",
     "generate-icons": "node scripts/generate-pwa-icons.js"
   },
   "dependencies": {
