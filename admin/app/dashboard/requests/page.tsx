@@ -82,7 +82,10 @@ export default function RequestsPage() {
       const data = await response.json()
 
       if (data.success && data.data) {
-        setRequests(data.data.requests || [])
+        const newRequests = data.data.requests || []
+        // Обновляем список заявок - новые заявки появятся автоматически
+        setRequests(newRequests)
+        console.log(`📋 Requests updated: ${newRequests.length} requests loaded`)
       } else {
         console.error('API returned error:', data.error || 'Unknown error')
         setRequests([])

@@ -30,14 +30,16 @@ export default function HistoryPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'deposit' | 'withdraw'>('all')
   const [isFetching, setIsFetching] = useState(false)
 
-  const fetchHistory = async () => {
+  const fetchHistory = async (showLoading = true) => {
     // Предотвращаем множественные запросы
     if (isFetching) {
       return
     }
 
     setIsFetching(true)
-    setLoading(true)
+    if (showLoading) {
+      setLoading(true)
+    }
     try {
       const params = new URLSearchParams()
       if (activeTab !== 'all') {
@@ -65,7 +67,10 @@ export default function HistoryPage() {
       const data = await response.json()
 
       if (data.success && data.data) {
-        setTransactions(data.data.transactions || [])
+        const newTransactions = data.data.transactions || []
+        // Обновляем список транзакций - новые транзакции появятся автоматически
+        setTransactions(newTransactions)
+        console.log(`📋 History updated: ${newTransactions.length} transactions loaded`)
       } else {
         console.error('API returned error:', data.error || 'Unknown error')
         setTransactions([])
@@ -77,13 +82,41 @@ export default function HistoryPage() {
       }
       setTransactions([])
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
       setIsFetching(false)
     }
   }
 
   useEffect(() => {
     fetchHistory()
+    
+    // Автоматическое обновление каждые 10 секунд для загрузки новых транзакций
+    const interval = setInterval(() => {
+      fetchHistory(false) // Не показываем loading при автообновлении
+    }, 10000)
+    
+    // Обновление при фокусе страницы
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchHistory(false) // Не показываем loading при автообновлении
+      }
+    }
+    
+    // Обновление при возврате фокуса
+    const handleFocus = () => {
+      fetchHistory(false) // Не показываем loading при автообновлении
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+    
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 

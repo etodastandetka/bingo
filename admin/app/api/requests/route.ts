@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
 
     // Убрали лишние логи для оптимизации
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       createApiResponse({
         requests: requests.map(r => ({
           ...r,
@@ -86,6 +86,13 @@ export async function GET(request: NextRequest) {
         },
       })
     )
+    
+    // Отключаем кеширование для актуальных данных
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    
+    return response
   } catch (error: any) {
     console.error('❌ Requests API - Error fetching requests:', {
       error: error.message,
