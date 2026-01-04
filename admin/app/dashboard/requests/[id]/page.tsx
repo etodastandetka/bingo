@@ -46,6 +46,7 @@ export default function RequestDetailPage() {
   const [request, setRequest] = useState<RequestDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchAmount, setSearchAmount] = useState('')
+  const searchAmountInitializedRef = useRef(false) // Отслеживаем, была ли сумма установлена
   // По умолчанию включена "Точная сумма" - ищем по целой части (любой копейки)
   const [exactAmount, setExactAmount] = useState(true)
   const [processedOnly, setProcessedOnly] = useState<boolean | undefined>(undefined)
@@ -483,17 +484,7 @@ export default function RequestDetailPage() {
             if (fullData.success && isMountedRef.current) {
               setRequest(fullData.data)
               
-              // Заполняем поле поиска только если оно пустое (пользователь еще не вводил сумму)
-              if (fullData.data.requestType === 'deposit' && fullData.data.amount && !searchAmount.trim()) {
-                const amount = parseFloat(fullData.data.amount)
-                if (!isNaN(amount) && amount > 0) {
-                  const formattedAmount = amount.toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })
-                  setSearchAmount(formattedAmount)
-                }
-              }
+              // НЕ устанавливаем сумму - пользователь должен вводить сам
               
               // Загружаем фото профиля пользователя (с кэшем)
               if (fullData.data.userId) {
@@ -559,20 +550,7 @@ export default function RequestDetailPage() {
               if (fullData.success && isMountedRef.current) {
                 setRequest(fullData.data)
                 
-                // Автоматически заполняем поле поиска и запускаем поиск, если это депозит и сумма указана
-                if (fullData.data.requestType === 'deposit' && fullData.data.amount) {
-                  const amount = parseFloat(fullData.data.amount)
-                  if (!isNaN(amount) && amount > 0) {
-                    const formattedAmount = amount.toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })
-                    setSearchAmount(formattedAmount)
-                    setTimeout(() => {
-                      handleSearchPaymentsWithAmount(formattedAmount)
-                    }, 500)
-                  }
-                }
+                // НЕ устанавливаем сумму - пользователь должен вводить сам
                 
                 // Загружаем фото профиля пользователя (с кэшем)
                 if (fullData.data.userId) {
@@ -618,17 +596,7 @@ export default function RequestDetailPage() {
             if (fullData.success && isMountedRef.current) {
               setRequest(fullData.data)
               
-              // Заполняем поле поиска только если оно пустое (пользователь еще не вводил сумму)
-              if (fullData.data.requestType === 'deposit' && fullData.data.amount && !searchAmount.trim()) {
-                const amount = parseFloat(fullData.data.amount)
-                if (!isNaN(amount) && amount > 0) {
-                  const formattedAmount = amount.toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })
-                  setSearchAmount(formattedAmount)
-                }
-              }
+              // НЕ устанавливаем сумму - пользователь должен вводить сам
               
               // Загружаем фото профиля пользователя
               if (fullData.data.userId) {
