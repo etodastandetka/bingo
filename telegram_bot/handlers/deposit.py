@@ -858,9 +858,39 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
             await cmd_start(message, state, bot)
             return
         
-        # ВАЖНО: Создаем заявку только при отправке фото чека
-        # Заявка НЕ создается при показе QR кода, чтобы не блокировать новые заявки
-        result = await APIClient.create_request(
+        # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем, есть ли уже pending заявка для этого пользователя
+        # Если есть - ОБНОВЛЯЕМ её, а не создаем новую (защита от двойного зачисления)
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        pending_request = None
+        request_id = None
+        
+        try:
+            pending_result = await APIClient.get_pending_request(
+                telegram_user_id=str(message.from_user.id),
+                request_type='deposit'
+            )
+            if pending_result.get('success') and pending_result.get('data'):
+                pending_request = pending_result.get('data')
+                logger.info(f"[Deposit] Found pending request {pending_request.get('id')} for user {message.from_user.id}")
+        except Exception as e:
+            logger.warning(f"[Deposit] Error checking pending request: {e}, will create new request")
+        
+        # Если есть pending заявка - ОБНОВЛЯЕМ её, иначе создаем новую
+        if pending_request and pending_request.get('id'):
+            pending_request_id = pending_request.get('id')
+            logger.info(f"[Deposit] Updating existing request {pending_request_id} with receipt photo")
+            
+            result = await APIClient.update_request(
+                request_id=str(pending_request_id),
+                receipt_photo=photo_base64_with_prefix
+            )
+            request_id = pending_request_id
+        else:
+            # Создаем новую заявку только если нет pending заявки
+            logger.info(f"[Deposit] Creating new request for user {message.from_user.id}")
+            result = await APIClient.create_request(
                 telegram_user_id=str(message.from_user.id),
                 request_type='deposit',
                 amount=amount,
@@ -873,12 +903,14 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
                 receipt_photo=photo_base64_with_prefix,
                 bot_type=Config.BOT_TYPE
             )
+            if result.get('success') and result.get('data'):
+                request_id = result.get('data', {}).get('id')
         
-        if result.get('success') and result.get('data'):
-            # Заявка создана успешно
-            request_id = result.get('data', {}).get('id')
+        if result.get('success'):
+            # Заявка создана или обновлена успешно
             # Сохраняем request_id в state для возможных уведомлений
-            await state.update_data(request_id=request_id)
+            if request_id:
+                await state.update_data(request_id=request_id, pending_request_id=request_id)
             
             # Отправляем сообщение о создании заявки и сохраняем его ID
             casino_name = data.get('casino_name', casino_id)  # Получаем название букмекера

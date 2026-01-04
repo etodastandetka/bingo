@@ -792,6 +792,57 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
             await cmd_start(message, state, bot)
             return
         
+        # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем через API, есть ли уже pending заявка
+        # Это защищает от потери pending_request_id из state (перезапуск бота, очистка state)
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if not pending_request_id:
+            # Если нет pending_request_id в state, проверяем через API
+            try:
+                import aiohttp
+                import ssl
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                
+                connector = aiohttp.TCPConnector(ssl=ssl_context)
+                async with aiohttp.ClientSession(connector=connector) as session:
+                    api_url = Config.API_BASE_URL
+                    if api_url.startswith('http://localhost'):
+                        try:
+                            async with session.get(
+                                f'{api_url}/public/pending-request',
+                                params={'telegram_user_id': str(message.from_user.id), 'type': 'deposit'},
+                                timeout=aiohttp.ClientTimeout(total=3)
+                            ) as response:
+                                pending_result = await response.json()
+                                if pending_result.get('success') and pending_result.get('data'):
+                                    pending_request_id = pending_result.get('data', {}).get('id')
+                                    logger.info(f"[Deposit] Found pending request {pending_request_id} via API for user {message.from_user.id}")
+                        except:
+                            api_url = Config.API_FALLBACK_URL
+                            async with session.get(
+                                f'{api_url}/public/pending-request',
+                                params={'telegram_user_id': str(message.from_user.id), 'type': 'deposit'},
+                                timeout=aiohttp.ClientTimeout(total=3)
+                            ) as response:
+                                pending_result = await response.json()
+                                if pending_result.get('success') and pending_result.get('data'):
+                                    pending_request_id = pending_result.get('data', {}).get('id')
+                                    logger.info(f"[Deposit] Found pending request {pending_request_id} via API for user {message.from_user.id}")
+                    else:
+                        async with session.get(
+                            f'{api_url}/public/pending-request',
+                            params={'telegram_user_id': str(message.from_user.id), 'type': 'deposit'},
+                            timeout=aiohttp.ClientTimeout(total=3)
+                        ) as response:
+                            pending_result = await response.json()
+                            if pending_result.get('success') and pending_result.get('data'):
+                                pending_request_id = pending_result.get('data', {}).get('id')
+                                logger.info(f"[Deposit] Found pending request {pending_request_id} via API for user {message.from_user.id}")
+            except Exception as e:
+                logger.warning(f"[Deposit] Error checking pending request via API: {e}, will use state value or create new")
+        
         # Если есть pending заявка - обновляем её, добавляя фото чека
         # Если нет - создаем новую заявку с фото чека
         if pending_request_id:

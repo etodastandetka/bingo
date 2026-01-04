@@ -828,10 +828,22 @@ export async function PUT(request: NextRequest) {
       return `data:image/jpeg;base64,${trimmed}`
     }
 
-    // Проверяем, не истекло ли время для заявки
+    // ОПТИМИЗИРОВАННАЯ ПРОВЕРКА: Загружаем все нужные поля сразу для защиты от двойного зачисления
     const existingRequest = await prisma.request.findUnique({
       where: { id: parseInt(id) },
-      select: { createdAt: true, status: true },
+      select: { 
+        createdAt: true, 
+        status: true,
+        photoFileUrl: true, // Для проверки, был ли чек уже добавлен
+        processedBy: true, // Для проверки, была ли заявка уже обработана
+        incomingPayments: {
+          where: { isProcessed: true },
+          select: { id: true },
+          take: 1, // Нужен только факт наличия
+        },
+        requestType: true,
+        amount: true,
+      },
     })
     
     if (!existingRequest) {
@@ -958,43 +970,80 @@ export async function PUT(request: NextRequest) {
       data: updateData,
     })
 
-    // Автопополнение вызывается ТОЛЬКО при добавлении фото чека к pending заявке
-    // Это происходит когда пользователь отправляет фото чека после показа QR кода
-    if (receipt_photo !== undefined && updatedRequest.requestType === 'deposit' && updatedRequest.status === 'pending' && updatedRequest.amount) {
+    // ЗАЩИТА ОТ ДВОЙНОГО ЗАЧИСЛЕНИЯ + ОПТИМИЗАЦИЯ:
+    // Автопополнение вызывается ТОЛЬКО если:
+    // 1. Чек добавляется ВПЕРВЫЕ (раньше его не было)
+    // 2. Заявка все еще pending
+    // 3. Заявка еще не обработана автопополнением
+    // 4. Нет уже обработанных платежей
+    const isFirstReceipt = receipt_photo !== undefined && !existingRequest.photoFileUrl
+    const isPendingDeposit = updatedRequest.requestType === 'deposit' && updatedRequest.status === 'pending' && updatedRequest.amount
+    const isNotProcessed = existingRequest.processedBy !== 'автопополнение'
+    const hasNoProcessedPayments = !existingRequest.incomingPayments?.length
+
+    if (isFirstReceipt && isPendingDeposit && isNotProcessed && hasNoProcessedPayments) {
       const requestAmount = parseFloat(updatedRequest.amount.toString())
-      console.log(`🔍 Payment API PUT - Checking for existing payments for request ${updatedRequest.id} after adding receipt photo, amount: ${requestAmount}`)
+      console.log(`🔍 Payment API PUT - First receipt added, checking payments for request ${updatedRequest.id}, amount: ${requestAmount}`)
       
-      // Функция для проверки и обработки платежей (вызывается сразу и через задержку)
-      const checkPayment = async (attempt: number, delay: number = 0) => {
+      // ОПТИМИЗИРОВАННАЯ ФУНКЦИЯ: Проверяет платеж и возвращает true если нашел, чтобы пропустить повторную проверку
+      let processingStarted = false
+      
+      const checkPayment = async (attempt: number, delay: number = 0): Promise<boolean> => {
         if (delay > 0) {
           await new Promise(resolve => setTimeout(resolve, delay))
         }
         
+        // Проверяем, не началась ли уже обработка другим вызовом
+        if (processingStarted) {
+          console.log(`⚠️ Payment API PUT - Request ${updatedRequest.id} already being processed, skipping attempt ${attempt}`)
+          return true
+        }
+        
         try {
+          // Быстрая проверка: заявка еще pending и не обработана?
+          const quickCheck = await prisma.request.findUnique({
+            where: { id: updatedRequest.id },
+            select: { status: true, processedBy: true },
+          })
+          
+          if (quickCheck?.status !== 'pending' || quickCheck?.processedBy === 'автопополнение') {
+            console.log(`⚠️ Payment API PUT - Request ${updatedRequest.id} already processed, skipping attempt ${attempt}`)
+            processingStarted = true
+            return true
+          }
+          
+          processingStarted = true // Помечаем, что обработка началась
+          
           const { checkAndProcessExistingPayment } = await import('@/lib/auto-deposit')
           const result = await checkAndProcessExistingPayment(updatedRequest.id, requestAmount)
+          
           if (result) {
-            console.log(`✅ Payment API PUT - Auto-deposit check completed for request ${updatedRequest.id} (attempt ${attempt})`)
+            console.log(`✅ Payment API PUT - Auto-deposit completed for request ${updatedRequest.id} (attempt ${attempt})`)
             return true
           } else {
+            processingStarted = false // Если не нашли, сбрасываем флаг для повторной попытки
             console.log(`ℹ️ Payment API PUT - No matching payments found for request ${updatedRequest.id} (attempt ${attempt})`)
             return false
           }
         } catch (autoDepositError: any) {
+          processingStarted = false // При ошибке сбрасываем флаг
           console.warn(`⚠️ Payment API PUT - Auto-deposit check failed (attempt ${attempt}):`, autoDepositError.message)
           return false
         }
       }
       
-      // Запускаем проверку в фоне (не блокируем ответ) - все заявки обрабатываются параллельно
-      checkPayment(1, 0).catch(err => {
-        console.warn(`⚠️ Payment API PUT - Background payment check failed:`, err)
+      // Запускаем первую проверку сразу (не блокируем ответ)
+      checkPayment(1, 0).then(found => {
+        // Если платеж не найден сразу - запускаем повторную проверку через 3 секунды
+        if (!found) {
+          checkPayment(2, 3000).catch(() => {})
+        }
+      }).catch(() => {
+        // При ошибке все равно запускаем повторную проверку
+        checkPayment(2, 3000).catch(() => {})
       })
-      
-      // Повторная проверка через 3 секунды (платеж может прийти с задержкой)
-      checkPayment(2, 3000).catch(err => {
-        console.warn(`⚠️ Payment API PUT - Background payment check (retry) failed:`, err)
-      })
+    } else if (receipt_photo !== undefined && existingRequest.photoFileUrl) {
+      console.log(`⚠️ Payment API PUT - Receipt already exists for request ${updatedRequest.id}, skipping autodeposit`)
     }
 
     const response = NextResponse.json(

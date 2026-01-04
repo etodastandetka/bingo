@@ -9,6 +9,39 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
   console.log(`🔍 [Auto-Deposit] checkAndProcessExistingPayment called: requestId=${requestId}, amount=${amount}`)
   
   try {
+    // КРИТИЧЕСКАЯ ЗАЩИТА: Проверяем статус заявки ПЕРЕД поиском платежей
+    // Если заявка уже обработана - сразу выходим, не тратим время на поиск платежей
+    const requestCheck = await prisma.request.findUnique({
+      where: { id: requestId },
+      select: { 
+        status: true, 
+        processedBy: true,
+        incomingPayments: {
+          where: { isProcessed: true },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    })
+    
+    // Если заявка уже обработана - не ищем платежи (защита от дубликатов)
+    if (requestCheck?.status !== 'pending') {
+      console.log(`⚠️ [Auto-Deposit] Request ${requestId} already processed (status: ${requestCheck?.status}), skipping payment search`)
+      return null
+    }
+    
+    // Если заявка уже обработана автопополнением - не ищем платежи
+    if (requestCheck?.processedBy === 'автопополнение') {
+      console.log(`⚠️ [Auto-Deposit] Request ${requestId} already processed by autodeposit, skipping payment search`)
+      return null
+    }
+    
+    // Если уже есть обработанный платеж - не ищем новые
+    if (requestCheck?.incomingPayments?.length > 0) {
+      console.log(`⚠️ [Auto-Deposit] Request ${requestId} already has processed payment, skipping payment search`)
+      return null
+    }
+    
     // Ищем необработанные платежи с такой же суммой за последние 10 минут
     // 10 минут - больше чем 5 минут в matchAndProcessPayment, чтобы учесть задержки
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
@@ -61,6 +94,18 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     
     // Берем самый первый платеж (самый старый)
     const payment = exactMatches[exactMatches.length - 1]
+    
+    // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Проверяем статус заявки еще раз перед вызовом matchAndProcessPayment
+    // Это защищает от race condition, когда два вызова checkAndProcessExistingPayment идут параллельно
+    const finalCheck = await prisma.request.findUnique({
+      where: { id: requestId },
+      select: { status: true, processedBy: true },
+    })
+    
+    if (finalCheck?.status !== 'pending' || finalCheck?.processedBy === 'автопополнение') {
+      console.log(`⚠️ [Auto-Deposit] Request ${requestId} was processed by another call, skipping payment ${payment.id}`)
+      return null
+    }
     
     console.log(`💸 [Auto-Deposit] Processing existing payment ${payment.id} for request ${requestId}`)
     
@@ -166,6 +211,18 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
   const requestAmount = parseFloat(request.amount.toString())
   
   console.log(`💸 [Auto-Deposit] Processing: Request ${request.id}, ${request.bookmaker}, Account ${request.accountId}, Amount ${requestAmount}`)
+
+  // КРИТИЧЕСКАЯ ЗАЩИТА: Проверяем статус ПЕРЕД вызовом API казино
+  // Это предотвращает двойное зачисление, если два вызова идут параллельно
+  const preCheck = await prisma.request.findUnique({
+    where: { id: request.id },
+    select: { status: true, processedBy: true },
+  })
+  
+  if (preCheck?.status !== 'pending' || preCheck?.processedBy === 'автопополнение') {
+    console.log(`⚠️ [Auto-Deposit] Request ${request.id} already processed before API call (status: ${preCheck?.status}), skipping`)
+    return null
+  }
 
   // Оптимизированная обработка: все в одной транзакции для максимальной скорости
   try {

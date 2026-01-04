@@ -371,13 +371,16 @@ export async function depositMostbetAPI(
   }
 }
 
-// Пополнение для 1win
+// Пополнение для 1win с retry для rate limit ошибок
 export async function deposit1winAPI(
   userId: string,
   amount: number,
-  config: CasinoConfig
+  config: CasinoConfig,
+  retryCount: number = 0
 ): Promise<{ success: boolean; message: string; data?: any }> {
   const baseUrl = 'https://api.1win.win/v1/client'
+  const MAX_RETRIES = 3
+  const RETRY_DELAYS = [2000, 5000, 10000] // Задержки в миллисекундах: 2с, 5с, 10с
 
   // Проверяем, что все обязательные поля заполнены и не пустые
   const apiKey = config.api_key
@@ -391,7 +394,7 @@ export async function deposit1winAPI(
 
   try {
     // userId здесь - это ID казино (accountId), не Telegram ID
-    console.log(`[1win Deposit] Casino User ID: ${userId}, Amount: ${amount}`)
+    console.log(`[1win Deposit] Casino User ID: ${userId}, Amount: ${amount}, Attempt: ${retryCount + 1}`)
     
     const url = `${baseUrl}/deposit`
     const requestBody = {
@@ -439,6 +442,20 @@ export async function deposit1winAPI(
     
     if (errorCode === 'CASH06') {
       errorMessage = 'Слишком много запросов к API 1win. Пожалуйста, подождите несколько секунд и попробуйте снова.'
+      
+      // RETRY для rate limit ошибок
+      if (retryCount < MAX_RETRIES) {
+        const delay = RETRY_DELAYS[retryCount] || RETRY_DELAYS[RETRY_DELAYS.length - 1]
+        console.log(`⚠️ [1win Deposit] Rate limit error (CASH06), retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
+        
+        // Ждем перед повторной попыткой
+        await new Promise(resolve => setTimeout(resolve, delay))
+        
+        // Повторная попытка
+        return await deposit1winAPI(userId, amount, config, retryCount + 1)
+      } else {
+        console.error(`❌ [1win Deposit] Rate limit error after ${MAX_RETRIES} retries`)
+      }
     } else if (errorCode === 'CASH07') {
       errorMessage = 'Превышен лимит баланса. Сумма пополнения слишком большая.'
     } else if (errorCode === 'CASH01') {

@@ -212,6 +212,74 @@ class APIClient:
                 return {'success': False, 'error': str(e)}
     
     @staticmethod
+    async def get_pending_request(telegram_user_id: str, request_type: str = 'deposit') -> Dict[str, Any]:
+        """Получить pending заявку для пользователя"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.get(
+                        f'{api_url}/public/pending-request',
+                        params={'telegram_user_id': telegram_user_id, 'type': request_type},
+                        timeout=aiohttp.ClientTimeout(total=3)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.get(
+                f'{api_url}/public/pending-request',
+                params={'telegram_user_id': telegram_user_id, 'type': request_type},
+                timeout=aiohttp.ClientTimeout(total=3)
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
+    async def update_request(
+        request_id: str,
+        receipt_photo: Optional[str] = None,
+        status: Optional[str] = None,
+        status_detail: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Обновить заявку (PUT запрос)"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            data = {}
+            if receipt_photo is not None:
+                data['receipt_photo'] = receipt_photo
+            if status is not None:
+                data['status'] = status
+            if status_detail is not None:
+                data['status_detail'] = status_detail
+            # Добавляем другие поля из kwargs
+            data.update(kwargs)
+            
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.put(
+                        f'{api_url}/payment',
+                        json={'id': request_id, **data},
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.put(
+                f'{api_url}/payment',
+                json={'id': request_id, **data},
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                return await response.json()
+    
+    @staticmethod
     async def update_request_message_id(request_id: int, message_id: int) -> Dict[str, Any]:
         """Обновить ID сообщения о создании заявки"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)
