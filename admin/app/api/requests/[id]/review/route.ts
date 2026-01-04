@@ -16,27 +16,6 @@ const formatDateTime = (value?: string | Date | null) => {
   return `${day}.${month}.${year} • ${hours}:${minutes}`
 }
 
-async function sendOperatorMessage(userId: bigint, text: string) {
-  try {
-    const token = process.env.OPERATOR_BOT_TOKEN
-    if (!token) return
-    const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: userId.toString(),
-        text,
-        parse_mode: 'HTML',
-        protect_content: true,
-      }),
-    })
-    const data = await resp.json().catch(() => null)
-    if (!resp.ok || !data?.ok) {
-      console.error('Operator sendMessage failed', { userId: userId.toString(), status: resp.status, data })
-    }
-  } catch {}
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -62,17 +41,37 @@ export async function POST(
       },
     })
 
-    // Уведомление пользователю через оператор-бота
-    sendOperatorMessage(
-      updated.userId,
-      [
+    // Уведомление пользователю через основной бот (не оператор-бот)
+    try {
+      const { sendMessageWithMainMenuButton, getBotTypeByUserLastMessage } = await import('@/lib/send-notification')
+      
+      // Определяем botType по последнему сообщению пользователя
+      let botType: string | null = null
+      try {
+        botType = await getBotTypeByUserLastMessage(updated.userId, updated.createdAt)
+      } catch (error) {
+        console.warn('Failed to get botType, using bookmaker:', error)
+      }
+      
+      const notificationMessage = [
         `📨 Оператор отправил вашу заявку #${updated.id} на проверку.`,
         `💰 Сумма: ${updated.amount?.toString() || '0'}`,
         `🟡 Статус: На проверке`,
         `🗓 Создано: ${formatDateTime(updated.createdAt)}`,
         `⏳ Отправлено на проверку: ${formatDateTime(updated.updatedAt)}`,
       ].join('\n')
-    )
+      
+      await sendMessageWithMainMenuButton(
+        updated.userId,
+        notificationMessage,
+        updated.bookmaker,
+        botType
+      )
+      console.log(`✅ Notification sent to user ${updated.userId.toString()} about request ${updated.id} sent to review`)
+    } catch (error: any) {
+      console.error('Failed to send review notification:', error)
+      // Не прерываем выполнение, если уведомление не отправилось
+    }
 
     return NextResponse.json(
       createApiResponse({

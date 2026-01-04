@@ -383,17 +383,37 @@ export async function PATCH(
           }
           // Для обычных заявок (не операторских) notificationMessage отправится в основной бот ниже
         } else if (body.status === 'pending' && updatedRequest.statusDetail === 'pending_check') {
-          // Статус "на проверке" (если выставляется через PATCH) - только в оператор-бот
-          sendOperatorMessage(
-            updatedRequest.userId,
-            [
+          // Статус "на проверке" (если выставляется через PATCH) - отправляем через основной бот
+          try {
+            const { sendMessageWithMainMenuButton, getBotTypeByUserLastMessage } = await import('@/lib/send-notification')
+            
+            // Определяем botType по последнему сообщению пользователя
+            let botType: string | null = null
+            try {
+              botType = await getBotTypeByUserLastMessage(updatedRequest.userId, updatedRequest.createdAt)
+            } catch (error) {
+              console.warn('Failed to get botType, using bookmaker:', error)
+            }
+            
+            const notificationMessage = [
               `📨 Оператор отправил вашу заявку #${updatedRequest.id} на проверку.`,
               `💰 Сумма: ${updatedRequest.amount?.toString() || '0'}`,
               `🟡 Статус: На проверке`,
               `🗓 Создано: ${formatDateTime(updatedRequest.createdAt)}`,
               `⏳ Отправлено на проверку: ${formatDateTime(new Date())}`,
             ].join('\n')
-          )
+            
+            await sendMessageWithMainMenuButton(
+              updatedRequest.userId,
+              notificationMessage,
+              updatedRequest.bookmaker,
+              botType
+            )
+            console.log(`✅ Notification sent to user ${updatedRequest.userId.toString()} about request ${updatedRequest.id} sent to review`)
+          } catch (error: any) {
+            console.error('Failed to send review notification:', error)
+            // Не прерываем выполнение, если уведомление не отправилось
+          }
         }
 
         // Отправляем уведомление в правильный бот только если это не операторская заявка
