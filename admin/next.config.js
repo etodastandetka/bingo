@@ -27,7 +27,7 @@ const nextConfig = {
   env: {
     DATABASE_URL: process.env.DATABASE_URL,
     JWT_SECRET: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-    BOT_TOKEN: process.env.BOT_TOKEN || '8413027203:AAHhXadiHxW8WUSGp8tzxPqOF7iLHf8lI_s',
+    BOT_TOKEN: process.env.BOT_TOKEN || '8237611656:AAG3A0PqOqBtIYDzl-MiXRbSgClRE0Rs5Ko',
     OPERATOR_BOT_TOKEN: process.env.OPERATOR_BOT_TOKEN || '7958632748:AAH478HkHt2czFo7dxCoyFSgqH_zVLzDJ98',
     BOT_TOKEN_MOSTBET: process.env.BOT_TOKEN_MOSTBET,
     BOT_TOKEN_1XBET: process.env.BOT_TOKEN_1XBET,

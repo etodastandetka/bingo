@@ -53,7 +53,7 @@ def load_domains_config():
 domains_config = load_domains_config()
 
 class Config:
-    BOT_TOKEN = os.getenv('BOT_TOKEN', '8413027203:AAHhXadiHxW8WUSGp8tzxPqOF7iLHf8lI_s')
+    BOT_TOKEN = os.getenv('BOT_TOKEN', '8237611656:AAG3A0PqOqBtIYDzl-MiXRbSgClRE0Rs5Ko')
     OPERATOR_BOT_TOKEN = os.getenv('OPERATOR_BOT_TOKEN', '7958632748:AAH478HkHt2czFo7dxCoyFSgqH_zVLzDJ98')
     BOT_TYPE = 'main'  # Тип бота для определения правильного токена при отправке уведомлений
     
