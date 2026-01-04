@@ -49,26 +49,36 @@ def get_withdrawal_instructions(casino_id: str, lang: str = 'ru') -> str:
 @router.message(F.text.in_(['💸 Вывести', '💸 Чыгаруу']))
 async def withdraw_start(message: Message, state: FSMContext):
     """Начало процесса вывода - выбор казино"""
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Сохраняем язык перед очисткой состояния
     lang = await get_lang_from_state(state)
+    
+    # ВАЖНО: Проверяем блокировку пользователя СРАЗУ, до начала процесса
+    try:
+        blocked_check = await asyncio.wait_for(
+            APIClient.check_blocked(str(message.from_user.id)),
+            timeout=2.0  # Максимум 2 секунды на проверку
+        )
+        if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
+            blocked_data = blocked_check.get('data', {})
+            blocked_message = blocked_data.get('message', 'Вы заблокированы')
+            await message.answer(blocked_message)
+            return
+    except asyncio.TimeoutError:
+        logger.warning(f"[Withdraw] Timeout checking blocked status for user {message.from_user.id}, continuing...")
+        # Продолжаем работу при таймауте
+    except Exception as e:
+        logger.error(f"[Withdraw] Error checking blocked status: {e}")
+        # Продолжаем работу, если проверка не удалась
     
     # Очищаем предыдущее состояние (если была незавершенная операция)
     await state.clear()
     
     # Восстанавливаем язык
     await state.update_data(language=lang)
-    
-    # Проверяем блокировку пользователя
-    try:
-        blocked_check = await APIClient.check_blocked(str(message.from_user.id))
-        if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
-            blocked_data = blocked_check.get('data', {})
-            blocked_message = blocked_data.get('message', 'Вы заблокированы')
-            await message.answer(blocked_message)
-            return
-    except Exception as e:
-        print(f"Error checking blocked status: {e}")
-        # Продолжаем работу, если проверка не удалась
     
     # Получаем настройки из админки
     settings = await APIClient.get_payment_settings()
@@ -381,16 +391,27 @@ async def withdraw_account_id_received(message: Message, state: FSMContext, bot:
         except Exception:
             pass  # Игнорируем ошибки сохранения
     
-    # Проверяем блокировку accountId
+    # ВАЖНО: Проверяем блокировку accountId с таймаутом для быстрой проверки
     try:
-        blocked_check = await APIClient.check_blocked(str(message.from_user.id), account_id)
+        import asyncio
+        blocked_check = await asyncio.wait_for(
+            APIClient.check_blocked(str(message.from_user.id), account_id),
+            timeout=2.0  # Максимум 2 секунды на проверку
+        )
         if blocked_check.get('success') and blocked_check.get('data', {}).get('blocked'):
             blocked_data = blocked_check.get('data', {})
             blocked_message = blocked_data.get('message', 'Аккаунт заблокирован')
             await message.answer(blocked_message)
             return
+    except asyncio.TimeoutError:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"[Withdraw] Timeout checking blocked accountId for user {message.from_user.id}")
+        # Продолжаем работу при таймауте
     except Exception as e:
-        print(f"Error checking blocked accountId: {e}")
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[Withdraw] Error checking blocked accountId: {e}")
         # Продолжаем работу, если проверка не удалась
     
     await state.update_data(account_id=account_id)
