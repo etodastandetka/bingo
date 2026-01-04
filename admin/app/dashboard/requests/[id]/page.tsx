@@ -146,21 +146,19 @@ export default function RequestDetailPage() {
           if (!isMountedRef.current) return
 
           if (data.success && isMountedRef.current) {
+            const isFirstLoad = !request // Проверяем, это первая загрузка или обновление
             setRequest(data.data)
             // Устанавливаем выбранное казино из заявки (или оставляем текущее, если уже было изменено)
             if (selectedBookmaker === null) {
               setSelectedBookmaker(data.data.bookmaker)
             }
             
-            // Автоматически запускаем поиск пополнений по сумме из заявки и заполняем поле поиска
-            if (data.data.requestType === 'deposit' && data.data.amount) {
+            // Автоматически заполняем поле поиска ТОЛЬКО при первой загрузке (если поле пустое)
+            if (isFirstLoad && data.data.requestType === 'deposit' && data.data.amount && !searchAmount.trim()) {
               const amount = parseFloat(data.data.amount)
               if (!isNaN(amount) && amount > 0) {
-                // Заполняем поле поиска и автоматически запускаем поиск пополнений
+                // Заполняем поле поиска только при первой загрузке
                 setSearchAmount(amount.toString())
-                setTimeout(() => {
-                  handleSearchPaymentsWithAmount(amount.toString())
-                }, 500)
               }
             }
             
@@ -485,8 +483,8 @@ export default function RequestDetailPage() {
             if (fullData.success && isMountedRef.current) {
               setRequest(fullData.data)
               
-              // Автоматически заполняем поле поиска и запускаем поиск, если это депозит и сумма указана
-              if (fullData.data.requestType === 'deposit' && fullData.data.amount) {
+              // Заполняем поле поиска только если оно пустое (пользователь еще не вводил сумму)
+              if (fullData.data.requestType === 'deposit' && fullData.data.amount && !searchAmount.trim()) {
                 const amount = parseFloat(fullData.data.amount)
                 if (!isNaN(amount) && amount > 0) {
                   const formattedAmount = amount.toLocaleString('en-US', {
@@ -494,9 +492,6 @@ export default function RequestDetailPage() {
                     maximumFractionDigits: 2,
                   })
                   setSearchAmount(formattedAmount)
-                  setTimeout(() => {
-                    handleSearchPaymentsWithAmount(formattedAmount)
-                  }, 500)
                 }
               }
               
@@ -623,8 +618,8 @@ export default function RequestDetailPage() {
             if (fullData.success && isMountedRef.current) {
               setRequest(fullData.data)
               
-              // Автоматически заполняем поле поиска и запускаем поиск, если это депозит и сумма указана
-              if (fullData.data.requestType === 'deposit' && fullData.data.amount) {
+              // Заполняем поле поиска только если оно пустое (пользователь еще не вводил сумму)
+              if (fullData.data.requestType === 'deposit' && fullData.data.amount && !searchAmount.trim()) {
                 const amount = parseFloat(fullData.data.amount)
                 if (!isNaN(amount) && amount > 0) {
                   const formattedAmount = amount.toLocaleString('en-US', {
@@ -632,9 +627,6 @@ export default function RequestDetailPage() {
                     maximumFractionDigits: 2,
                   })
                   setSearchAmount(formattedAmount)
-                  setTimeout(() => {
-                    handleSearchPaymentsWithAmount(formattedAmount)
-                  }, 500)
                 }
               }
               
