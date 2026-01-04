@@ -263,9 +263,15 @@ class APIClient:
                             timeout=aiohttp.ClientTimeout(total=5)
                         ) as response:
                             if response.status == 200:
-                                data = await response.json()
-                                return data if data.get('success') else {}
-                    except:
+                                # Проверяем Content-Type перед парсингом JSON
+                                content_type = response.headers.get('Content-Type', '')
+                                if 'application/json' in content_type:
+                                    data = await response.json()
+                                    return data if data.get('success') else {}
+                                else:
+                                    # Если не JSON, возвращаем пустой словарь
+                                    return {}
+                    except Exception as e:
                         # Если локальный недоступен, используем fallback из конфига
                         api_url = Config.API_FALLBACK_URL
                 
@@ -273,8 +279,14 @@ class APIClient:
                     f'{api_url}/public/payment-settings',
                     timeout=aiohttp.ClientTimeout(total=10)
                 ) as response:
-                    data = await response.json()
-                    return data if data.get('success') else {}
+                    # Проверяем Content-Type перед парсингом JSON
+                    content_type = response.headers.get('Content-Type', '')
+                    if 'application/json' in content_type:
+                        data = await response.json()
+                        return data if data.get('success') else {}
+                    else:
+                        # Если не JSON, возвращаем пустой словарь
+                        return {}
             except Exception as e:
                 print(f"Error fetching payment settings: {e}")
                 return {}
@@ -305,16 +317,33 @@ class APIClient:
                         json=data,
                         timeout=aiohttp.ClientTimeout(total=2)
                     ) as response:
-                        return await response.json()
-                except:
+                        # Проверяем Content-Type перед парсингом JSON
+                        content_type = response.headers.get('Content-Type', '')
+                        if 'application/json' in content_type:
+                            return await response.json()
+                        else:
+                            # Если не JSON, возвращаем дефолтное значение (не заблокирован)
+                            return {'success': True, 'data': {'blocked': False}}
+                except Exception as e:
                     # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
             
-            async with session.post(
-                f'{api_url}/public/check-blocked',
-                json=data
-            ) as response:
-                return await response.json()
+            try:
+                async with session.post(
+                    f'{api_url}/public/check-blocked',
+                    json=data,
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as response:
+                    # Проверяем Content-Type перед парсингом JSON
+                    content_type = response.headers.get('Content-Type', '')
+                    if 'application/json' in content_type:
+                        return await response.json()
+                    else:
+                        # Если не JSON, возвращаем дефолтное значение (не заблокирован)
+                        return {'success': True, 'data': {'blocked': False}}
+            except Exception as e:
+                # При любой ошибке считаем, что пользователь не заблокирован
+                return {'success': True, 'data': {'blocked': False}}
     
     @staticmethod
     async def check_player(bookmaker: str, account_id: str) -> Dict[str, Any]:
