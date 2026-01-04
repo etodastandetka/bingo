@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createApiResponse } from '@/lib/api-helpers'
+import { ensureUserExists } from '@/lib/sync-user'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +66,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     const userIdBigInt = BigInt(userId)
+
+    // Убеждаемся, что пользователь существует в BotUser перед созданием BotUserData
+    // Это необходимо для соблюдения внешнего ключа (foreign key constraint)
+    await ensureUserExists(userIdBigInt)
 
     const result = await prisma.botUserData.upsert({
       where: {
