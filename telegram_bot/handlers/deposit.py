@@ -741,6 +741,16 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
 @router.callback_query(F.data == 'deposit_cancel')
 async def deposit_cancel_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Обработка нажатия на кнопку "Отмена" в процессе депозита"""
+    # ВАЖНО: Отвечаем на callback query СРАЗУ, до выполнения долгих операций
+    # Иначе callback query может истечь (Telegram требует ответ в течение нескольких секунд)
+    try:
+        await callback.answer()
+    except Exception as e:
+        # Если callback уже истек, просто игнорируем ошибку
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"[Deposit Cancel] Callback query expired: {e}")
+    
     lang = await get_lang_from_state(state)
     
     # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
@@ -762,7 +772,6 @@ async def deposit_cancel_callback(callback: CallbackQuery, state: FSMContext, bo
     # Показываем главное меню
     from handlers.start import cmd_start
     await cmd_start(callback.message, state, bot)
-    await callback.answer()
 
 @router.message(DepositStates.waiting_for_receipt, F.photo)
 async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot):
@@ -915,6 +924,16 @@ async def deposit_invalid_receipt(message: Message, state: FSMContext, bot: Bot)
 @router.callback_query(F.data == 'deposit_cancel')
 async def deposit_cancel_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Обработка нажатия на кнопку "Отмена" в процессе депозита"""
+    # ВАЖНО: Отвечаем на callback query СРАЗУ, до выполнения долгих операций
+    # Иначе callback query может истечь (Telegram требует ответ в течение нескольких секунд)
+    try:
+        await callback.answer()
+    except Exception as e:
+        # Если callback уже истек, просто игнорируем ошибку
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"[Deposit Cancel] Callback query expired: {e}")
+    
     lang = await get_lang_from_state(state)
     
     # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
@@ -936,5 +955,4 @@ async def deposit_cancel_callback(callback: CallbackQuery, state: FSMContext, bo
     # Показываем главное меню
     from handlers.start import cmd_start
     await cmd_start(callback.message, state, bot)
-    await callback.answer()
 
