@@ -654,9 +654,17 @@ export async function POST(request: NextRequest) {
         addLog('success', `✅ Статус заявки исправлен на 'pending' (ID: ${verifyRequest.id})`)
       }
 
-      // Автопополнение теперь работает через Email Watcher
-      // Email Watcher сохраняет платежи в БД и вызывает matchAndProcessPayment
-      // Не нужно запускать отдельный watcher для заявок с фото чека
+      // Проверяем существующие платежи при создании заявки
+      // Это нужно на случай, если платеж был обработан email-watcher'ом ДО создания заявки
+      if (validType === 'deposit' && amountDecimal) {
+        try {
+          const { checkAndProcessExistingPayment } = await import('@/lib/auto-deposit')
+          await checkAndProcessExistingPayment(newRequest.id, parseFloat(amountDecimal.toString()))
+        } catch (autoDepositError: any) {
+          // Не блокируем создание заявки если автопополнение не сработало
+          console.warn('⚠️ Payment API - Auto-deposit check failed (non-blocking):', autoDepositError.message)
+        }
+      }
 
       const response = NextResponse.json(
         createApiResponse({

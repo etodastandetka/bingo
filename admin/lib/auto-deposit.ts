@@ -1,6 +1,58 @@
 import { prisma } from './prisma'
 
 /**
+ * Проверяет существующие необработанные платежи для заявки и вызывает автопополнение
+ * Используется когда заявка создается ПОСЛЕ того, как платеж уже был обработан email-watcher'ом
+ */
+export async function checkAndProcessExistingPayment(requestId: number, amount: number) {
+  console.log(`🔍 [Auto-Deposit] checkAndProcessExistingPayment called: requestId=${requestId}, amount=${amount}`)
+  
+  try {
+    // Ищем необработанные платежи с такой же суммой за последние 10 минут
+    // 10 минут - больше чем 5 минут в matchAndProcessPayment, чтобы учесть задержки
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+    
+    const matchingPayments = await prisma.incomingPayment.findMany({
+      where: {
+        isProcessed: false,
+        paymentDate: { gte: tenMinutesAgo },
+      },
+      orderBy: { paymentDate: 'desc' },
+      select: {
+        id: true,
+        amount: true,
+        paymentDate: true,
+      },
+    })
+    
+    // Фильтруем по точному совпадению суммы
+    const exactMatches = matchingPayments.filter((payment) => {
+      const paymentAmount = parseFloat(payment.amount.toString())
+      const diff = Math.abs(paymentAmount - amount)
+      return diff < 0.01 // Точность до 1 копейки
+    })
+    
+    if (exactMatches.length === 0) {
+      console.log(`ℹ️ [Auto-Deposit] No matching payments found for request ${requestId} (amount: ${amount})`)
+      return null
+    }
+    
+    console.log(`🎯 [Auto-Deposit] Found ${exactMatches.length} matching payment(s) for request ${requestId}`)
+    
+    // Берем самый первый платеж (самый старый)
+    const payment = exactMatches[exactMatches.length - 1]
+    
+    console.log(`💸 [Auto-Deposit] Processing existing payment ${payment.id} for request ${requestId}`)
+    
+    // Вызываем стандартную функцию автопополнения
+    return await matchAndProcessPayment(payment.id, amount)
+  } catch (error: any) {
+    console.error(`❌ [Auto-Deposit] Error checking existing payments for request ${requestId}:`, error.message)
+    return null
+  }
+}
+
+/**
  * ЕДИНСТВЕННАЯ функция автопополнения - работает только здесь
  * Все вызовы должны использовать эту функцию из ./auto-deposit
  * Работает секунду в секунду - мгновенно
@@ -9,18 +61,19 @@ import { prisma } from './prisma'
 export async function matchAndProcessPayment(paymentId: number, amount: number) {
   console.log(`🔍 [Auto-Deposit] matchAndProcessPayment called: paymentId=${paymentId}, amount=${amount}`)
   
-  // Ищем заявки на пополнение со статусом pending за последние 5 минут
+  // Ищем заявки на пополнение со статусом pending за последние 10 минут
+  // Увеличено до 10 минут для учета задержек обработки email и создания заявок
   // Это защищает от случайного пополнения если пользователь не пополнял
   // И предотвращает обработку старых заявок с одинаковыми суммами
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
 
   // Оптимизированный поиск заявок - минимум запросов для максимальной скорости
-  // Ищем ТОЛЬКО за последние 5 минут чтобы избежать случайного пополнения старых заявок
+  // Ищем за последние 10 минут чтобы учесть возможные задержки
   const matchingRequests = await prisma.request.findMany({
     where: {
       requestType: 'deposit',
       status: 'pending',
-      createdAt: { gte: fiveMinutesAgo }, // Только последние 5 минут
+      createdAt: { gte: tenMinutesAgo }, // Последние 10 минут
       incomingPayments: { none: { isProcessed: true } },
     },
     orderBy: { createdAt: 'asc' },
@@ -47,9 +100,9 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       return false
     }
     
-    // Дополнительная проверка: заявка должна быть создана не более 5 минут назад
+    // Дополнительная проверка: заявка должна быть создана не более 10 минут назад
     const requestAge = Date.now() - req.createdAt.getTime()
-    const maxAge = 5 * 60 * 1000 // 5 минут
+    const maxAge = 10 * 60 * 1000 // 10 минут
     if (requestAge > maxAge) {
       console.log(`⚠️ [Auto-Deposit] Request ${req.id} is too old (${Math.floor(requestAge / 1000)}s), skipping`)
       return false
