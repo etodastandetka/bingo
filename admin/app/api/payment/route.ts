@@ -712,17 +712,16 @@ export async function POST(request: NextRequest) {
           }
         }
         
-        // Проверяем сразу
-        const immediateResult = await checkPayment(1, 0)
+        // Запускаем проверку в фоне (не блокируем ответ) - все заявки обрабатываются параллельно
+        checkPayment(1, 0).catch(err => {
+          console.warn(`⚠️ Payment API - Background payment check failed:`, err)
+        })
         
-        // Если не нашли сразу, проверяем еще раз через 3 секунды (платеж может прийти с задержкой)
+        // Повторная проверка через 3 секунды (платеж может прийти с задержкой)
         // Для заявок без чека это особенно важно - платеж может прийти позже
-        if (!immediateResult) {
-          // Запускаем повторную проверку в фоне (не блокируем ответ)
-          checkPayment(2, 3000).catch(err => {
-            console.warn(`⚠️ Payment API - Background payment check failed:`, err)
-          })
-        }
+        checkPayment(2, 3000).catch(err => {
+          console.warn(`⚠️ Payment API - Background payment check (retry) failed:`, err)
+        })
       }
 
       const response = NextResponse.json(
@@ -987,16 +986,15 @@ export async function PUT(request: NextRequest) {
         }
       }
       
-      // Проверяем сразу
-      const immediateResult = await checkPayment(1, 0)
+      // Запускаем проверку в фоне (не блокируем ответ) - все заявки обрабатываются параллельно
+      checkPayment(1, 0).catch(err => {
+        console.warn(`⚠️ Payment API PUT - Background payment check failed:`, err)
+      })
       
-      // Если не нашли сразу, проверяем еще раз через 3 секунды (платеж может прийти с задержкой)
-      if (!immediateResult) {
-        // Запускаем повторную проверку в фоне (не блокируем ответ)
-        checkPayment(2, 3000).catch(err => {
-          console.warn(`⚠️ Payment API PUT - Background payment check failed:`, err)
-        })
-      }
+      // Повторная проверка через 3 секунды (платеж может прийти с задержкой)
+      checkPayment(2, 3000).catch(err => {
+        console.warn(`⚠️ Payment API PUT - Background payment check (retry) failed:`, err)
+      })
     }
 
     const response = NextResponse.json(
