@@ -215,12 +215,9 @@ export default function OperatorChatPage() {
     }
   }
 
-  useEffect(() => {
-    // Используем setTimeout для корректного скролла после рендера
-    setTimeout(() => {
-      scrollToBottom()
-    }, 100)
-  }, [messages])
+  // УБРАНО: Автоматическая прокрутка вниз при обновлении сообщений
+  // Это мешало пользователю читать старые сообщения сверху
+  // Прокрутка теперь происходит только при отправке нового сообщения оператором
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
