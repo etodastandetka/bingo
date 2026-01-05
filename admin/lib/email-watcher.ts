@@ -16,6 +16,14 @@ interface WatcherSettings {
   folder: string
   bank: string
   intervalSec: number
+  walletId?: number
+}
+
+interface Wallet {
+  id: number
+  email: string
+  password: string
+  bank: string | null
 }
 
 // Rate limiting для логов сетевых ошибок
@@ -25,35 +33,45 @@ let consecutiveNetworkErrors = 0
 const MAX_CONSECUTIVE_ERRORS_BEFORE_LOG = 3 // Логируем только после 3+ ошибок подряд
 
 /**
- * Получение настроек watcher из БД
- * Упрощенная версия: только флаг включен/выключен в БД, остальное фиксировано
+ * Получение всех кошельков с email и password
  */
-async function getWatcherSettings(): Promise<WatcherSettings> {
-  // Получаем email и password из активного реквизита
-  const activeRequisite = await prisma.botRequisite.findFirst({
-    where: { isActive: true },
+async function getAllWallets(): Promise<Wallet[]> {
+  const wallets = await prisma.botRequisite.findMany({
+    where: {
+      email: { not: null },
+      password: { not: null },
+    },
+    select: {
+      id: true,
+      email: true,
+      password: true,
+      bank: true,
+    },
   })
 
-  const email = activeRequisite?.email || ''
-  const password = activeRequisite?.password || ''
+  return wallets
+    .filter((w) => w.email && w.password)
+    .map((w) => ({
+      id: w.id,
+      email: w.email!,
+      password: w.password!,
+      bank: w.bank,
+    }))
+}
 
-  // Получаем только флаг включен/выключен из БД
-  const enabledSetting = await prisma.botSetting.findUnique({
-    where: { key: 'autodeposit_enabled' },
-  })
-
-  // Фиксированные настройки для Timeweb
-  // IMAP сервер: imap.timeweb.ru
-  // Порт SSL: 993
-  // Порт STARTTLS: 143 (не используется, используем SSL)
+/**
+ * Преобразование кошелька в настройки watcher
+ */
+function walletToSettings(wallet: Wallet, enabled: boolean): WatcherSettings {
   return {
-    enabled: enabledSetting?.value === '1',
+    enabled,
     imapHost: 'imap.timeweb.ru', // Timeweb IMAP сервер
-    email,
-    password,
+    email: wallet.email,
+    password: wallet.password,
     folder: 'INBOX', // Всегда INBOX
-    bank: 'DEMIRBANK', // Можно изменить если нужно, но по умолчанию DEMIRBANK
+    bank: wallet.bank || 'DEMIRBANK', // Используем банк из кошелька или DEMIRBANK по умолчанию
     intervalSec: 60, // Фиксированный интервал 60 секунд
+    walletId: wallet.id,
   }
 }
 
@@ -248,14 +266,20 @@ async function processEmail(
             console.log(`✅ Payment saved: ID ${incomingPayment.id}, email UID ${uid} already marked as read`)
             resolve()
           } catch (error: any) {
-            console.error(`❌ Error processing email (UID: ${uid}):`, error)
-            reject(error)
+            console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error processing email (UID: ${uid}):`, error.message || error)
+            // НЕ reject'им - просто resolve, чтобы не прерывать обработку других писем
+            // Письмо уже помечено как прочитанное, так что оно не будет обработано повторно
+            resolve()
           }
         })
       })
     })
 
-    fetch.once('error', reject)
+    fetch.once('error', (err: Error) => {
+      console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error fetching email UID ${uid}:`, err.message || err)
+      // НЕ reject'им - просто resolve, чтобы не прерывать обработку других писем
+      resolve()
+    })
     fetch.once('end', () => {
       // Если сообщений не было, все равно resolve
       resolve()
@@ -412,7 +436,8 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
               try {
                 await processEmail(imap, uid, settings)
               } catch (error: any) {
-                console.error(`❌ Error processing email UID ${uid}:`, error.message)
+                // processEmail теперь всегда resolve, но на всякий случай ловим ошибки
+                console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error processing email UID ${uid}:`, error.message || error)
                 // Продолжаем обработку остальных писем даже при ошибке
               }
             }
@@ -426,8 +451,11 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
               resolve()
             })
             .catch((error) => {
+              // ВАЖНО: Даже если произошла ошибка, мы все равно resolve, чтобы продолжить работу
+              console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error in processSequentially:`, error.message || error)
+              consecutiveNetworkErrors = 0
               imap.end()
-              reject(error)
+              resolve() // НЕ reject - продолжаем работу
             })
         })
       })
@@ -498,7 +526,7 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
 
         // Слушаем события о новых письмах
         imap.on('mail', async () => {
-          console.log('📬 New email detected! Processing...')
+          console.log(`📬 [Wallet ${settings.walletId || 'N/A'}] New email detected! Processing...`)
           try {
             await checkEmails(settings)
             // Сбрасываем счетчик при успешной обработке
@@ -510,12 +538,14 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
               const now = Date.now()
               if (consecutiveNetworkErrors >= MAX_CONSECUTIVE_ERRORS_BEFORE_LOG && 
                   (now - lastNetworkErrorLog) > NETWORK_ERROR_LOG_INTERVAL) {
-                console.warn(`⚠️ Network error processing new emails (${error.code}): ${error.message || error} (${consecutiveNetworkErrors} consecutive errors)`)
+                console.warn(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Network error processing new emails (${error.code}): ${error.message || error} (${consecutiveNetworkErrors} consecutive errors)`)
                 lastNetworkErrorLog = now
               }
             } else {
-              console.error('Error processing new emails:', error)
+              // Другие ошибки - логируем, но не прерываем работу
+              console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error processing new emails:`, error.message || error)
             }
+            // НЕ пробрасываем ошибку дальше - продолжаем слушать новые письма
           }
         })
 
@@ -529,31 +559,6 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
         // Это почти как реальное время, но с небольшой задержкой
         idleInterval = setInterval(async () => {
           try {
-            // Проверяем, не изменился ли активный реквизит
-            const currentActiveRequisite = await prisma.botRequisite.findFirst({
-              where: { isActive: true },
-              select: { id: true, email: true },
-            })
-            
-            const newRequisiteId = currentActiveRequisite?.id || null
-            const newRequisiteEmail = currentActiveRequisite?.email || null
-            
-            // Если активный реквизит изменился - завершаем соединение для переподключения
-            if (currentActiveRequisiteId !== null && 
-                (newRequisiteId !== currentActiveRequisiteId || 
-                 newRequisiteEmail !== settings.email)) {
-              console.log(`🔄 Active requisite changed during polling!`)
-              console.log(`   Previous: ID ${currentActiveRequisiteId}, Email: ${settings.email}`)
-              console.log(`   New: ID ${newRequisiteId}, Email: ${newRequisiteEmail}`)
-              console.log(`   Ending current connection to reconnect...`)
-              
-              if (idleInterval) clearInterval(idleInterval)
-              if (keepAliveInterval) clearInterval(keepAliveInterval)
-              imap.end()
-              resolve() // Завершаем Promise, чтобы переподключиться в основном цикле
-              return
-            }
-            
             await checkEmails(settings)
           } catch (error: any) {
             if (error.textCode === 'AUTHENTICATIONFAILED') {
@@ -581,9 +586,10 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
               return
             }
             
-            // Сбрасываем счетчик при других ошибках или успехе
+            // Другие ошибки - логируем, но продолжаем работу
             consecutiveNetworkErrors = 0
-            console.error('Error in quick polling:', error.message || error)
+            console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error in quick polling:`, error.message || error)
+            // НЕ прерываем работу - продолжаем проверку
           }
         }, 5000) // Проверка каждые 5 секунд вместо 60
         
@@ -664,29 +670,89 @@ async function checkTimeouts(): Promise<void> {
   }
 }
 
-// Флаг для отслеживания первого запуска после перезапуска
-let isFirstRun = true
+// Хранилище флагов первого запуска для каждого кошелька
+const firstRunFlags = new Map<number, boolean>()
 
-// Отслеживание текущего активного реквизита для переподключения при смене
-let currentActiveRequisiteId: number | null = null
-let currentActiveEmail: string | null = null
+// Хранилище активных watchers для каждого кошелька
+const activeWatchers = new Map<number, { interval: NodeJS.Timeout | null; keepAlive: NodeJS.Timeout | null }>()
+
+// Отслеживание запущенных watchers для каждого кошелька (чтобы не запускать дубликаты)
+const runningWatchers = new Set<number>()
 
 /**
- * Получение ID активного реквизита для отслеживания изменений
+ * Запуск watcher для одного кошелька
  */
-async function getActiveRequisiteId(): Promise<number | null> {
-  const activeRequisite = await prisma.botRequisite.findFirst({
-    where: { isActive: true },
-    select: { id: true, email: true },
+async function startWalletWatcher(wallet: Wallet): Promise<void> {
+  const walletId = wallet.id
+  
+  // Получаем флаг включен/выключен из БД
+  const enabledSetting = await prisma.botSetting.findUnique({
+    where: { key: 'autodeposit_enabled' },
   })
-  return activeRequisite?.id || null
+  const enabled = enabledSetting?.value === '1'
+
+  if (!enabled) {
+    console.log(`⏸️ Autodeposit is disabled, skipping wallet ${walletId} (${wallet.email})`)
+    return
+  }
+
+  const settings = walletToSettings(wallet, enabled)
+
+  console.log(`🚀 Starting Email Watcher for wallet ${walletId} (${settings.email})...`)
+
+  while (true) {
+    try {
+      if (!settings.email || !settings.password) {
+        console.warn(`⚠️ IMAP credentials not configured for wallet ${walletId} (${settings.email})`)
+        console.warn('   Waiting 30 seconds...')
+        await new Promise((resolve) => setTimeout(resolve, 30000))
+        continue
+      }
+
+      console.log(`📧 [Wallet ${walletId}] Connecting to ${settings.imapHost} (${settings.email})...`)
+
+      // При первом запуске для этого кошелька помечаем все непрочитанные письма как прочитанные
+      const isFirstRun = !firstRunFlags.has(walletId)
+      if (isFirstRun) {
+        console.log(`🔄 [Wallet ${walletId}] First run detected - marking all unread emails as read...`)
+        try {
+          await checkAllUnreadEmails(settings)
+          console.log(`✅ [Wallet ${walletId}] Finished marking unread emails as read, switching to real-time mode...`)
+        } catch (error: any) {
+          console.error(`❌ [Wallet ${walletId}] Error marking unread emails on first run:`, error.message)
+          // Продолжаем работу даже если помечание непрочитанных писем не удалось
+        }
+        firstRunFlags.set(walletId, true)
+      }
+
+      // Запускаем IDLE режим (реальное время)
+      try {
+        await startIdleMode(settings)
+      } catch (error: any) {
+        if (error.textCode === 'AUTHENTICATIONFAILED') {
+          console.error(`❌ [Wallet ${walletId}] IMAP Authentication Failed!`)
+          console.error(`   Please check email and password for wallet ${walletId}`)
+          console.error(`   Email: ${settings.email ? '✓ set' : '✗ missing'}`)
+          console.error(`   Password: ${settings.password ? '✓ set' : '✗ missing'}`)
+          console.error(`   Waiting 60 seconds before retry...`)
+          await new Promise((resolve) => setTimeout(resolve, 60000))
+        } else {
+          console.error(`❌ [Wallet ${walletId}] IDLE mode error, reconnecting in 10 seconds...`, error.message)
+          await new Promise((resolve) => setTimeout(resolve, 10000))
+        }
+      }
+    } catch (error: any) {
+      console.error(`❌ [Wallet ${walletId}] Error in watcher:`, error)
+      await new Promise((resolve) => setTimeout(resolve, 10000))
+    }
+  }
 }
 
 /**
- * Запуск watcher в режиме реального времени (IDLE)
+ * Запуск watcher для всех кошельков параллельно
  */
 export async function startWatcher(): Promise<void> {
-  console.log('🚀 Starting Email Watcher (IDLE mode - real-time)...')
+  console.log('🚀 Starting Email Watcher for all wallets (IDLE mode - real-time)...')
 
   // Запускаем периодическую проверку таймаутов каждую минуту
   const timeoutInterval = setInterval(() => {
@@ -700,82 +766,48 @@ export async function startWatcher(): Promise<void> {
     console.warn('⚠️ Initial timeout check failed:', error.message)
   })
 
+  // Запускаем watcher для каждого кошелька параллельно
   while (true) {
     try {
-      const settings = await getWatcherSettings()
+      const wallets = await getAllWallets()
       
-      // Получаем текущий активный реквизит для отслеживания изменений
-      const activeRequisite = await prisma.botRequisite.findFirst({
-        where: { isActive: true },
-        select: { id: true, email: true },
-      })
-      
-      const newRequisiteId = activeRequisite?.id || null
-      const newEmail = activeRequisite?.email || null
-
-      // Проверяем, изменился ли активный реквизит
-      if (currentActiveRequisiteId !== null && 
-          currentActiveRequisiteId !== newRequisiteId) {
-        console.log(`🔄 Active requisite changed!`)
-        console.log(`   Previous: ID ${currentActiveRequisiteId}, Email: ${currentActiveEmail}`)
-        console.log(`   New: ID ${newRequisiteId}, Email: ${newEmail}`)
-        console.log(`   Reconnecting to new email account...`)
-        
-        // Сбрасываем флаг первого запуска, чтобы обработать новые письма
-        isFirstRun = true
-      }
-
-      // Обновляем текущие значения
-      currentActiveRequisiteId = newRequisiteId
-      currentActiveEmail = newEmail
-
-      if (!settings.enabled) {
-        console.log('⏸️ Autodeposit is disabled, waiting 30 seconds...')
-        await new Promise((resolve) => setTimeout(resolve, 30000))
-        continue
-      }
-
-      if (!settings.email || !settings.password) {
-        console.warn('⚠️ IMAP credentials not configured!')
-        console.warn('   Please set email and password in the active requisite (BotRequisite with isActive=true)')
+      if (wallets.length === 0) {
+        console.warn('⚠️ No wallets found with email and password')
         console.warn('   Waiting 30 seconds...')
         await new Promise((resolve) => setTimeout(resolve, 30000))
         continue
       }
 
-      console.log(`📧 Connecting to ${settings.imapHost} (${settings.email})...`)
+      console.log(`📋 Found ${wallets.length} wallet(s) to monitor`)
 
-      // При первом запуске просто помечаем все непрочитанные письма как прочитанные
-      if (isFirstRun) {
-        console.log('🔄 First run detected - marking all unread emails as read...')
-        try {
-          await checkAllUnreadEmails(settings)
-          console.log('✅ Finished marking unread emails as read, switching to real-time mode...')
-        } catch (error: any) {
-          console.error('❌ Error marking unread emails on first run:', error.message)
-          // Продолжаем работу даже если помечание непрочитанных писем не удалось
+      // Запускаем watcher для каждого кошелька параллельно (неблокирующе)
+      for (const wallet of wallets) {
+        // Проверяем, не запущен ли уже watcher для этого кошелька
+        if (runningWatchers.has(wallet.id)) {
+          continue // Пропускаем, если watcher уже запущен
         }
-        isFirstRun = false
+
+        // Помечаем watcher как запущенный
+        runningWatchers.add(wallet.id)
+        
+        // Запускаем watcher для каждого кошелька в фоне (не ждем завершения)
+        startWalletWatcher(wallet)
+          .catch((error) => {
+            console.error(`❌ [Wallet ${wallet.id}] Fatal error in watcher:`, error)
+            // Удаляем из списка запущенных при фатальной ошибке, чтобы можно было перезапустить
+            runningWatchers.delete(wallet.id)
+          })
+          .finally(() => {
+            // Удаляем из списка запущенных когда watcher завершается (для переподключения)
+            runningWatchers.delete(wallet.id)
+          })
       }
 
-      // Запускаем IDLE режим (реальное время)
-      try {
-        await startIdleMode(settings)
-      } catch (error: any) {
-        if (error.textCode === 'AUTHENTICATIONFAILED') {
-          console.error('❌ IMAP Authentication Failed!')
-          console.error('   Please check email and password in the active requisite')
-          console.error(`   Email: ${settings.email ? '✓ set' : '✗ missing'}`)
-          console.error(`   Password: ${settings.password ? '✓ set' : '✗ missing'}`)
-          console.error('   Waiting 60 seconds before retry...')
-          await new Promise((resolve) => setTimeout(resolve, 60000))
-        } else {
-          console.error('❌ IDLE mode error, reconnecting in 10 seconds...', error.message)
-          await new Promise((resolve) => setTimeout(resolve, 10000))
-        }
-      }
+      // Ждем 60 секунд перед следующей проверкой списка кошельков
+      // (кошельки работают независимо в фоне)
+      await new Promise((resolve) => setTimeout(resolve, 60000))
     } catch (error: any) {
-      console.error('❌ Error in watcher:', error)
+      console.error('❌ Error in main watcher loop:', error)
       await new Promise((resolve) => setTimeout(resolve, 10000))
     }
   }
@@ -783,19 +815,39 @@ export async function startWatcher(): Promise<void> {
 
 /**
  * Одноразовая проверка (для ручного запуска)
+ * Проверяет все кошельки один раз
  */
 export async function checkEmailsOnce(): Promise<void> {
-  const settings = await getWatcherSettings()
+  // Получаем флаг включен/выключен из БД
+  const enabledSetting = await prisma.botSetting.findUnique({
+    where: { key: 'autodeposit_enabled' },
+  })
 
-  if (!settings.enabled) {
+  if (enabledSetting?.value !== '1') {
     console.log('⏸️ Autodeposit is disabled')
     return
   }
 
-  if (!settings.email || !settings.password) {
-    throw new Error('IMAP credentials not configured')
+  const wallets = await getAllWallets()
+
+  if (wallets.length === 0) {
+    throw new Error('No wallets found with email and password')
   }
 
-  await checkEmails(settings)
+  // Проверяем все кошельки параллельно
+  await Promise.all(
+    wallets.map(async (wallet) => {
+      const settings = walletToSettings(wallet, true)
+      if (!settings.email || !settings.password) {
+        console.warn(`⚠️ Wallet ${wallet.id} missing email or password`)
+        return
+      }
+      try {
+        await checkEmails(settings)
+      } catch (error: any) {
+        console.error(`❌ Error checking wallet ${wallet.id}:`, error.message)
+      }
+    })
+  )
 }
 

@@ -23,6 +23,7 @@ export default function BroadcastPage() {
   useEffect(() => {
     fetchHistory()
     fetchStats()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchStats = async () => {
