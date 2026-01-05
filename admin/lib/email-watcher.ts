@@ -115,12 +115,16 @@ async function processEmail(
             // КРИТИЧЕСКИ ВАЖНО: Помечаем письмо как прочитанное СРАЗУ после получения
             // Это предотвращает повторную обработку одного и того же письма
             // Делаем это ДО обработки, чтобы письмо не попало снова в непрочитанные
-            imap.setFlags(uid, ['\\Seen'], (err: Error | null) => {
-              if (err) {
-                console.error(`❌ Error marking email as seen (before processing):`, err)
-              } else {
-                console.log(`✅ Email UID ${uid} marked as read (before processing to prevent duplicates)`)
-              }
+            // ВАЖНО: Делаем это синхронно (await), чтобы письмо точно было помечено до обработки
+            await new Promise<void>((resolveFlag) => {
+              imap.setFlags(uid, ['\\Seen'], (err: Error | null) => {
+                if (err) {
+                  console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error marking email UID ${uid} as seen (before processing):`, err)
+                } else {
+                  console.log(`✅ [Wallet ${settings.walletId || 'N/A'}] Email UID ${uid} marked as read (before processing to prevent duplicates)`)
+                }
+                resolveFlag() // Разрешаем Promise независимо от результата
+              })
             })
 
             // ВАЖНО: Проверяем дату письма - если письмо старше 7 дней, сразу помечаем как прочитанное
@@ -171,24 +175,26 @@ async function processEmail(
 
             // ВАЖНО: Проверяем, не существует ли уже такой платеж (по сумме, дате и банку)
             // Это предотвращает дубликаты при повторной обработке писем
-            // Увеличиваем окно поиска до ±10 минут для более надежной проверки
-            // ОГРАНИЧИВАЕМ поиск только необработанными платежами для производительности
+            // Используем строгое окно ±2 минуты для более точной проверки дубликатов
+            // Проверяем ВСЕ платежи (обработанные и необработанные) для надежности
             const existingPayment = await prisma.incomingPayment.findFirst({
               where: {
-                amount: amount,
+                amount: {
+                  gte: amount - 0.0001, // Точное сравнение с учетом ошибок округления
+                  lte: amount + 0.0001,
+                },
                 bank: bank,
                 paymentDate: {
-                  gte: new Date(paymentDate.getTime() - 10 * 60000), // ±10 минут
-                  lte: new Date(paymentDate.getTime() + 10 * 60000),
+                  gte: new Date(paymentDate.getTime() - 2 * 60000), // ±2 минуты (более строго)
+                  lte: new Date(paymentDate.getTime() + 2 * 60000),
                 },
-                // Проверяем как обработанные, так и необработанные (для надежности)
               },
               orderBy: { createdAt: 'desc' },
             })
 
             if (existingPayment) {
-              console.log(`⚠️ Payment already exists: ID ${existingPayment.id}, amount: ${amount}, date: ${paymentDate.toISOString()}`)
-              console.log(`   Skipping duplicate payment. Email already marked as read.`)
+              console.log(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Payment already exists: ID ${existingPayment.id}, amount: ${amount}, date: ${paymentDate.toISOString()}`)
+              console.log(`   Skipping duplicate payment. Email UID ${uid} already processed.`)
               // Письмо уже помечено как прочитанное выше, просто завершаем
               resolve()
               return
