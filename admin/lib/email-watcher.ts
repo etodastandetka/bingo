@@ -413,7 +413,7 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
         ]
         
         // Используем более строгий фильтр: только UNSEEN письма за последние 2 минуты
-        imap.search(['UNSEEN', searchDate], (err: Error | null, results?: number[]) => {
+        imap.search(['UNSEEN', searchDate], async (err: Error | null, results?: number[]) => {
           if (err) {
             reject(err)
             return
@@ -432,11 +432,14 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
 
           // КРИТИЧЕСКИ ВАЖНО: Помечаем ВСЕ найденные письма как прочитанные СРАЗУ после поиска
           // Это предотвращает повторную обработку при следующем polling (каждую секунду)
-          imap.setFlags(results!, ['\\Seen'], (err: Error | null) => {
-            if (err) {
-              console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error marking emails as read:`, err)
-            }
-            // Продолжаем обработку даже если не удалось пометить как прочитанное
+          // ВАЖНО: Ждем завершения setFlags перед началом обработки
+          await new Promise<void>((resolveFlags) => {
+            imap.setFlags(results!, ['\\Seen'], (err: Error | null) => {
+              if (err) {
+                console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error marking emails as read:`, err)
+              }
+              resolveFlags() // Разрешаем Promise независимо от результата
+            })
           })
 
           // Обрабатываем каждое письмо последовательно (не параллельно), чтобы избежать конфликтов
@@ -473,7 +476,12 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
     imap.once('error', (err: Error) => {
       // Обрабатываем DNS-ошибки: пытаемся переподключиться с IP-адресом
       if ((err as any).code === 'ENOTFOUND' && !useIpFallback) {
-        console.log(`🔄 [Wallet ${settings.walletId || 'N/A'}] DNS error, retrying with IP address (${TIMEWEB_IMAP_IP})...`)
+        // Логируем только если прошло достаточно времени (чтобы не спамить)
+        const now = Date.now()
+        if ((now - lastNetworkErrorLog) > NETWORK_ERROR_LOG_INTERVAL) {
+          console.log(`🔄 [Wallet ${settings.walletId || 'N/A'}] DNS error, retrying with IP address (${TIMEWEB_IMAP_IP})...`)
+          lastNetworkErrorLog = now
+        }
         imap.end()
         
         // Пытаемся подключиться с IP-адресом
@@ -494,7 +502,7 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
               twoMinutesAgo.toISOString().split('T')[0].replace(/-/g, '-')
             ]
             
-            imapWithIp.search(['UNSEEN', searchDate], (err: Error | null, results?: number[]) => {
+            imapWithIp.search(['UNSEEN', searchDate], async (err: Error | null, results?: number[]) => {
               if (err) {
                 reject(err)
                 return
@@ -512,10 +520,14 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
 
               // КРИТИЧЕСКИ ВАЖНО: Помечаем ВСЕ найденные письма как прочитанные СРАЗУ после поиска
               // Это предотвращает повторную обработку при следующем polling
-              imapWithIp.setFlags(results!, ['\\Seen'], (err: Error | null) => {
-                if (err) {
-                  console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error marking emails as read (IP fallback):`, err)
-                }
+              // ВАЖНО: Ждем завершения setFlags перед началом обработки
+              await new Promise<void>((resolveFlags) => {
+                imapWithIp.setFlags(results!, ['\\Seen'], (err: Error | null) => {
+                  if (err) {
+                    console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error marking emails as read (IP fallback):`, err)
+                  }
+                  resolveFlags() // Разрешаем Promise независимо от результата
+                })
               })
 
               const processSequentially = async () => {
