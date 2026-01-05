@@ -172,30 +172,17 @@ async function processEmail(
             const paymentData = parseEmailByBank(text, settings.bank)
 
           if (!paymentData) {
-            console.log(`⚠️ Could not parse email (UID: ${uid})`)
+            console.log(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Could not parse email (UID: ${uid})`)
             console.log(`   Bank setting: ${settings.bank}`)
-            console.log(`   Trying to find amount pattern in text...`)
-            // Попробуем показать, что именно ищем
-            // Поддерживаем числа с пробелами: "1 000", "10 000", "100 000"
-            // Поддерживаем запятые как разделители тысяч: "1,240.06"
-            const amountPattern = /([0-9]{1,3}(?:[,\s]+[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:[,\s]+[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:,[0-9]{1,2})?)\s*(KGS|сом|сомов)/i
-            const amountMatches = text.match(amountPattern)
-            if (amountMatches) {
-              console.log(`   Found potential amount: ${amountMatches[0]}`)
-            } else {
-              console.log(`   No amount pattern found`)
-            }
             // Письмо уже помечено как прочитанное выше, просто завершаем
-            console.log(`⚠️ Could not parse email (UID: ${uid}), skipping`)
             resolve()
             return
           }
 
           const { amount, isoDatetime, bank } = paymentData
 
-            console.log(
-              `💰 [Wallet ${settings.walletId || 'N/A'}] Parsed payment: ${amount} KGS, bank: ${bank}, date: ${isoDatetime || 'N/A'}`
-            )
+            // СРАЗУ логируем сумму после парсинга
+            console.log(`💰 [Wallet ${settings.walletId || 'N/A'}] Parsed payment: ${amount} KGS, bank: ${bank}, date: ${isoDatetime || 'N/A'}`)
 
             // Сохраняем входящий платеж в БД
             const paymentDate = isoDatetime
@@ -240,7 +227,7 @@ async function processEmail(
               },
             })
 
-            console.log(`✅ IncomingPayment saved: ID ${incomingPayment.id}`)
+            console.log(`✅ [Wallet ${settings.walletId || 'N/A'}] IncomingPayment saved: ID ${incomingPayment.id}, amount: ${amount} KGS`)
 
             // ФОНОВОЕ АВТОПОПОЛНЕНИЕ: Ищем ВСЕ pending заявки с такой же суммой и вызываем автопополнение
             // Это обрабатывает заявки как с фото чека, так и без него
