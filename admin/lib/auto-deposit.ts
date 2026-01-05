@@ -225,7 +225,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       // Блокируем заявку через SELECT FOR UPDATE - только один процесс может получить блокировку
       const lockedRequest = await tx.$queryRaw<Array<{ id: number; status: string; processedBy: string | null }>>`
         SELECT id, status, "processedBy" 
-        FROM "Request" 
+        FROM "requests" 
         WHERE id = ${request.id} 
         FOR UPDATE
       `
