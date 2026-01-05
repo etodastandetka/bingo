@@ -380,7 +380,7 @@ export async function deposit1winAPI(
 ): Promise<{ success: boolean; message: string; data?: any }> {
   const baseUrl = 'https://api.1win.win/v1/client'
   const MAX_RETRIES = 3
-  const RETRY_DELAYS = [2000, 5000, 10000] // Задержки в миллисекундах: 2с, 5с, 10с
+  const RETRY_DELAYS = [3000, 8000, 15000] // Задержки в миллисекундах: 3с, 8с, 15с (увеличено для rate limit)
 
   // Проверяем, что все обязательные поля заполнены и не пустые
   const apiKey = config.api_key
@@ -454,7 +454,13 @@ export async function deposit1winAPI(
         // Повторная попытка
         return await deposit1winAPI(userId, amount, config, retryCount + 1)
       } else {
-        console.error(`❌ [1win Deposit] Rate limit error after ${MAX_RETRIES} retries`)
+        // После всех попыток возвращаем ошибку
+        console.error(`❌ [1win Deposit] Rate limit error after ${MAX_RETRIES} retries for userId ${userId}, amount ${amount}`)
+        return {
+          success: false,
+          message: `Rate limit error after ${MAX_RETRIES} retries. ${errorMessage}`,
+          data,
+        }
       }
     } else if (errorCode === 'CASH07') {
       errorMessage = 'Превышен лимит баланса. Сумма пополнения слишком большая.'
