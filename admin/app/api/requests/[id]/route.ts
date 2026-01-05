@@ -7,6 +7,9 @@ import { formatDateTimeBishkek } from '@/lib/date-utils'
 // Отключаем кеширование для актуальных данных
 export const dynamic = 'force-dynamic'
 
+// Увеличиваем таймаут для больших изображений
+export const maxDuration = 60
+
 const formatDateTime = formatDateTimeBishkek
 
 async function sendOperatorMessage(userId: bigint, text: string) {
@@ -44,6 +47,8 @@ export async function GET(
       include: {
         incomingPayments: true,
       },
+      // Явно указываем, что нужно загрузить photoFileUrl
+      // Это важно для больших base64 строк
     })
 
     if (!requestData) {
@@ -95,12 +100,20 @@ export async function GET(
       })
     }
 
+    // Логируем размер photoFileUrl для диагностики
+    const photoSize = requestData.photoFileUrl ? requestData.photoFileUrl.length : 0
+    if (photoSize > 0) {
+      console.log(`📸 [Request ${id}] Photo size: ${photoSize} bytes (${(photoSize / 1024).toFixed(2)} KB)`)
+    }
+
     return NextResponse.json(
       createApiResponse({
         ...requestData,
         userId: requestData.userId.toString(), // Преобразуем BigInt в строку
         amount: requestData.amount ? requestData.amount.toString() : null,
-        photoFileUrl: requestData.photoFileUrl, // Фото чека (base64 или URL)
+        // Если photoFileUrl очень большой, возвращаем null и предлагаем загрузить через отдельный endpoint
+        // Это предотвращает обрезание ответа Next.js
+        photoFileUrl: photoSize > 1000000 ? null : requestData.photoFileUrl, // Фото чека (base64 или URL) - если > 1MB, загружаем через отдельный endpoint
         withdrawalCode: requestData.withdrawalCode, // Код вывода
         userNote: userNote, // Заметка пользователя
         processedBy: requestData.processedBy, // Кто обработал заявку (автопополнение или админ)

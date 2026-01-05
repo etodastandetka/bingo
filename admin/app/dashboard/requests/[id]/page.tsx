@@ -71,6 +71,8 @@ export default function RequestDetailPage() {
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [photoFileUrl, setPhotoFileUrl] = useState<string | null>(null)
+  const [photoLoading, setPhotoLoading] = useState(false)
 
   const pushToast = (message: string, type: 'success' | 'error' | 'info' = 'info', timeout = 4000) => {
     setToast({ message, type })
@@ -149,6 +151,28 @@ export default function RequestDetailPage() {
           if (data.success && isMountedRef.current) {
             const isFirstLoad = !request // Проверяем, это первая загрузка или обновление
             setRequest(data.data)
+            
+            // Если photoFileUrl отсутствует, пустой или null, пытаемся загрузить через отдельный endpoint
+            // Это может быть из-за большого размера фото (> 1MB), которое не включено в основной ответ
+            if (!data.data.photoFileUrl || data.data.photoFileUrl.length === 0) {
+              // Пытаемся загрузить фото через отдельный endpoint
+              fetch(`/api/requests/${requestId}/photo`)
+                .then(res => res.json())
+                .then(photoData => {
+                  if (photoData.success && photoData.data?.photoFileUrl && isMountedRef.current) {
+                    setPhotoFileUrl(photoData.data.photoFileUrl)
+                    // Обновляем request с загруженным фото
+                    setRequest((prev) => prev ? { ...prev, photoFileUrl: photoData.data.photoFileUrl } : prev)
+                  }
+                })
+                .catch(err => {
+                  console.warn('Failed to fetch photo separately:', err)
+                })
+            } else {
+              // Если фото есть в основном ответе, используем его
+              setPhotoFileUrl(data.data.photoFileUrl)
+            }
+            
             // Устанавливаем выбранное казино из заявки (или оставляем текущее, если уже было изменено)
             if (selectedBookmaker === null) {
               setSelectedBookmaker(data.data.bookmaker)
@@ -1220,7 +1244,7 @@ export default function RequestDetailPage() {
       </div>
 
       {/* Фото чека (если есть) */}
-      {request.photoFileUrl && (
+      {(request.photoFileUrl || photoFileUrl) && (
         <div className="mx-4 mb-4 bg-gray-800 rounded-2xl p-4 border border-gray-700">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-base font-semibold text-white">Фото чека</h3>
@@ -1241,9 +1265,9 @@ export default function RequestDetailPage() {
           <div className="relative w-full flex justify-center">
             <img
               src={
-                request.photoFileUrl?.startsWith('data:image') 
-                  ? request.photoFileUrl 
-                  : `data:image/jpeg;base64,${request.photoFileUrl}`
+                (request.photoFileUrl || photoFileUrl)?.startsWith('data:image') 
+                  ? (request.photoFileUrl || photoFileUrl) || ''
+                  : `data:image/jpeg;base64,${request.photoFileUrl || photoFileUrl || ''}`
               }
               alt="Фото чека об оплате"
               className="max-w-full max-h-[500px] rounded-lg border border-gray-600 object-contain cursor-pointer hover:opacity-90 transition-opacity"
@@ -1252,13 +1276,49 @@ export default function RequestDetailPage() {
                 setImageZoom(1)
                 setImagePosition({ x: 0, y: 0 })
               }}
-              onError={(e) => {
-                // Если фото не загрузилось, скрываем блок
+              onError={async (e) => {
+                // Если фото не загрузилось, пытаемся загрузить через отдельный endpoint
                 const target = e.target as HTMLImageElement
-                target.style.display = 'none'
-                const parent = target.closest('.bg-gray-800')
-                if (parent) {
-                  (parent as HTMLElement).style.display = 'none'
+                const requestId = Array.isArray(params.id) ? params.id[0] : params.id
+                
+                if (!photoFileUrl && requestId && !photoLoading) {
+                  setPhotoLoading(true)
+                  try {
+                    const photoResponse = await fetch(`/api/requests/${requestId}/photo`)
+                    const photoData = await photoResponse.json()
+                    
+                    if (photoData.success && photoData.data?.photoFileUrl && isMountedRef.current) {
+                      setPhotoFileUrl(photoData.data.photoFileUrl)
+                      // Обновляем src изображения
+                      target.src = photoData.data.photoFileUrl.startsWith('data:image')
+                        ? photoData.data.photoFileUrl
+                        : `data:image/jpeg;base64,${photoData.data.photoFileUrl}`
+                    } else {
+                      // Если фото не найдено, скрываем блок
+                      target.style.display = 'none'
+                      const parent = target.closest('.bg-gray-800')
+                      if (parent) {
+                        (parent as HTMLElement).style.display = 'none'
+                      }
+                    }
+                  } catch (err) {
+                    console.error('Failed to load photo:', err)
+                    // Скрываем блок при ошибке
+                    target.style.display = 'none'
+                    const parent = target.closest('.bg-gray-800')
+                    if (parent) {
+                      (parent as HTMLElement).style.display = 'none'
+                    }
+                  } finally {
+                    setPhotoLoading(false)
+                  }
+                } else {
+                  // Если уже пытались загрузить или нет requestId, скрываем блок
+                  target.style.display = 'none'
+                  const parent = target.closest('.bg-gray-800')
+                  if (parent) {
+                    (parent as HTMLElement).style.display = 'none'
+                  }
                 }
               }}
             />
@@ -1267,7 +1327,7 @@ export default function RequestDetailPage() {
       )}
 
       {/* Модальное окно для просмотра фото в полном размере */}
-      {imageModalOpen && request.photoFileUrl && (
+      {imageModalOpen && (request.photoFileUrl || photoFileUrl) && (
         <div 
           className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center p-4"
           onClick={() => {
@@ -1366,9 +1426,9 @@ export default function RequestDetailPage() {
             >
               <img
                 src={
-                  request.photoFileUrl?.startsWith('data:image') 
-                    ? request.photoFileUrl 
-                    : `data:image/jpeg;base64,${request.photoFileUrl}`
+                  (request.photoFileUrl || photoFileUrl)?.startsWith('data:image') 
+                    ? (request.photoFileUrl || photoFileUrl) || ''
+                    : `data:image/jpeg;base64,${request.photoFileUrl || photoFileUrl || ''}`
                 }
                 alt="Фото чека об оплате"
                 className="max-w-full max-h-full object-contain transition-transform duration-200 select-none"
