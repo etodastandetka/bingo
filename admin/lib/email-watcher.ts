@@ -139,14 +139,8 @@ async function processEmail(
             const parsed = await simpleParser(buffer)
             const text = parsed.text || parsed.html || parsed.textAsHtml || ''
 
-            // Логируем информацию о письме для отладки
-            console.log(`📨 Email subject: ${parsed.subject || 'N/A'}`)
-            console.log(`📨 Email from: ${parsed.from?.text || 'N/A'}`)
-            console.log(`📨 Email text length: ${text.length} chars`)
-            if (text.length > 0) {
-              const preview = text.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')
-              console.log(`📨 Email preview: ${preview}...`)
-            }
+            // Логируем краткую информацию о письме
+            console.log(`📨 [Wallet ${settings.walletId || 'N/A'}] Email: ${parsed.subject || 'N/A'} from ${parsed.from?.text || 'N/A'}`)
 
             // КРИТИЧЕСКИ ВАЖНО: Помечаем письмо как прочитанное СРАЗУ после получения
             // Это предотвращает повторную обработку одного и того же письма
@@ -156,9 +150,8 @@ async function processEmail(
               imap.setFlags(uid, ['\\Seen'], (err: Error | null) => {
                 if (err) {
                   console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error marking email UID ${uid} as seen (before processing):`, err)
-                } else {
-                  console.log(`✅ [Wallet ${settings.walletId || 'N/A'}] Email UID ${uid} marked as read (before processing to prevent duplicates)`)
                 }
+                // Не логируем успешное помечание как прочитанное - это спам
                 resolveFlag() // Разрешаем Promise независимо от результата
               })
             })
@@ -201,7 +194,7 @@ async function processEmail(
           const { amount, isoDatetime, bank } = paymentData
 
             console.log(
-              `📧 Parsed email: ${bank}, amount: ${amount}, date: ${isoDatetime || 'N/A'}`
+              `💰 [Wallet ${settings.walletId || 'N/A'}] Parsed payment: ${amount} KGS, bank: ${bank}, date: ${isoDatetime || 'N/A'}`
             )
 
             // Сохраняем входящий платеж в БД
@@ -306,7 +299,7 @@ async function processEmail(
             }
 
             // Письмо уже помечено как прочитанное выше, просто завершаем
-            console.log(`✅ Payment saved: ID ${incomingPayment.id}, email UID ${uid} already marked as read`)
+            console.log(`✅ [Wallet ${settings.walletId || 'N/A'}] Payment saved: ID ${incomingPayment.id}, amount: ${amount} KGS`)
             resolve()
           } catch (error: any) {
             console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error processing email (UID: ${uid}):`, error.message || error)
@@ -451,7 +444,7 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
           }
 
           if (!results || results.length === 0) {
-            console.log('📭 No new emails (last 2 minutes)')
+            // Не логируем "No new emails" - это спам при polling каждую секунду
             // Сбрасываем счетчик при успешной проверке
             consecutiveNetworkErrors = 0
             imap.end()
@@ -459,7 +452,7 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
             return
           }
 
-          console.log(`📬 Found ${results.length} new email(s) (since ${twoMinutesAgo.toISOString().split('T')[0]})`)
+          console.log(`📬 [Wallet ${settings.walletId || 'N/A'}] Found ${results.length} new email(s)`)
 
           // Обрабатываем каждое письмо последовательно (не параллельно), чтобы избежать конфликтов
           const processSequentially = async () => {
@@ -523,14 +516,14 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
               }
 
               if (!results || results.length === 0) {
-                console.log('📭 No new emails (last 2 minutes)')
+                // Не логируем "No new emails" - это спам при polling каждую секунду
                 consecutiveNetworkErrors = 0
                 imapWithIp.end()
                 resolve()
                 return
               }
 
-              console.log(`📬 Found ${results.length} new email(s) (since ${twoMinutesAgo.toISOString().split('T')[0]})`)
+              console.log(`📬 [Wallet ${settings.walletId || 'N/A'}] Found ${results.length} new email(s) (IP fallback)`)
 
               const processSequentially = async () => {
                 for (const uid of results!) {
