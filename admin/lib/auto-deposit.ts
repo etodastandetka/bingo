@@ -223,9 +223,9 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
   try {
     const depositResult = await prisma.$transaction(async (tx) => {
       // Блокируем заявку через SELECT FOR UPDATE - только один процесс может получить блокировку
-      const lockedRequest = await tx.$queryRaw<Array<{ id: number; status: string; processedBy: string | null }>>`
-        SELECT id, status, "processedBy" 
-        FROM "requests" 
+      const lockedRequest = await tx.$queryRaw<Array<{ id: number; status: string; processed_by: string | null }>>`
+        SELECT id, status, processed_by 
+        FROM requests 
         WHERE id = ${request.id} 
         FOR UPDATE
       `
@@ -238,7 +238,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       const currentRequest = lockedRequest[0]
       
       // Если заявка уже обработана - сразу выходим (другой процесс уже обработал)
-      if (currentRequest.status !== 'pending' || currentRequest.processedBy === 'автопополнение') {
+      if (currentRequest.status !== 'pending' || currentRequest.processed_by === 'автопополнение') {
         console.log(`⚠️ [Auto-Deposit] Request ${request.id} already processed (status: ${currentRequest.status}), skipping - another process handled it`)
         return { success: false, message: 'Request already processed', skipped: true }
       }
