@@ -28,9 +28,10 @@ interface Wallet {
 
 // Rate limiting для логов сетевых ошибок
 let lastNetworkErrorLog = 0
-const NETWORK_ERROR_LOG_INTERVAL = 60000 // Логируем не чаще раза в минуту
+const NETWORK_ERROR_LOG_INTERVAL = 300000 // Логируем не чаще раза в 5 минут при множественных ошибках
 let consecutiveNetworkErrors = 0
 const MAX_CONSECUTIVE_ERRORS_BEFORE_LOG = 3 // Логируем только после 3+ ошибок подряд
+const MAX_CONSECUTIVE_ERRORS_BEFORE_LONG_DELAY = 10 // После 10 ошибок увеличиваем задержку
 
 /**
  * Получение всех кошельков с email и password
@@ -476,6 +477,7 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
         const now = Date.now()
         
         // Логируем только если прошло достаточно времени и есть несколько ошибок подряд
+        // При множественных ошибках логируем реже (раз в 5 минут)
         if (consecutiveNetworkErrors >= MAX_CONSECUTIVE_ERRORS_BEFORE_LOG && 
             (now - lastNetworkErrorLog) > NETWORK_ERROR_LOG_INTERVAL) {
           console.warn(`⚠️ IMAP network error in checkEmails (${(err as any).code}): ${err.message || err} (${consecutiveNetworkErrors} consecutive errors)`)
@@ -549,6 +551,25 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
                 console.warn(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Network error processing new emails (${error.code}): ${error.message || error} (${consecutiveNetworkErrors} consecutive errors)`)
                 lastNetworkErrorLog = now
               }
+              
+              // При DNS ошибках добавляем задержку перед следующей попыткой
+              if (error.code === 'ENOTFOUND') {
+                let delay = 30000 // Начальная задержка 30 секунд
+                if (consecutiveNetworkErrors >= MAX_CONSECUTIVE_ERRORS_BEFORE_LONG_DELAY) {
+                  if (consecutiveNetworkErrors >= 40) {
+                    delay = 300000 // 5 минут
+                  } else if (consecutiveNetworkErrors >= 30) {
+                    delay = 240000 // 4 минуты
+                  } else if (consecutiveNetworkErrors >= 20) {
+                    delay = 180000 // 3 минуты
+                  } else {
+                    delay = 120000 // 2 минуты
+                  }
+                } else {
+                  delay = Math.min(30000 * Math.pow(2, Math.floor(consecutiveNetworkErrors / 3)), 90000)
+                }
+                await new Promise((resolve) => setTimeout(resolve, delay))
+              }
             } else {
               // Другие ошибки - логируем, но не прерываем работу
               console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error processing new emails:`, error.message || error)
@@ -590,10 +611,37 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
                 console.warn(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Network error in polling (${error.code}): ${error.message || error.hostname || 'Connection issue'} (${consecutiveNetworkErrors} consecutive errors)`)
                 lastNetworkErrorLog = now
               }
-              // При DNS ошибках увеличиваем задержку перед следующей попыткой
+              
+              // При DNS ошибках увеличиваем задержку экспоненциально
               // Это снижает нагрузку на DNS и дает время на восстановление сети
               if (error.code === 'ENOTFOUND') {
-                await new Promise((resolve) => setTimeout(resolve, 30000)) // 30 секунд при DNS ошибках
+                let delay = 30000 // Начальная задержка 30 секунд
+                
+                // Экспоненциальная задержка: 30s, 60s, 120s, 240s, максимум 5 минут
+                if (consecutiveNetworkErrors >= MAX_CONSECUTIVE_ERRORS_BEFORE_LONG_DELAY) {
+                  // После 10 ошибок: 2 минуты, после 20: 3 минуты, после 30: 4 минуты, после 40+: 5 минут
+                  if (consecutiveNetworkErrors >= 40) {
+                    delay = 300000 // 5 минут
+                  } else if (consecutiveNetworkErrors >= 30) {
+                    delay = 240000 // 4 минуты
+                  } else if (consecutiveNetworkErrors >= 20) {
+                    delay = 180000 // 3 минуты
+                  } else {
+                    delay = 120000 // 2 минуты
+                  }
+                  
+                  if (consecutiveNetworkErrors % 10 === 0) {
+                    console.warn(`⚠️ [Wallet ${settings.walletId || 'N/A'}] DNS errors continue (${consecutiveNetworkErrors} consecutive). Waiting ${Math.floor(delay / 1000)}s before next attempt...`)
+                  }
+                } else {
+                  // До 10 ошибок: экспоненциальная задержка 30s, 60s, 90s
+                  delay = Math.min(30000 * Math.pow(2, Math.floor(consecutiveNetworkErrors / 3)), 90000)
+                }
+                
+                await new Promise((resolve) => setTimeout(resolve, delay))
+              } else {
+                // Для других сетевых ошибок (ETIMEDOUT, ECONNREFUSED) - меньшая задержка
+                await new Promise((resolve) => setTimeout(resolve, 10000)) // 10 секунд
               }
               // Продолжаем работу, попробуем снова через интервал
               return
