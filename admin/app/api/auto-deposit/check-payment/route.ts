@@ -71,7 +71,9 @@ export async function POST(request: NextRequest) {
 
     // Ищем необработанные платежи с точной суммой в окне ±5 минут
     const amountValue = parseFloat(amount.toString())
-    const tolerance = 0.001 // Точность для сравнения Decimal
+    // Используем очень маленький допуск (0.0001) только для ошибок округления при поиске в БД
+    // В финальной проверке будет точное сравнение
+    const tolerance = 0.0001
 
     const matchingPayments = await prisma.incomingPayment.findMany({
       where: {
@@ -104,11 +106,12 @@ export async function POST(request: NextRequest) {
     const payment = matchingPayments[0]
     const paymentAmount = parseFloat(payment.amount.toString())
 
-    // Проверяем точное совпадение суммы (включая копейки)
+    // Проверяем ТОЧНОЕ совпадение суммы (включая копейки, без допуска)
+    // Используем очень маленький допуск (0.0001) только для ошибок округления float
     const diff = Math.abs(paymentAmount - amountValue)
-    if (diff >= 0.01) {
+    if (diff >= 0.0001) {
       return NextResponse.json(
-        createApiResponse({ processed: false, reason: 'Amount mismatch' }),
+        createApiResponse({ processed: false, reason: 'Amount mismatch (exact match required)' }),
         { status: 200 }
       )
     }

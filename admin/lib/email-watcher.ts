@@ -241,8 +241,10 @@ async function processEmail(
               }
               
               const reqAmount = parseFloat(req.amount.toString())
+              // Точное сравнение: суммы должны совпадать полностью (включая копейки)
+              // Используем очень маленький допуск (0.0001) только для ошибок округления float
               const diff = Math.abs(reqAmount - amount)
-              return diff < 0.01 // Точность до 1 копейки
+              return diff < 0.0001 // Только для ошибок округления, не для допуска копеек
             })
 
             if (exactMatch) {

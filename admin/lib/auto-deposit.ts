@@ -47,9 +47,10 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
     
     // ОПТИМИЗАЦИЯ: Фильтруем по сумме прямо в БД (приблизительно)
-    // Используем диапазон ±0.1 для учета округлений, затем фильтруем точно в памяти
-    const amountMin = amount - 0.1
-    const amountMax = amount + 0.1
+    // Используем очень маленький диапазон ±0.0001 только для ошибок округления при поиске в БД
+    // В финальной проверке будет точное сравнение
+    const amountMin = amount - 0.0001
+    const amountMax = amount + 0.0001
     
     // ОГРАНИЧИВАЕМ количество записей для производительности
     // За 10 минут вряд ли будет больше 50 необработанных платежей с такой суммой
@@ -74,13 +75,15 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     
     console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in last 10 minutes (amount range: ${amountMin}-${amountMax}) for request ${requestId}`)
     
-    // Фильтруем по точному совпадению суммы (до 1 копейки)
+    // Фильтруем по ТОЧНОМУ совпадению суммы (без допуска)
     const exactMatches = matchingPayments.filter((payment) => {
       const paymentAmount = parseFloat(payment.amount.toString())
+      // Точное сравнение: суммы должны совпадать полностью (включая копейки)
+      // Используем очень маленький допуск (0.0001) только для ошибок округления float
       const diff = Math.abs(paymentAmount - amount)
-      const matches = diff < 0.01 // Точность до 1 копейки
+      const matches = diff < 0.0001 // Только для ошибок округления, не для допуска копеек
       if (matches) {
-        console.log(`✅ [Auto-Deposit] Exact match found: Payment ${payment.id} (${paymentAmount}) ≈ Request ${requestId} (${amount}), diff: ${diff.toFixed(4)}`)
+        console.log(`✅ [Auto-Deposit] Exact match found: Payment ${payment.id} (${paymentAmount}) = Request ${requestId} (${amount}), diff: ${diff.toFixed(6)}`)
       }
       return matches
     })
@@ -182,11 +185,13 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     }
     
     const reqAmount = parseFloat(req.amount.toString())
+    // Точное сравнение: суммы должны совпадать полностью (включая копейки)
+    // Используем очень маленький допуск (0.0001) только для ошибок округления float
     const diff = Math.abs(reqAmount - amount)
-    const matches = diff < 0.01 // Точность до 1 копейки
+    const matches = diff < 0.0001 // Только для ошибок округления, не для допуска копеек
     
     if (matches) {
-      console.log(`✅ [Auto-Deposit] Exact match: Request ${req.id} (${reqAmount}) ≈ Payment ${amount} (diff: ${diff.toFixed(4)}, age: ${Math.floor(requestAge / 1000)}s)`)
+      console.log(`✅ [Auto-Deposit] Exact match: Request ${req.id} (${reqAmount}) = Payment ${amount} (diff: ${diff.toFixed(6)}, age: ${Math.floor(requestAge / 1000)}s)`)
     }
     
     return matches
