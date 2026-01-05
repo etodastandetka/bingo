@@ -448,7 +448,9 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       
       // ВАЖНО: Если API вызов был успешен, но транзакция пропущена (заявка уже обработана),
       // все равно помечаем платеж как обработанный, чтобы избежать повторной обработки
-      // Это защита от race condition, когда два процесса обрабатывают одну заявку
+      // Это защита от race condition, когда два процесса обрабатывают одну заявку:
+      // 1. email-watcher (фоновая обработка при получении нового письма)
+      // 2. Payment API (при создании/обновлении заявки с фото чека)
       try {
         const currentPayment = await prisma.incomingPayment.findUnique({
           where: { id: paymentId },
