@@ -444,7 +444,34 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     
     // Проверяем что транзакция действительно обновила статус
     if (updateResult?.skipped) {
-      console.log(`⚠️ [Auto-Deposit] Transaction skipped for request ${request.id}`)
+      console.log(`⚠️ [Auto-Deposit] Transaction skipped for request ${request.id} (already processed by another process)`)
+      
+      // ВАЖНО: Если API вызов был успешен, но транзакция пропущена (заявка уже обработана),
+      // все равно помечаем платеж как обработанный, чтобы избежать повторной обработки
+      // Это защита от race condition, когда два процесса обрабатывают одну заявку
+      try {
+        const currentPayment = await prisma.incomingPayment.findUnique({
+          where: { id: paymentId },
+          select: { isProcessed: true, requestId: true },
+        })
+        
+        // Помечаем платеж как обработанный только если он еще не обработан
+        if (currentPayment && !currentPayment.isProcessed) {
+          await prisma.incomingPayment.update({
+            where: { id: paymentId },
+            data: {
+              isProcessed: true,
+              requestId: request.id, // Связываем с заявкой, даже если она уже обработана
+            },
+          })
+          console.log(`✅ [Auto-Deposit] Payment ${paymentId} marked as processed (request ${request.id} was already processed by another process)`)
+        } else if (currentPayment?.isProcessed) {
+          console.log(`ℹ️ [Auto-Deposit] Payment ${paymentId} already marked as processed`)
+        }
+      } catch (paymentError: any) {
+        console.warn(`⚠️ [Auto-Deposit] Failed to mark payment ${paymentId} as processed:`, paymentError.message)
+      }
+      
       return null
     }
     
