@@ -713,8 +713,23 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
     """Фото чека получено, создаем заявку"""
     lang = await get_lang_from_state(state)
     
-    # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
+    # КРИТИЧЕСКАЯ ПРОВЕРКА: Получаем данные из состояния ПЕРЕД обработкой фото
+    # Если данных нет - это не процесс депозита, просто игнорируем фото
     data = await state.get_data()
+    casino_id = data.get('casino_id')
+    account_id = data.get('account_id')
+    amount = data.get('amount')
+    
+    # Если нет обязательных данных - это НЕ процесс депозита, очищаем состояние и выходим
+    if not casino_id or not account_id or not amount:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"[Deposit] Photo received but no deposit data in state for user {message.from_user.id}, clearing state")
+        await state.clear()
+        # Не отправляем сообщение, просто игнорируем фото
+        return
+    
+    # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
     qr_message_id = data.get('qr_message_id')
     if qr_message_id:
         # Останавливаем таймер
@@ -740,7 +755,7 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
         # Добавляем префикс для base64 изображения
         photo_base64_with_prefix = f'data:image/jpeg;base64,{photo_base64}'
         
-        # Получаем данные из состояния
+        # Получаем данные из состояния (уже проверили выше, но получаем еще раз для использования)
         data = await state.get_data()
         casino_id = data.get('casino_id')
         account_id = data.get('account_id')
@@ -748,6 +763,7 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
         bank_id = data.get('bank_id', 'omoney')  # По умолчанию omoney
         pending_request_id = data.get('pending_request_id')
         
+        # Дополнительная проверка (на случай если данные изменились)
         if not all([casino_id, account_id, amount]):
             await message.answer(get_text(lang, 'deposit', 'error'))
             await state.clear()
@@ -893,8 +909,9 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
                 
                 # Запускаем в фоне, не ждем завершения
                 asyncio.create_task(save_message_id_background())
-            # НЕ возвращаем главное меню и НЕ очищаем state
-            # Главное меню вернется только когда деньги зачислятся или заявка отменится
+            # ВАЖНО: Очищаем state после успешной обработки фото чека
+            # Это закрывает стейт и предотвращает прием новых сообщений
+            await state.clear()
         else:
             error_msg = result.get('message', get_text(lang, 'deposit', 'error'))
             await message.answer(error_msg)
