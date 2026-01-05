@@ -345,18 +345,25 @@ export default function RequestDetailPage() {
     return request.casinoTransactions.map(t => {
       const amount = parseFloat(t.amount || '0')
       const isDeposit = t.requestType === 'deposit'
+      const isWithdraw = t.requestType === 'withdraw'
       const userName = t.firstName 
         ? `${t.firstName}${t.lastName ? ' ' + t.lastName : ''}` 
         : t.username 
           ? `@${t.username}` 
           : `ID: ${t.userId}`
       
+      // Для выводов не показываем копейки, для депозитов показываем
       return {
         id: t.id,
-        amount: Math.abs(amount).toLocaleString('en-US', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        }),
+        amount: isWithdraw
+          ? Math.round(Math.abs(amount)).toLocaleString('en-US', {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+            })
+          : Math.abs(amount).toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }),
         isDeposit,
         createdAt: t.createdAt,
         status: t.status,
@@ -976,18 +983,29 @@ export default function RequestDetailPage() {
   }
 
     // Форматируем сумму с запятыми для тысяч (50,000.54)
-    const formatAmount = (amountStr: string | null) => {
-      if (!amountStr) return '0.00'
+    // Для выводов не показываем копейки, для депозитов показываем
+    const formatAmount = (amountStr: string | null, isWithdraw: boolean = false) => {
+      if (!amountStr) return isWithdraw ? '0' : '0.00'
       const num = parseFloat(amountStr)
-      if (isNaN(num)) return '0.00'
+      if (isNaN(num)) return isWithdraw ? '0' : '0.00'
       // Используем английский формат с запятыми для тысяч и точкой для десятичных
-      return num.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
+      if (isWithdraw) {
+        // Для выводов без копеек
+        return Math.round(num).toLocaleString('en-US', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        })
+      } else {
+        // Для депозитов с копейками
+        return num.toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      }
     }
-    const displayAmount = formatAmount(request?.amount)
     const isDeposit = request?.requestType === 'deposit'
+    const isWithdraw = request?.requestType === 'withdraw'
+    const displayAmount = formatAmount(request?.amount, isWithdraw)
     const isDeferred = request?.status === 'deferred'
     // Проверяем, является ли статус успешным
     const isSuccessStatus = request?.status === 'completed' || 
@@ -1812,7 +1830,7 @@ export default function RequestDetailPage() {
               заявку на сумму{' '}
               <span className="font-semibold text-white">
                 {selectedPaymentId
-                  ? formatAmount((similarPayments.find(p => p.id === selectedPaymentId)?.amount)?.toString() || request.amount)
+                  ? formatAmount((similarPayments.find(p => p.id === selectedPaymentId)?.amount)?.toString() || request.amount, isWithdraw)
                   : displayAmount}
               </span>
               ?

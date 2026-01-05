@@ -243,7 +243,11 @@ export default function RequestsPage() {
                   </p>
                 </div>
                 <p className="text-base font-bold text-white">
-                  {request.amount ? `${parseFloat(request.amount).toLocaleString()} KGS` : 'N/A'}
+                  {request.amount 
+                    ? request.requestType === 'withdraw'
+                      ? `${Math.round(parseFloat(request.amount)).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} KGS`
+                      : `${parseFloat(request.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} KGS`
+                    : 'N/A'}
                 </p>
               </div>
               <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
