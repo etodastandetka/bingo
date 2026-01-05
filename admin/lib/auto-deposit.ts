@@ -11,11 +11,13 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
   try {
     // КРИТИЧЕСКАЯ ЗАЩИТА: Проверяем статус заявки ПЕРЕД поиском платежей
     // Если заявка уже обработана - сразу выходим, не тратим время на поиск платежей
+    // ВАЖНО: Получаем также createdAt для определения временного окна
     const requestCheck = await prisma.request.findUnique({
       where: { id: requestId },
       select: { 
         status: true, 
         processedBy: true,
+        createdAt: true, // Получаем время создания заявки
         incomingPayments: {
           where: { isProcessed: true },
           select: { id: true },
@@ -42,9 +44,21 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       return null
     }
     
-    // Ищем необработанные платежи с такой же суммой за последние 10 минут
-    // 10 минут - больше чем 5 минут в matchAndProcessPayment, чтобы учесть задержки
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+    if (!requestCheck?.createdAt) {
+      console.log(`⚠️ [Auto-Deposit] Request ${requestId} has no createdAt, skipping payment search`)
+      return null
+    }
+    
+    // КРИТИЧЕСКИ ВАЖНО: Ищем платежи в окне ±5 минут от времени создания заявки
+    // Это предотвращает обработку старых платежей (например, вчерашних)
+    // которые не были привязаны к заявке
+    const requestCreatedAt = requestCheck.createdAt
+    const windowStart = new Date(requestCreatedAt.getTime() - 5 * 60 * 1000) // 5 минут до
+    const windowEnd = new Date(requestCreatedAt.getTime() + 5 * 60 * 1000) // 5 минут после
+    
+    // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Платеж не должен быть старше 15 минут от текущего момента
+    // Это предотвращает обработку очень старых платежей (например, вчерашних)
+    const maxPaymentAge = new Date(Date.now() - 15 * 60 * 1000) // 15 минут назад
     
     // ОПТИМИЗАЦИЯ: Фильтруем по сумме прямо в БД (приблизительно)
     // Используем очень маленький диапазон ±0.0001 только для ошибок округления при поиске в БД
@@ -52,20 +66,22 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     const amountMin = amount - 0.0001
     const amountMax = amount + 0.0001
     
-    // ОГРАНИЧИВАЕМ количество записей для производительности
-    // За 10 минут вряд ли будет больше 50 необработанных платежей с такой суммой
-    // Если платеж был недавно, он будет среди последних (отсортированных по дате)
+    // Ищем платежи в окне ±5 минут от времени создания заявки
+    // И дополнительно проверяем, что платеж не старше 15 минут от текущего момента
     const matchingPayments = await prisma.incomingPayment.findMany({
       where: {
         isProcessed: false,
-        paymentDate: { gte: tenMinutesAgo },
+        paymentDate: { 
+          gte: windowStart > maxPaymentAge ? windowStart : maxPaymentAge, // Берем более позднюю дату
+          lte: windowEnd,
+        },
         amount: {
           gte: amountMin,
           lte: amountMax,
         },
       },
-      orderBy: { paymentDate: 'desc' },
-      take: 50, // Уменьшено до 50, так как уже фильтруем по сумме в БД
+      orderBy: { paymentDate: 'asc' }, // Берем самые ранние платежи (FIFO)
+      take: 10, // В окне ±5 минут не должно быть много платежей
       select: {
         id: true,
         amount: true,
@@ -73,7 +89,7 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       },
     })
     
-    console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in last 10 minutes (amount range: ${amountMin}-${amountMax}) for request ${requestId}`)
+    console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in window ±5min from request createdAt (${requestCreatedAt.toISOString()}) for request ${requestId}`)
     
     // Фильтруем по ТОЧНОМУ совпадению суммы (без допуска)
     const exactMatches = matchingPayments.filter((payment) => {
@@ -95,8 +111,24 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     
     console.log(`🎯 [Auto-Deposit] Found ${exactMatches.length} matching payment(s) for request ${requestId}`)
     
-    // Берем самый первый платеж (самый старый)
-    const payment = exactMatches[exactMatches.length - 1]
+    if (exactMatches.length === 0) {
+      console.log(`ℹ️ [Auto-Deposit] No exact matches found for request ${requestId} (amount: ${amount}, checked ${matchingPayments.length} payments)`)
+      return null
+    }
+    
+    // Берем самый первый платеж (самый ранний в окне)
+    const payment = exactMatches[0]
+    
+    // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что платеж действительно в окне ±5 минут
+    const paymentTime = payment.paymentDate.getTime()
+    const requestTime = requestCreatedAt.getTime()
+    const timeDiff = Math.abs(paymentTime - requestTime)
+    const maxTimeDiff = 5 * 60 * 1000 // 5 минут в миллисекундах
+    
+    if (timeDiff > maxTimeDiff) {
+      console.log(`⚠️ [Auto-Deposit] Payment ${payment.id} is outside ±5min window (diff: ${Math.floor(timeDiff / 1000)}s), skipping`)
+      return null
+    }
     
     // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Проверяем статус заявки еще раз перед вызовом matchAndProcessPayment
     // Это защищает от race condition, когда два вызова checkAndProcessExistingPayment идут параллельно
@@ -136,6 +168,36 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
   const startTime = Date.now()
   console.log(`🔍 [Auto-Deposit] matchAndProcessPayment called: paymentId=${paymentId}, amount=${amount}`)
   
+  // КРИТИЧЕСКИ ВАЖНО: Получаем информацию о платеже, чтобы проверить его время
+  // Это предотвращает обработку старых платежей (например, вчерашних)
+  const paymentInfo = await prisma.incomingPayment.findUnique({
+    where: { id: paymentId },
+    select: {
+      id: true,
+      paymentDate: true,
+      isProcessed: true,
+      amount: true,
+    },
+  })
+  
+  if (!paymentInfo) {
+    console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} not found`)
+    return null
+  }
+  
+  if (paymentInfo.isProcessed) {
+    console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} already processed`)
+    return null
+  }
+  
+  // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Платеж не должен быть старше 15 минут от текущего момента
+  // Это предотвращает обработку очень старых платежей (например, вчерашних)
+  const maxPaymentAge = new Date(Date.now() - 15 * 60 * 1000) // 15 минут назад
+  if (paymentInfo.paymentDate < maxPaymentAge) {
+    console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} is too old (${paymentInfo.paymentDate.toISOString()}), skipping`)
+    return null
+  }
+  
   // Ищем заявки на пополнение со статусом pending за последние 10 минут
   // Увеличено до 10 минут для учета задержек обработки email и создания заявок
   // Это защищает от случайного пополнения если пользователь не пополнял
@@ -165,7 +227,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     },
   })
 
-  // Быстрая фильтрация по точному совпадению суммы
+  // Быстрая фильтрация по точному совпадению суммы И времени
   const exactMatches = matchingRequests.filter((req) => {
     if (req.status !== 'pending' || !req.amount) return false
     
@@ -184,6 +246,18 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       return false
     }
     
+    // КРИТИЧЕСКИ ВАЖНО: Проверяем, что платеж находится в окне ±5 минут от времени создания заявки
+    // Это предотвращает обработку старых платежей (например, вчерашних), которые не были привязаны
+    const paymentTime = paymentInfo.paymentDate.getTime()
+    const requestTime = req.createdAt.getTime()
+    const timeDiff = Math.abs(paymentTime - requestTime)
+    const maxTimeDiff = 5 * 60 * 1000 // 5 минут в миллисекундах
+    
+    if (timeDiff > maxTimeDiff) {
+      console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} is outside ±5min window from request ${req.id} createdAt (diff: ${Math.floor(timeDiff / 1000)}s), skipping`)
+      return false
+    }
+    
     const reqAmount = parseFloat(req.amount.toString())
     // Точное сравнение: суммы должны совпадать полностью (включая копейки)
     // Используем очень маленький допуск (0.0001) только для ошибок округления float
@@ -191,7 +265,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     const matches = diff < 0.0001 // Только для ошибок округления, не для допуска копеек
     
     if (matches) {
-      console.log(`✅ [Auto-Deposit] Exact match: Request ${req.id} (${reqAmount}) = Payment ${amount} (diff: ${diff.toFixed(6)}, age: ${Math.floor(requestAge / 1000)}s)`)
+      console.log(`✅ [Auto-Deposit] Exact match: Request ${req.id} (${reqAmount}) = Payment ${amount} (diff: ${diff.toFixed(6)}, time diff: ${Math.floor(timeDiff / 1000)}s)`)
     }
     
     return matches
