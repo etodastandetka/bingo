@@ -217,29 +217,104 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
   
   console.log(`💸 [Auto-Deposit] Processing: Request ${request.id}, ${request.bookmaker}, Account ${request.accountId}, Amount ${requestAmount}`)
 
-  // КРИТИЧЕСКАЯ ЗАЩИТА: Проверяем статус ПЕРЕД вызовом API казино
-  // Это предотвращает двойное зачисление, если два вызова идут параллельно
-  const preCheck = await prisma.request.findUnique({
-    where: { id: request.id },
-    select: { status: true, processedBy: true },
-  })
-  
-  if (preCheck?.status !== 'pending' || preCheck?.processedBy === 'автопополнение') {
-    console.log(`⚠️ [Auto-Deposit] Request ${request.id} already processed before API call (status: ${preCheck?.status}), skipping`)
-    return null
-  }
-
-  // Оптимизированная обработка: все в одной транзакции для максимальной скорости
+  // КРИТИЧЕСКАЯ ЗАЩИТА: Блокируем заявку через SELECT FOR UPDATE в транзакции
+  // Это гарантирует, что только ОДИН процесс сможет обработать заявку
+  // Другие процессы будут ждать завершения транзакции и увидят, что заявка уже обработана
   try {
-    const { depositToCasino } = await import('./deposit-balance')
+    const depositResult = await prisma.$transaction(async (tx) => {
+      // Блокируем заявку через SELECT FOR UPDATE - только один процесс может получить блокировку
+      const lockedRequest = await tx.$queryRaw<Array<{ id: number; status: string; processedBy: string | null }>>`
+        SELECT id, status, "processedBy" 
+        FROM "Request" 
+        WHERE id = ${request.id} 
+        FOR UPDATE
+      `
+      
+      if (!lockedRequest || lockedRequest.length === 0) {
+        console.log(`⚠️ [Auto-Deposit] Request ${request.id} not found, skipping`)
+        return { success: false, message: 'Request not found', skipped: true }
+      }
+      
+      const currentRequest = lockedRequest[0]
+      
+      // Если заявка уже обработана - сразу выходим (другой процесс уже обработал)
+      if (currentRequest.status !== 'pending' || currentRequest.processedBy === 'автопополнение') {
+        console.log(`⚠️ [Auto-Deposit] Request ${request.id} already processed (status: ${currentRequest.status}), skipping - another process handled it`)
+        return { success: false, message: 'Request already processed', skipped: true }
+      }
+      
+      // Проверяем, что платеж еще не обработан
+      const currentPayment = await tx.incomingPayment.findUnique({
+        where: { id: paymentId },
+        select: { isProcessed: true },
+      })
+      
+      if (currentPayment?.isProcessed) {
+        console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} already processed, skipping`)
+        return { success: false, message: 'Payment already processed', skipped: true }
+      }
+      
+      // Заявка заблокирована и готова к обработке - вызываем API казино
+      // ВАЖНО: API вызов делаем ВНУТРИ транзакции, чтобы гарантировать атомарность
+      const { depositToCasino } = await import('./deposit-balance')
+      
+      // Пополняем баланс через казино API
+      if (!request.bookmaker || !request.accountId) {
+        return { success: false, message: 'Missing required fields', skipped: true }
+      }
+      
+      const depositResult = await depositToCasino(
+        request.bookmaker,
+        request.accountId.toString(),
+        requestAmount
+      )
+      
+      // Если API вызов неуспешен - возвращаем ошибку (транзакция откатится)
+      if (!depositResult.success) {
+        return { success: false, message: depositResult.message || 'Deposit failed', depositResult }
+      }
+      
+      // Если успешно - обновляем заявку и платеж в той же транзакции
+      const [updatedRequest, updatedPayment] = await Promise.all([
+        tx.request.update({
+          where: { id: request.id },
+          data: {
+            status: 'autodeposit_success',
+            statusDetail: null,
+            processedBy: 'автопополнение' as any,
+            processedAt: new Date(),
+            updatedAt: new Date(),
+          } as any,
+        }),
+        tx.incomingPayment.update({
+          where: { id: paymentId },
+          data: {
+            requestId: request.id,
+            isProcessed: true,
+          },
+        }),
+      ])
+      
+      console.log(`✅ [Auto-Deposit] Transaction: Request ${request.id} status updated to autodeposit_success`)
+      console.log(`✅ [Auto-Deposit] Transaction: Payment ${paymentId} marked as processed`)
+      
+      return { 
+        success: true, 
+        message: 'Deposit successful',
+        updatedRequest,
+        updatedPayment,
+      }
+    }, {
+      timeout: 30000, // 30 секунд таймаут для транзакции
+    })
     
-    // Сразу пополняем баланс через казино API (самое важное - делаем мгновенно)
-    const depositResult = await depositToCasino(
-      request.bookmaker,
-      request.accountId,
-      requestAmount
-    )
-
+    // Если транзакция вернула skipped - заявка уже обработана другим процессом
+    if (depositResult.skipped) {
+      console.log(`⚠️ [Auto-Deposit] Request ${request.id} was processed by another process, skipping`)
+      return null
+    }
+    
+    // Если API вызов неуспешен - обрабатываем ошибку
     if (!depositResult.success) {
       const errorMessage = depositResult.message || 'Deposit failed'
       
@@ -251,7 +326,6 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       if (isAlreadyProcessed) {
         console.log(`✅ [Auto-Deposit] Deposit already processed for request ${request.id}, marking as success`)
         // Помечаем заявку как успешную, так как депозит уже был проведен
-        // Это означает, что заявка уже обработана ранее
         try {
           await prisma.request.update({
             where: { id: request.id },
@@ -278,52 +352,6 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
             console.warn(`⚠️ [Auto-Deposit] Failed to mark payment ${paymentId} as processed:`, paymentError)
           }
           
-          // Отправляем уведомление пользователю
-          try {
-            const fullRequest = await prisma.request.findUnique({
-              where: { id: request.id },
-              select: {
-                userId: true,
-                botType: true,
-                amount: true,
-                bookmaker: true,
-                accountId: true,
-              },
-            })
-            
-            if (fullRequest && fullRequest.userId) {
-              const { formatDepositMessage, getAdminUsername, sendMessageWithMainMenuButton } = await import('./send-notification')
-              
-              const amount = parseFloat(fullRequest.amount?.toString() || '0')
-              const casino = fullRequest.bookmaker || 'Неизвестно'
-              const accountId = fullRequest.accountId || ''
-              const processingTime = '1s'
-              const lang = 'ru'
-              
-              const adminUsername = await getAdminUsername()
-              const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
-              
-              let botType = fullRequest.botType || null
-              if (!botType && fullRequest.bookmaker) {
-                const bookmakerLower = fullRequest.bookmaker.toLowerCase()
-                if (bookmakerLower.includes('mostbet')) {
-                  botType = 'mostbet'
-                } else if (bookmakerLower.includes('1xbet') || bookmakerLower.includes('xbet')) {
-                  botType = '1xbet'
-                }
-              }
-              
-              await sendMessageWithMainMenuButton(
-                fullRequest.userId,
-                notificationMessage,
-                botType ? null : fullRequest.bookmaker,
-                botType
-              )
-            }
-          } catch (notificationError) {
-            console.warn(`⚠️ [Auto-Deposit] Failed to send notification:`, notificationError)
-          }
-          
           return {
             requestId: request.id,
             success: true,
@@ -338,7 +366,6 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       console.error(`❌ [Auto-Deposit] Deposit failed: ${errorMessage}`)
       
       // ВАЖНО: Если пользователь не найден в системе казино - оставляем заявку в pending
-      // для ручной проверки администратором (возможно, неправильный accountId или пользователь не зарегистрирован)
       const isUserNotFound = errorMessage.toLowerCase().includes('not found user') ||
                              errorMessage.toLowerCase().includes('пользователь не найден') ||
                              errorMessage.toLowerCase().includes('user not found') ||
@@ -346,12 +373,11 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       
       if (isUserNotFound) {
         console.warn(`⚠️ [Auto-Deposit] User not found in casino for request ${request.id}, leaving in pending for manual review`)
-        // Оставляем заявку в pending, но добавляем пометку об ошибке в statusDetail
         try {
           await prisma.request.update({
             where: { id: request.id },
             data: {
-              status: 'pending', // Оставляем в pending для ручной проверки
+              status: 'pending',
               statusDetail: `Автопополнение: ${errorMessage.length > 40 ? errorMessage.substring(0, 40) : errorMessage}`,
               updatedAt: new Date(),
             } as any,
@@ -360,7 +386,6 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
         } catch (dbError: any) {
           console.error(`❌ [Auto-Deposit] Failed to update request status:`, dbError.message)
         }
-        // НЕ помечаем платеж как обработанный, чтобы можно было попробовать снова
         return {
           requestId: request.id,
           success: false,
@@ -387,192 +412,81 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       throw new Error(errorMessage)
     }
     
-    // После успешного пополнения - атомарно обновляем все в одной транзакции
-    // ВАЖНО: Проверяем что заявка все еще pending и не была обработана автопополнением
-    // ВАЖНО: Используем транзакцию чтобы гарантировать что статус ОБЯЗАТЕЛЬНО обновится
-    const updateResult = await prisma.$transaction(async (tx) => {
-      // Проверяем что заявка все еще pending и платеж не обработан
-      const [currentRequest, currentPayment] = await Promise.all([
-        tx.request.findUnique({
-          where: { id: request.id },
-          select: { status: true, processedBy: true },
-        }),
-        tx.incomingPayment.findUnique({
-          where: { id: paymentId },
-          select: { isProcessed: true },
-        }),
-      ])
-      
-      // Если уже обработано - пропускаем (защита от двойного пополнения)
-      if (currentRequest?.status !== 'pending' || currentPayment?.isProcessed) {
-        console.log(`⚠️ [Auto-Deposit] Request ${request.id} already processed (status: ${currentRequest?.status}), skipping`)
-        return { skipped: true }
-      }
-      
-      // Дополнительная проверка: если заявка уже обработана автопополнением - не трогаем
-      if (currentRequest?.processedBy === 'автопополнение') {
-        console.log(`⚠️ [Auto-Deposit] Request ${request.id} already processed by autodeposit, skipping`)
-        return { skipped: true }
-      }
-      
-      // Обновляем заявку и платеж атомарно - ВАЖНО: это должно обязательно выполниться
-      const [updatedRequest, updatedPayment] = await Promise.all([
-        tx.request.update({
-          where: { id: request.id },
-          data: {
-            status: 'autodeposit_success',
-            statusDetail: null,
-            processedBy: 'автопополнение' as any,
-            processedAt: new Date(),
-            updatedAt: new Date(),
-          } as any,
-        }),
-        tx.incomingPayment.update({
-          where: { id: paymentId },
-          data: {
-            requestId: request.id,
-            isProcessed: true,
-          },
-        }),
-      ])
-      
-      console.log(`✅ [Auto-Deposit] Transaction: Request ${request.id} status updated to autodeposit_success`)
-      console.log(`✅ [Auto-Deposit] Transaction: Payment ${paymentId} marked as processed`)
-      
-      return { updatedRequest, updatedPayment, skipped: false }
-    })
-    
-    // Проверяем что транзакция действительно обновила статус
-    if (updateResult?.skipped) {
-      console.log(`⚠️ [Auto-Deposit] Transaction skipped for request ${request.id} (already processed by another process)`)
-      
-      // ВАЖНО: Если API вызов был успешен, но транзакция пропущена (заявка уже обработана),
-      // все равно помечаем платеж как обработанный, чтобы избежать повторной обработки
-      // Это защита от race condition, когда два процесса обрабатывают одну заявку:
-      // 1. email-watcher (фоновая обработка при получении нового письма)
-      // 2. Payment API (при создании/обновлении заявки с фото чека)
+    // Если успешно - отправляем уведомление и возвращаем результат
+    if (depositResult.success && depositResult.updatedRequest) {
+      // Отправляем уведомление пользователю
       try {
-        const currentPayment = await prisma.incomingPayment.findUnique({
-          where: { id: paymentId },
-          select: { isProcessed: true, requestId: true },
+        const fullRequest = await prisma.request.findUnique({
+          where: { id: request.id },
+          select: {
+            userId: true,
+            botType: true,
+            amount: true,
+            bookmaker: true,
+            accountId: true,
+          },
         })
         
-        // Помечаем платеж как обработанный только если он еще не обработан
-        if (currentPayment && !currentPayment.isProcessed) {
-          await prisma.incomingPayment.update({
-            where: { id: paymentId },
-            data: {
-              isProcessed: true,
-              requestId: request.id, // Связываем с заявкой, даже если она уже обработана
-            },
-          })
-          console.log(`✅ [Auto-Deposit] Payment ${paymentId} marked as processed (request ${request.id} was already processed by another process)`)
-        } else if (currentPayment?.isProcessed) {
-          console.log(`ℹ️ [Auto-Deposit] Payment ${paymentId} already marked as processed`)
+        if (fullRequest && fullRequest.userId) {
+          const { formatDepositMessage, getAdminUsername, sendMessageWithMainMenuButton } = await import('./send-notification')
+          
+          const amount = parseFloat(fullRequest.amount?.toString() || '0')
+          const casino = fullRequest.bookmaker || 'Неизвестно'
+          const accountId = fullRequest.accountId || ''
+          const processingTime = '1s'
+          const lang = 'ru'
+          
+          const adminUsername = await getAdminUsername()
+          const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
+          
+          let botType = fullRequest.botType || null
+          if (!botType && fullRequest.bookmaker) {
+            const bookmakerLower = fullRequest.bookmaker.toLowerCase()
+            if (bookmakerLower.includes('mostbet')) {
+              botType = 'mostbet'
+            } else if (bookmakerLower.includes('1xbet') || bookmakerLower.includes('xbet')) {
+              botType = '1xbet'
+            }
+          }
+          
+          await sendMessageWithMainMenuButton(
+            fullRequest.userId,
+            notificationMessage,
+            botType ? null : fullRequest.bookmaker,
+            botType
+          )
         }
-      } catch (paymentError: any) {
-        console.warn(`⚠️ [Auto-Deposit] Failed to mark payment ${paymentId} as processed:`, paymentError.message)
+      } catch (notificationError) {
+        console.warn(`⚠️ [Auto-Deposit] Failed to send notification:`, notificationError)
       }
       
+      const elapsedMs = Date.now() - startTime
+      const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
+      console.log(`✅ [Auto-Deposit] SUCCESS: Request ${request.id} → autodeposit_success (verified) in ${elapsedSeconds}s`)
+      
+      return {
+        requestId: request.id,
+        success: true,
+      }
+    }
+    
+    // Если что-то пошло не так
+    console.error(`❌ [Auto-Deposit] Unexpected result from transaction for request ${request.id}`)
+    return null
+  } catch (error: any) {
+    // Обработка ошибок, которые не были обработаны внутри транзакции
+    if (error.message && !error.message.includes('Request already processed')) {
+      console.error(`❌ [Auto-Deposit] Error processing payment ${paymentId} for request ${request.id}:`, error.message)
+    }
+    
+    // Если это ошибка "Request already processed" - это нормально, просто возвращаем null
+    if (error.message?.includes('Request already processed') || error.message?.includes('already processed')) {
       return null
     }
     
-    if (!updateResult?.updatedRequest) {
-      console.error(`❌ [Auto-Deposit] Transaction failed to update request ${request.id}`)
-      throw new Error('Failed to update request status in transaction')
-    }
-    
-    // Дополнительная проверка что статус действительно обновился
-    const verifyRequest = await prisma.request.findUnique({
-      where: { id: request.id },
-      select: { status: true, processedBy: true },
-    })
-    
-    if (verifyRequest?.status !== 'autodeposit_success') {
-      console.error(`❌ [Auto-Deposit] CRITICAL: Request ${request.id} status is ${verifyRequest?.status}, expected autodeposit_success`)
-      throw new Error(`Failed to update request status: current status is ${verifyRequest?.status}`)
-    }
-    
-    const elapsedMs = Date.now() - startTime
-    const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
-    console.log(`✅ [Auto-Deposit] SUCCESS: Request ${request.id} → autodeposit_success (verified) in ${elapsedSeconds}s`)
-
-    // Отправляем уведомление пользователю в правильный бот с правильным текстом
-    try {
-      const fullRequest = await prisma.request.findUnique({
-        where: { id: request.id },
-        select: {
-          userId: true,
-          botType: true,
-          amount: true,
-          bookmaker: true,
-          accountId: true,
-        },
-      })
-      
-      if (fullRequest && fullRequest.userId) {
-        // Импортируем функции для отправки уведомления
-        const { formatDepositMessage, getAdminUsername, sendMessageWithMainMenuButton } = await import('./send-notification')
-        
-        const amount = parseFloat(fullRequest.amount?.toString() || '0')
-        const casino = fullRequest.bookmaker || 'Неизвестно'
-        const accountId = fullRequest.accountId || ''
-        const processingTime = '1s' // Для автопополнения всегда 1 секунда
-        const lang = 'ru' // Дефолтный язык
-        
-        // Получаем username админа для сообщения
-        const adminUsername = await getAdminUsername()
-        
-        // Форматируем сообщение
-        const notificationMessage = formatDepositMessage(amount, casino, accountId, adminUsername, lang, processingTime)
-        
-        // Определяем botType из заявки
-        let botType = fullRequest.botType || null
-        
-        // Если botType не указан, пытаемся определить из bookmaker
-        if (!botType && fullRequest.bookmaker) {
-          const bookmakerLower = fullRequest.bookmaker.toLowerCase()
-          if (bookmakerLower.includes('mostbet')) {
-            botType = 'mostbet'
-          } else if (bookmakerLower.includes('1xbet') || bookmakerLower.includes('xbet')) {
-            botType = '1xbet'
-          }
-        }
-        
-        console.log(`📨 [Auto-Deposit] Sending notification to user ${fullRequest.userId.toString()}, botType: ${botType || 'main'}, requestId: ${request.id}`)
-        
-        // Отправляем уведомление в правильный бот
-        const notificationResult = await sendMessageWithMainMenuButton(
-          fullRequest.userId,
-          notificationMessage,
-          botType ? null : fullRequest.bookmaker, // bookmaker только если botType не указан
-          botType
-        )
-        
-        if (notificationResult.success) {
-          console.log(`✅ [Auto-Deposit] Notification sent successfully to user ${fullRequest.userId.toString()} for request ${request.id}`)
-        } else {
-          console.error(`❌ [Auto-Deposit] Failed to send notification for request ${request.id}: ${notificationResult.error}`)
-        }
-      }
-    } catch (notificationError: any) {
-      // Не блокируем выполнение если уведомление не отправилось
-      console.error(`❌ Error sending notification for request ${request.id}:`, notificationError)
-    }
-
-    const totalElapsedMs = Date.now() - startTime
-    const totalElapsedSeconds = (totalElapsedMs / 1000).toFixed(2)
-    console.log(`⏱️ [Auto-Deposit] Total processing time: ${totalElapsedSeconds}s for payment ${paymentId} → request ${request.id}`)
-    
-    return {
-      requestId: request.id,
-      success: true,
-    }
-  } catch (error: any) {
-    const elapsedMs = Date.now() - startTime
-    const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
-    console.error(`❌ [Auto-Deposit] FAILED for request ${request.id} (${elapsedSeconds}s):`, error.message)
     throw error
   }
 }
+
+// Старый код удален - теперь все делается в одной транзакции с SELECT FOR UPDATE
 
