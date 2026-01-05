@@ -232,6 +232,90 @@ export default function RequestDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id])
 
+  // Автоматическая проверка поступлений каждую секунду для pending заявок типа deposit
+  useEffect(() => {
+    if (!request || request.requestType !== 'deposit' || request.status !== 'pending' || !request.amount || !request.createdAt) {
+      return
+    }
+
+    const requestId = request.id
+    const amount = parseFloat(request.amount.toString())
+    const createdAt = new Date(request.createdAt)
+    const now = new Date()
+
+    // Проверяем, не прошло ли больше 5 минут после создания заявки
+    const fiveMinutesAfter = new Date(createdAt.getTime() + 5 * 60 * 1000)
+    if (now > fiveMinutesAfter) {
+      // Окно проверки истекло
+      return
+    }
+
+    // Проверяем поступления каждую секунду
+    const checkInterval = setInterval(async () => {
+      if (!isMountedRef.current) {
+        clearInterval(checkInterval)
+        return
+      }
+
+      // Проверяем, не прошло ли больше 5 минут после создания заявки
+      const currentTime = new Date()
+      if (currentTime > fiveMinutesAfter) {
+        clearInterval(checkInterval)
+        return
+      }
+
+      try {
+        // Проверяем текущий статус заявки перед проверкой поступления
+        const statusResponse = await fetch(`/api/requests/${requestId}`)
+        const statusData = await statusResponse.json()
+        
+        if (statusData.success && statusData.data) {
+          // Если заявка уже обработана - останавливаем проверку
+          if (statusData.data.status !== 'pending') {
+            clearInterval(checkInterval)
+            if (isMountedRef.current) {
+              setRequest(statusData.data)
+            }
+            return
+          }
+        }
+
+        // Вызываем API для проверки и автоматической обработки поступления
+        const response = await fetch('/api/auto-deposit/check-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestId,
+            amount,
+            createdAt: createdAt.toISOString(),
+          }),
+        })
+
+        const data = await response.json()
+
+        if (data.success && data.data?.processed) {
+          console.log(`✅ [Auto-Deposit] Payment processed automatically for request ${requestId}`)
+          // Заявка обработана, останавливаем проверку
+          clearInterval(checkInterval)
+          // Обновляем заявку
+          const updatedResponse = await fetch(`/api/requests/${requestId}`)
+          const updatedData = await updatedResponse.json()
+          if (updatedData.success && isMountedRef.current) {
+            setRequest(updatedData.data)
+          }
+        }
+      } catch (error) {
+        // Игнорируем ошибки проверки, чтобы не прерывать процесс
+        console.warn('Auto-deposit check error:', error)
+      }
+    }, 1000) // Проверка каждую секунду
+
+    return () => {
+      clearInterval(checkInterval)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request?.id, request?.status, request?.requestType, request?.amount, request?.createdAt])
+
   // Закрываем меню при клике вне его
   useEffect(() => {
     if (!showMenu) return
@@ -905,6 +989,11 @@ export default function RequestDetailPage() {
     const displayAmount = formatAmount(request?.amount)
     const isDeposit = request?.requestType === 'deposit'
     const isDeferred = request?.status === 'deferred'
+    // Проверяем, является ли статус успешным
+    const isSuccessStatus = request?.status === 'completed' || 
+                            request?.status === 'approved' || 
+                            request?.status === 'auto_completed' || 
+                            request?.status === 'autodeposit_success'
     
     // Определяем тип транзакции для проверки
     const getTransactionTypeForMinus = () => {
@@ -1411,8 +1500,8 @@ export default function RequestDetailPage() {
               )}
 
       {/* Постоянные кнопки подтверждения / отмены выбора (для депозитов) */}
-      {/* Показываем кнопки для всех статусов, чтобы можно было обработать ошибки */}
-      {request.requestType === 'deposit' && (
+      {/* Показываем кнопки только если заявка не успешна */}
+      {request.requestType === 'deposit' && !isSuccessStatus && (
         <div className="mx-4 mb-4 flex space-x-3">
                 <button
             onClick={() => {
@@ -1438,8 +1527,8 @@ export default function RequestDetailPage() {
       )}
 
       {/* Кнопки подтверждения / отклонения для выводов */}
-      {/* Показываем кнопки для всех статусов, чтобы можно было обработать ошибки */}
-      {request.requestType === 'withdraw' && (
+      {/* Показываем кнопки только если заявка не успешна */}
+      {request.requestType === 'withdraw' && !isSuccessStatus && (
         <div className="mx-4 mb-4 flex space-x-3">
           <button
             onClick={() => {
