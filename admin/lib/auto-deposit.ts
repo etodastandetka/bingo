@@ -343,9 +343,50 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
         requestAmount
       )
       
-      // Если API вызов неуспешен - возвращаем ошибку (транзакция откатится)
+      // Если API вызов неуспешен - проверяем, не был ли депозит уже проведен
       if (!depositResult.success) {
-        return { success: false, message: depositResult.message || 'Deposit failed', depositResult }
+        const errorMessage = depositResult.message || 'Deposit failed'
+        
+        // ВАЖНО: Если депозит уже был проведен - это успешный результат, а не ошибка
+        const isAlreadyProcessed = errorMessage.toLowerCase().includes('уже был проведен') || 
+                                  errorMessage.toLowerCase().includes('already processed') ||
+                                  errorMessage.toLowerCase().includes('повторить платеж') ||
+                                  errorMessage.toLowerCase().includes('deposit already')
+        
+        if (isAlreadyProcessed) {
+          console.log(`✅ [Auto-Deposit] Deposit already processed for request ${request.id}, marking as success (within transaction)`)
+          // Помечаем заявку и платеж как обработанные в той же транзакции
+          const [updatedRequest, updatedPayment] = await Promise.all([
+            tx.request.update({
+              where: { id: request.id },
+              data: {
+                status: 'autodeposit_success',
+                statusDetail: null,
+                processedBy: 'автопополнение' as any,
+                processedAt: new Date(),
+                updatedAt: new Date(),
+              } as any,
+            }),
+            tx.incomingPayment.update({
+              where: { id: paymentId },
+              data: {
+                requestId: request.id,
+                isProcessed: true,
+              },
+            }),
+          ])
+          
+          return { 
+            success: true, 
+            message: 'Deposit already processed',
+            updatedRequest,
+            updatedPayment,
+            depositResult,
+          }
+        }
+        
+        // Если это не "already processed" - возвращаем ошибку (транзакция откатится)
+        return { success: false, message: errorMessage, depositResult }
       }
       
       // Если успешно - обновляем заявку и платеж в той же транзакции
@@ -389,50 +430,23 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     }
     
     // Если API вызов неуспешен - обрабатываем ошибку
+    // ВАЖНО: Обработка "already processed" теперь происходит ВНУТРИ транзакции (выше),
+    // поэтому здесь мы обрабатываем только реальные ошибки
     if (!depositResult.success) {
       const errorMessage = depositResult.message || 'Deposit failed'
       
-      // ВАЖНО: Если депозит уже был проведен - это успешный результат, а не ошибка
+      // Если это "already processed" - это уже обработано внутри транзакции, просто логируем
       const isAlreadyProcessed = errorMessage.toLowerCase().includes('уже был проведен') || 
                                   errorMessage.toLowerCase().includes('already processed') ||
-                                  errorMessage.toLowerCase().includes('повторить платеж')
+                                  errorMessage.toLowerCase().includes('повторить платеж') ||
+                                  errorMessage.toLowerCase().includes('deposit already')
       
       if (isAlreadyProcessed) {
-        console.log(`✅ [Auto-Deposit] Deposit already processed for request ${request.id}, marking as success`)
-        // Помечаем заявку как успешную, так как депозит уже был проведен
-        try {
-          await prisma.request.update({
-            where: { id: request.id },
-            data: {
-              status: 'autodeposit_success',
-              statusDetail: null,
-              processedBy: 'автопополнение' as any,
-              processedAt: new Date(),
-              updatedAt: new Date(),
-            } as any,
-          })
-          console.log(`✅ [Auto-Deposit] Request ${request.id} marked as autodeposit_success (deposit already processed)`)
-          
-          // Помечаем платеж как обработанный
-          try {
-            await prisma.incomingPayment.update({
-              where: { id: paymentId },
-              data: {
-                requestId: request.id,
-                isProcessed: true,
-              },
-            })
-          } catch (paymentError) {
-            console.warn(`⚠️ [Auto-Deposit] Failed to mark payment ${paymentId} as processed:`, paymentError)
-          }
-          
-          return {
-            requestId: request.id,
-            success: true,
-          }
-        } catch (dbError: any) {
-          console.error(`❌ [Auto-Deposit] Failed to mark request as success:`, dbError.message)
-          throw new Error(`Failed to update request status: ${dbError.message}`)
+        // Это уже обработано внутри транзакции, просто возвращаем успех
+        console.log(`✅ [Auto-Deposit] Deposit already processed for request ${request.id} (handled in transaction)`)
+        return {
+          requestId: request.id,
+          success: true,
         }
       }
       
