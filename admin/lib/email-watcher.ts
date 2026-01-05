@@ -292,16 +292,15 @@ async function processEmail(
             if (exactMatch) {
               const hasReceipt = !!exactMatch.photoFileUrl
               console.log(`✅ [Background Auto-Deposit] Found pending request ${exactMatch.id} with matching amount ${amount} (${hasReceipt ? 'with' : 'without'} receipt), processing in background`)
-              // Вызываем автопополнение для найденной заявки в фоне (не блокируем обработку других писем)
+              // Вызываем автопополнение СРАЗУ (await) для мгновенной обработки
               // Работает для заявок с чеком и без - заявки без чека не показываются в дашборде, но обрабатываются
-              const { matchAndProcessPayment } = await import('./auto-deposit')
-              matchAndProcessPayment(incomingPayment.id, amount)
-                .then(() => {
-                  console.log(`✅ [Background Auto-Deposit] Successfully processed payment ${incomingPayment.id} → request ${exactMatch.id} (${hasReceipt ? 'with receipt' : 'without receipt'})`)
-                })
-                .catch((autoDepositError: any) => {
-                  console.error(`❌ [Background Auto-Deposit] Error processing payment ${incomingPayment.id} → request ${exactMatch.id}:`, autoDepositError.message)
-                })
+              try {
+                const { matchAndProcessPayment } = await import('./auto-deposit')
+                await matchAndProcessPayment(incomingPayment.id, amount)
+                console.log(`✅ [Instant Auto-Deposit] Successfully processed payment ${incomingPayment.id} → request ${exactMatch.id} (${hasReceipt ? 'with receipt' : 'without receipt'})`)
+              } catch (autoDepositError: any) {
+                console.error(`❌ [Instant Auto-Deposit] Error processing payment ${incomingPayment.id} → request ${exactMatch.id}:`, autoDepositError.message)
+              }
             } else {
               console.log(`ℹ️ No pending request found with amount ${amount}, payment saved: ID ${incomingPayment.id}`)
             }
@@ -436,15 +435,15 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
           return
         }
 
-        // Ищем непрочитанные письма за последние 15 минут (обычный режим)
-        const fifteenMinutesAgo = new Date()
-        fifteenMinutesAgo.setMinutes(fifteenMinutesAgo.getMinutes() - 15)
+        // Ищем непрочитанные письма за последние 2 минуты (для мгновенной реакции)
+        const twoMinutesAgo = new Date()
+        twoMinutesAgo.setMinutes(twoMinutesAgo.getMinutes() - 2)
         const searchDate = [
           'SINCE',
-          fifteenMinutesAgo.toISOString().split('T')[0].replace(/-/g, '-')
+          twoMinutesAgo.toISOString().split('T')[0].replace(/-/g, '-')
         ]
         
-        // Используем более строгий фильтр: только UNSEEN письма за последние 15 минут
+        // Используем более строгий фильтр: только UNSEEN письма за последние 2 минуты
         imap.search(['UNSEEN', searchDate], (err: Error | null, results?: number[]) => {
           if (err) {
             reject(err)
@@ -452,7 +451,7 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
           }
 
           if (!results || results.length === 0) {
-            console.log('📭 No new emails (last 15 minutes)')
+            console.log('📭 No new emails (last 2 minutes)')
             // Сбрасываем счетчик при успешной проверке
             consecutiveNetworkErrors = 0
             imap.end()
@@ -460,7 +459,7 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
             return
           }
 
-          console.log(`📬 Found ${results.length} new email(s) (since ${fifteenMinutesAgo.toISOString().split('T')[0]})`)
+          console.log(`📬 Found ${results.length} new email(s) (since ${twoMinutesAgo.toISOString().split('T')[0]})`)
 
           // Обрабатываем каждое письмо последовательно (не параллельно), чтобы избежать конфликтов
           const processSequentially = async () => {
@@ -510,11 +509,11 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
               return
             }
             // Продолжаем с той же логикой поиска писем...
-            const fifteenMinutesAgo = new Date()
-            fifteenMinutesAgo.setMinutes(fifteenMinutesAgo.getMinutes() - 15)
+            const twoMinutesAgo = new Date()
+            twoMinutesAgo.setMinutes(twoMinutesAgo.getMinutes() - 2)
             const searchDate = [
               'SINCE',
-              fifteenMinutesAgo.toISOString().split('T')[0].replace(/-/g, '-')
+              twoMinutesAgo.toISOString().split('T')[0].replace(/-/g, '-')
             ]
             
             imapWithIp.search(['UNSEEN', searchDate], (err: Error | null, results?: number[]) => {
@@ -524,14 +523,14 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
               }
 
               if (!results || results.length === 0) {
-                console.log('📭 No new emails (last 15 minutes)')
+                console.log('📭 No new emails (last 2 minutes)')
                 consecutiveNetworkErrors = 0
                 imapWithIp.end()
                 resolve()
                 return
               }
 
-              console.log(`📬 Found ${results.length} new email(s) (since ${fifteenMinutesAgo.toISOString().split('T')[0]})`)
+              console.log(`📬 Found ${results.length} new email(s) (since ${twoMinutesAgo.toISOString().split('T')[0]})`)
 
               const processSequentially = async () => {
                 for (const uid of results!) {
@@ -671,14 +670,14 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
           }
         })
 
-        // Режим реального времени: используем событие 'mail' которое срабатывает автоматически
-        // Библиотека imap автоматически отслеживает новые письма через IMAP IDLE если поддерживается
-        // Если IDLE не поддерживается, используем быстрый polling (каждые 5 секунд)
+        // Режим реального времени: событие 'mail' срабатывает автоматически при новых письмах
+        // Библиотека imap использует IMAP IDLE если поддерживается сервером
+        // Дополнительно используем быстрый polling (каждую 1 секунду) для максимальной скорости
         
-        console.log('✅ Real-time mode active - listening for new emails...')
+        console.log('✅ Real-time mode active - listening for new emails (IDLE + 1s polling)...')
         
-        // Быстрый polling если IDLE не работает (каждые 5 секунд вместо 60)
-        // Это почти как реальное время, но с небольшой задержкой
+        // Мгновенный polling каждую 1 секунду для максимально быстрой реакции
+        // Это обеспечивает почти мгновенную обработку новых писем
         idleInterval = setInterval(async () => {
           try {
             await checkEmails(settings)
@@ -745,7 +744,7 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
             console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error in quick polling:`, error.message || error)
             // НЕ прерываем работу - продолжаем проверку
           }
-        }, 5000) // Проверка каждые 5 секунд вместо 60
+        }, 1000) // Проверка каждую 1 секунду для мгновенной реакции
         
         // Keepalive: каждые 29 минут проверяем соединение
         keepAliveInterval = setInterval(() => {
