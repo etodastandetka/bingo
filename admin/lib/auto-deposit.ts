@@ -332,7 +332,38 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       // Для других ошибок обрабатываем как обычно
       console.error(`❌ [Auto-Deposit] Deposit failed: ${errorMessage}`)
       
-      // Сохраняем ошибку в БД для отображения в админке
+      // ВАЖНО: Если пользователь не найден в системе казино - оставляем заявку в pending
+      // для ручной проверки администратором (возможно, неправильный accountId или пользователь не зарегистрирован)
+      const isUserNotFound = errorMessage.toLowerCase().includes('not found user') ||
+                             errorMessage.toLowerCase().includes('пользователь не найден') ||
+                             errorMessage.toLowerCase().includes('user not found') ||
+                             errorMessage.toLowerCase().includes('greenback')
+      
+      if (isUserNotFound) {
+        console.warn(`⚠️ [Auto-Deposit] User not found in casino for request ${request.id}, leaving in pending for manual review`)
+        // Оставляем заявку в pending, но добавляем пометку об ошибке в statusDetail
+        try {
+          await prisma.request.update({
+            where: { id: request.id },
+            data: {
+              status: 'pending', // Оставляем в pending для ручной проверки
+              statusDetail: `Автопополнение: ${errorMessage.length > 40 ? errorMessage.substring(0, 40) : errorMessage}`,
+              updatedAt: new Date(),
+            } as any,
+          })
+          console.log(`⚠️ [Auto-Deposit] Request ${request.id} left in pending with error note: ${errorMessage}`)
+        } catch (dbError: any) {
+          console.error(`❌ [Auto-Deposit] Failed to update request status:`, dbError.message)
+        }
+        // НЕ помечаем платеж как обработанный, чтобы можно было попробовать снова
+        return {
+          requestId: request.id,
+          success: false,
+          error: errorMessage,
+        }
+      }
+      
+      // Для других ошибок помечаем как api_error
       try {
         await prisma.request.update({
           where: { id: request.id },

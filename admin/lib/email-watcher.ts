@@ -579,8 +579,13 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
               // Логируем только если прошло достаточно времени и есть несколько ошибок подряд
               if (consecutiveNetworkErrors >= MAX_CONSECUTIVE_ERRORS_BEFORE_LOG && 
                   (now - lastNetworkErrorLog) > NETWORK_ERROR_LOG_INTERVAL) {
-                console.warn(`⚠️ Network error in polling (${error.code}): ${error.message || error.hostname || 'Connection issue'} (${consecutiveNetworkErrors} consecutive errors)`)
+                console.warn(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Network error in polling (${error.code}): ${error.message || error.hostname || 'Connection issue'} (${consecutiveNetworkErrors} consecutive errors)`)
                 lastNetworkErrorLog = now
+              }
+              // При DNS ошибках увеличиваем задержку перед следующей попыткой
+              // Это снижает нагрузку на DNS и дает время на восстановление сети
+              if (error.code === 'ENOTFOUND') {
+                await new Promise((resolve) => setTimeout(resolve, 30000)) // 30 секунд при DNS ошибках
               }
               // Продолжаем работу, попробуем снова через интервал
               return
