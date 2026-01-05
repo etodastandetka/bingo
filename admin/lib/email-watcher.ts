@@ -6,7 +6,42 @@ import Imap from 'imap'
 import { simpleParser } from 'mailparser'
 import { prisma } from './prisma'
 import { parseEmailByBank } from './email-parsers'
+import dns from 'dns'
 // Убрали импорт matchAndProcessPayment - автопополнение теперь вызывается только при создании заявки с фото чека
+
+// Настраиваем DNS-серверы для более надежного резолвинга
+// Используем Google DNS и Cloudflare DNS как fallback
+try {
+  dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1', '1.0.0.1'])
+  console.log('✅ DNS servers configured: Google DNS (8.8.8.8, 8.8.4.4) and Cloudflare DNS (1.1.1.1, 1.0.0.1)')
+} catch (error) {
+  console.warn('⚠️ Failed to set DNS servers:', error)
+}
+
+// IP-адрес imap.timeweb.ru для fallback (если DNS не работает)
+const TIMEWEB_IMAP_IP = '176.57.223.17'
+const TIMEWEB_IMAP_HOST = 'imap.timeweb.ru'
+
+/**
+ * Создает IMAP конфигурацию с fallback на IP-адрес при DNS-ошибках
+ */
+function createImapConfig(settings: WatcherSettings, useIpFallback: boolean = false) {
+  const host = useIpFallback ? TIMEWEB_IMAP_IP : settings.imapHost
+  
+  return {
+    user: settings.email,
+    password: settings.password,
+    host: host,
+    port: 993,
+    tls: true,
+    tlsOptions: { 
+      rejectUnauthorized: false,
+      servername: TIMEWEB_IMAP_HOST, // Всегда используем доменное имя для SNI (даже при подключении по IP)
+    },
+    connTimeout: 30000,
+    authTimeout: 10000,
+  }
+}
 
 interface WatcherSettings {
   enabled: boolean
@@ -304,19 +339,12 @@ async function processEmail(
  */
 async function checkAllUnreadEmails(settings: WatcherSettings): Promise<void> {
   return new Promise((resolve, reject) => {
-    const imap = new Imap({
-      user: settings.email,
-      password: settings.password,
-      host: settings.imapHost,
-      port: 993,
-      tls: true,
-      tlsOptions: { 
-        rejectUnauthorized: false,
-        servername: 'imap.timeweb.ru',
-      },
-      connTimeout: 30000,
-      authTimeout: 10000,
-    })
+    const useIpFallback = consecutiveNetworkErrors > 5
+    const imap = new Imap(createImapConfig(settings, useIpFallback))
+    
+    if (useIpFallback) {
+      console.log(`🔄 [Wallet ${settings.walletId || 'N/A'}] Using IP fallback (${TIMEWEB_IMAP_IP}) for checkAllUnreadEmails`)
+    }
 
     imap.once('ready', () => {
       consecutiveNetworkErrors = 0
@@ -390,19 +418,14 @@ async function checkAllUnreadEmails(settings: WatcherSettings): Promise<void> {
  */
 async function checkEmails(settings: WatcherSettings): Promise<void> {
   return new Promise((resolve, reject) => {
-    const imap = new Imap({
-      user: settings.email,
-      password: settings.password,
-      host: settings.imapHost, // imap.timeweb.ru
-      port: 993, // SSL порт для IMAP (Timeweb)
-      tls: true, // Используем SSL/TLS
-      tlsOptions: { 
-        rejectUnauthorized: false, // Разрешаем самоподписанные сертификаты
-        servername: 'imap.timeweb.ru', // Явно указываем имя сервера для SNI
-      },
-      connTimeout: 30000, // Таймаут подключения 30 секунд
-      authTimeout: 10000, // Таймаут авторизации 10 секунд
-    })
+    // Пытаемся подключиться сначала с доменом, при ENOTFOUND - используем IP
+    let useIpFallback = consecutiveNetworkErrors > 5 // Используем IP после 5+ DNS ошибок подряд
+    
+    const imap = new Imap(createImapConfig(settings, useIpFallback))
+    
+    if (useIpFallback) {
+      console.log(`🔄 [Wallet ${settings.walletId || 'N/A'}] Using IP fallback (${TIMEWEB_IMAP_IP}) due to DNS issues`)
+    }
 
     imap.once('ready', () => {
       // Сбрасываем счетчик ошибок при успешном подключении
@@ -471,19 +494,96 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
     })
 
     imap.once('error', (err: Error) => {
-      // Обрабатываем сетевые ошибки с rate limiting
-      if ((err as any).code === 'ENOTFOUND' || (err as any).code === 'ETIMEDOUT' || (err as any).code === 'ECONNREFUSED') {
+      // Обрабатываем DNS-ошибки: пытаемся переподключиться с IP-адресом
+      if ((err as any).code === 'ENOTFOUND' && !useIpFallback) {
+        console.log(`🔄 [Wallet ${settings.walletId || 'N/A'}] DNS error, retrying with IP address (${TIMEWEB_IMAP_IP})...`)
+        imap.end()
+        
+        // Пытаемся подключиться с IP-адресом
+        const imapWithIp = new Imap(createImapConfig(settings, true))
+        
+        imapWithIp.once('ready', () => {
+          consecutiveNetworkErrors = 0 // Сбрасываем счетчик при успешном подключении
+          imapWithIp.openBox(settings.folder, false, (err: Error | null) => {
+            if (err) {
+              reject(err)
+              return
+            }
+            // Продолжаем с той же логикой поиска писем...
+            const fifteenMinutesAgo = new Date()
+            fifteenMinutesAgo.setMinutes(fifteenMinutesAgo.getMinutes() - 15)
+            const searchDate = [
+              'SINCE',
+              fifteenMinutesAgo.toISOString().split('T')[0].replace(/-/g, '-')
+            ]
+            
+            imapWithIp.search(['UNSEEN', searchDate], (err: Error | null, results?: number[]) => {
+              if (err) {
+                reject(err)
+                return
+              }
+
+              if (!results || results.length === 0) {
+                console.log('📭 No new emails (last 15 minutes)')
+                consecutiveNetworkErrors = 0
+                imapWithIp.end()
+                resolve()
+                return
+              }
+
+              console.log(`📬 Found ${results.length} new email(s) (since ${fifteenMinutesAgo.toISOString().split('T')[0]})`)
+
+              const processSequentially = async () => {
+                for (const uid of results!) {
+                  try {
+                    await processEmail(imapWithIp, uid, settings)
+                  } catch (error: any) {
+                    console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error processing email UID ${uid}:`, error.message || error)
+                  }
+                }
+              }
+
+              processSequentially()
+                .then(() => {
+                  consecutiveNetworkErrors = 0
+                  imapWithIp.end()
+                  resolve()
+                })
+                .catch((error) => {
+                  console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error in processSequentially:`, error.message || error)
+                  consecutiveNetworkErrors = 0
+                  imapWithIp.end()
+                  resolve()
+                })
+            })
+          })
+        })
+        
+        imapWithIp.once('error', (ipErr: Error) => {
+          consecutiveNetworkErrors++
+          const now = Date.now()
+          if (consecutiveNetworkErrors >= MAX_CONSECUTIVE_ERRORS_BEFORE_LOG && 
+              (now - lastNetworkErrorLog) > NETWORK_ERROR_LOG_INTERVAL) {
+            console.warn(`⚠️ IMAP network error in checkEmails (even with IP fallback) (${(ipErr as any).code}): ${ipErr.message || ipErr} (${consecutiveNetworkErrors} consecutive errors)`)
+            lastNetworkErrorLog = now
+          }
+          resolve() // Продолжаем работу даже при ошибке
+        })
+        
+        imapWithIp.connect()
+        return
+      }
+      
+      // Обрабатываем другие сетевые ошибки с rate limiting
+      if ((err as any).code === 'ETIMEDOUT' || (err as any).code === 'ECONNREFUSED') {
         consecutiveNetworkErrors++
         const now = Date.now()
         
-        // Логируем только если прошло достаточно времени и есть несколько ошибок подряд
-        // При множественных ошибках логируем реже (раз в 5 минут)
         if (consecutiveNetworkErrors >= MAX_CONSECUTIVE_ERRORS_BEFORE_LOG && 
             (now - lastNetworkErrorLog) > NETWORK_ERROR_LOG_INTERVAL) {
           console.warn(`⚠️ IMAP network error in checkEmails (${(err as any).code}): ${err.message || err} (${consecutiveNetworkErrors} consecutive errors)`)
           lastNetworkErrorLog = now
         }
-        // Не reject при сетевых ошибках, просто resolve чтобы продолжить работу
         resolve()
         return
       }
@@ -503,19 +603,12 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
  */
 async function startIdleMode(settings: WatcherSettings): Promise<void> {
   return new Promise((resolve, reject) => {
-    const imap = new Imap({
-      user: settings.email,
-      password: settings.password,
-      host: settings.imapHost, // imap.timeweb.ru
-      port: 993, // SSL порт для IMAP (Timeweb)
-      tls: true, // Используем SSL/TLS
-      tlsOptions: { 
-        rejectUnauthorized: false, // Разрешаем самоподписанные сертификаты
-        servername: 'imap.timeweb.ru', // Явно указываем имя сервера для SNI
-      },
-      connTimeout: 30000, // Таймаут подключения 30 секунд
-      authTimeout: 10000, // Таймаут авторизации 10 секунд
-    })
+    const useIpFallback = consecutiveNetworkErrors > 5
+    const imap = new Imap(createImapConfig(settings, useIpFallback))
+    
+    if (useIpFallback) {
+      console.log(`🔄 [Wallet ${settings.walletId || 'N/A'}] Using IP fallback (${TIMEWEB_IMAP_IP}) for startIdleMode`)
+    }
 
     let idleInterval: NodeJS.Timeout | null = null
     let keepAliveInterval: NodeJS.Timeout | null = null
