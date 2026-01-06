@@ -1815,16 +1815,27 @@ export default function RequestDetailPage() {
               ? request.statusDetail.replace('payment_url:', '')
               : null
             
+            const handleOpenPayment = (url: string) => {
+              // На мобильных устройствах используем window.location.href
+              // Это должно открыть приложение через universal links (iOS) или app links (Android)
+              // Если приложение не установлено, откроется браузер
+              if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                // Мобильное устройство - используем прямой переход
+                window.location.href = url
+              } else {
+                // Десктоп - открываем в новой вкладке
+                window.open(url, '_blank')
+              }
+            }
+            
             return paymentUrl ? (
               <div className="mx-4 mb-4">
-                <a
-                  href={paymentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-xl transition-colors text-center"
+                <button
+                  onClick={() => handleOpenPayment(paymentUrl)}
+                  className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-xl transition-colors"
                 >
                   Оплатить
-                </a>
+                </button>
               </div>
             ) : (
               <div className="mx-4 mb-4">
