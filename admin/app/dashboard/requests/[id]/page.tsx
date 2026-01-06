@@ -77,6 +77,7 @@ export default function RequestDetailPage() {
   const [paymentToDelete, setPaymentToDelete] = useState<number | null>(null)
   const [deletingPayment, setDeletingPayment] = useState(false)
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const [scanningQr, setScanningQr] = useState(false)
 
   const pushToast = (message: string, type: 'success' | 'error' | 'info' = 'info', timeout = 4000) => {
     setToast({ message, type })
@@ -1036,6 +1037,94 @@ export default function RequestDetailPage() {
     }
   }
 
+  const handleScanQrFromPhoto = async () => {
+    if (!request || !request.photoFileUrl) {
+      pushToast('Фото QR-кода не найдено в заявке', 'error')
+      return
+    }
+
+    setScanningQr(true)
+    try {
+      // Загружаем jsQR динамически
+      const jsQR = (await import('jsqr')).default
+
+      // Используем фото из заявки
+      const img = new Image()
+      // Если это base64, не нужно crossOrigin
+      if (!request.photoFileUrl.startsWith('data:')) {
+        img.crossOrigin = 'anonymous'
+      }
+      img.src = request.photoFileUrl
+      
+      await new Promise((resolve, reject) => {
+        img.onload = resolve
+        img.onerror = () => reject(new Error('Не удалось загрузить изображение'))
+        // Таймаут на случай, если изображение не загрузится
+        setTimeout(() => reject(new Error('Таймаут загрузки изображения')), 10000)
+      })
+
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        throw new Error('Failed to get canvas context')
+      }
+      ctx.drawImage(img, 0, 0)
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const qrCode = jsQR(imageData.data, imageData.width, imageData.height)
+
+      if (!qrCode) {
+        pushToast('QR-код не найден на изображении. Убедитесь, что фото содержит QR-код', 'error')
+        return
+      }
+
+      const qrData = qrCode.data
+      console.log('QR Code data:', qrData)
+
+      // Парсим URL и извлекаем hash после #
+      let hash = ''
+      if (qrData.includes('#')) {
+        hash = qrData.split('#')[1]
+      } else {
+        pushToast('Неверный формат QR-кода. Ожидается URL с символом #', 'error')
+        return
+      }
+
+      // Формируем ссылку для DemirBank
+      const demirBankUrl = `https://retail.demirbank.kg/#${hash}`
+
+      // Сохраняем ссылку в заявку
+      const response = await fetch(`/api/requests/${request.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          statusDetail: `payment_url:${demirBankUrl}`,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Обновляем локальное состояние
+        setRequest(prev => prev ? {
+          ...prev,
+          statusDetail: `payment_url:${demirBankUrl}`,
+        } : null)
+        
+        pushToast('QR-код отсканирован, ссылка сохранена', 'success')
+      } else {
+        pushToast(data.error || 'Ошибка при сохранении ссылки', 'error')
+      }
+    } catch (error: any) {
+      console.error('Failed to scan QR code:', error)
+      pushToast(error.message || 'Ошибка при сканировании QR-кода', 'error')
+    } finally {
+      setScanningQr(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -1715,31 +1804,70 @@ export default function RequestDetailPage() {
             </div>
       )}
 
-      {/* Кнопки подтверждения / отклонения для выводов */}
+      {/* Кнопки для выводов */}
       {/* Показываем кнопки только если заявка не успешна */}
       {request.requestType === 'withdraw' && !isSuccessStatus && (
-        <div className="mx-4 mb-4 flex space-x-3">
-          <button
-            onClick={() => {
-              setStatusModalAction('approved')
-              setStatusModalOpen(true)
-            }}
-            disabled={statusModalLoading}
-            className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors"
-          >
-            Подтвердить
-          </button>
-          <button
-            onClick={() => {
-              setStatusModalAction('rejected')
-              setStatusModalOpen(true)
-            }}
-            disabled={statusModalLoading}
-            className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-gray-700 text-white font-bold py-3 px-4 rounded-xl transition-colors"
-          >
-            Отклонить
-          </button>
-        </div>
+        <>
+          {/* Кнопка Оплатить */}
+          {(() => {
+            // Извлекаем ссылку на оплату из statusDetail
+            const paymentUrl = request.statusDetail?.startsWith('payment_url:') 
+              ? request.statusDetail.replace('payment_url:', '')
+              : null
+            
+            return paymentUrl ? (
+              <div className="mx-4 mb-4">
+                <a
+                  href={paymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-xl transition-colors text-center"
+                >
+                  Оплатить
+                </a>
+              </div>
+            ) : (
+              <div className="mx-4 mb-4">
+                <button
+                  onClick={handleScanQrFromPhoto}
+                  disabled={scanningQr || !request.photoFileUrl}
+                  className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors"
+                >
+                  {scanningQr ? 'Сканирование QR-кода...' : 'Оплатить'}
+                </button>
+                {!request.photoFileUrl && (
+                  <p className="text-xs text-gray-400 mt-2 text-center">
+                    Фото QR-кода не найдено в заявке
+                  </p>
+                )}
+              </div>
+            )
+          })()}
+          
+          {/* Кнопки подтверждения / отклонения */}
+          <div className="mx-4 mb-4 flex space-x-3">
+            <button
+              onClick={() => {
+                setStatusModalAction('approved')
+                setStatusModalOpen(true)
+              }}
+              disabled={statusModalLoading}
+              className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors"
+            >
+              Подтвердить
+            </button>
+            <button
+              onClick={() => {
+                setStatusModalAction('rejected')
+                setStatusModalOpen(true)
+              }}
+              disabled={statusModalLoading}
+              className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-gray-700 text-white font-bold py-3 px-4 rounded-xl transition-colors"
+            >
+              Отклонить
+            </button>
+          </div>
+        </>
       )}
 
       {/* Ошибка казино (если есть) */}
