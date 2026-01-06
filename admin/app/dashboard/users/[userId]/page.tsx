@@ -589,7 +589,8 @@ export default function UserDetailPage() {
             {transactions.slice(0, 10).map((tx) => (
               <div
                 key={tx.id}
-                className="bg-gray-900 rounded-xl p-4 border border-gray-800 hover:border-blue-500 transition-colors"
+                onClick={() => router.push(`/dashboard/requests/${tx.id}`)}
+                className="bg-gray-900 rounded-xl p-4 border border-gray-800 hover:border-blue-500 transition-colors cursor-pointer"
               >
                 <div className="flex items-center space-x-3">
                   {/* Иконка банка */}
