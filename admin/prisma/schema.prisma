@@ -84,7 +84,7 @@ model Request {
   amount                  Decimal?          @db.Decimal(10, 2)
   requestType             String            @default("deposit") @map("request_type") @db.VarChar(20)
   status                  String            @default("pending") @db.VarChar(20)
-  statusDetail            String?           @map("status_detail") @db.VarChar(50)
+  statusDetail            String?           @map("status_detail") @db.VarChar(500)
   processedBy             String?           @map("processed_by") @db.VarChar(255)
   processedByUsername     String?           @map("processed_by_username") @db.VarChar(255)
   withdrawalCode          String?           @map("withdrawal_code") @db.VarChar(255)
