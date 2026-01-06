@@ -73,6 +73,10 @@ export default function RequestDetailPage() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [photoFileUrl, setPhotoFileUrl] = useState<string | null>(null)
   const [photoLoading, setPhotoLoading] = useState(false)
+  const [deletePaymentModalOpen, setDeletePaymentModalOpen] = useState(false)
+  const [paymentToDelete, setPaymentToDelete] = useState<number | null>(null)
+  const [deletingPayment, setDeletingPayment] = useState(false)
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const pushToast = (message: string, type: 'success' | 'error' | 'info' = 'info', timeout = 4000) => {
     setToast({ message, type })
@@ -999,6 +1003,39 @@ export default function RequestDetailPage() {
     }
   }
 
+  const handleDeletePayment = async () => {
+    if (!paymentToDelete) return
+    
+    setDeletingPayment(true)
+    try {
+      const response = await fetch(`/api/incoming-payments/${paymentToDelete}`, {
+        method: 'DELETE',
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        // Удаляем пополнение из списка
+        setSimilarPayments(prev => prev.filter(p => p.id !== paymentToDelete))
+        // Если это было выбранное пополнение, сбрасываем выбор
+        if (selectedPaymentId === paymentToDelete) {
+          setSelectedPaymentId(null)
+          setSelectedPaymentPreview(null)
+        }
+        pushToast('Пополнение удалено', 'success')
+        setDeletePaymentModalOpen(false)
+        setPaymentToDelete(null)
+      } else {
+        pushToast(data.error || 'Ошибка при удалении пополнения', 'error')
+      }
+    } catch (error) {
+      console.error('Failed to delete payment:', error)
+      pushToast('Ошибка при удалении пополнения', 'error')
+    } finally {
+      setDeletingPayment(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -1547,10 +1584,64 @@ export default function RequestDetailPage() {
                   setSelectedPaymentPreview(nextSelected ? formattedAmount : null)
                 }
 
+                // Локальная переменная для отслеживания долгого нажатия для этого платежа
+                let longPressTriggered = false
+                let paymentTimer: NodeJS.Timeout | null = null
+                
+                // Обработчик долгого нажатия (для мобильных)
+                const handleTouchStart = (e: React.TouchEvent) => {
+                  if (isProcessed) return // Не показываем для обработанных
+                  longPressTriggered = false
+                  paymentTimer = setTimeout(() => {
+                    longPressTriggered = true
+                    // Вибрация (если поддерживается)
+                    if (navigator.vibrate) {
+                      navigator.vibrate(50)
+                    }
+                    setPaymentToDelete(payment.id)
+                    setDeletePaymentModalOpen(true)
+                  }, 500) // 500ms = полсекунды
+                }
+
+                const handleTouchEnd = (e: React.TouchEvent) => {
+                  if (paymentTimer) {
+                    clearTimeout(paymentTimer)
+                    paymentTimer = null
+                  }
+                  // Если долгое нажатие не сработало, выполняем обычный клик
+                  if (!longPressTriggered) {
+                    // Небольшая задержка, чтобы не конфликтовать с onClick
+                    setTimeout(() => {
+                      handleSelectPayment()
+                    }, 50)
+                  }
+                }
+
+                const handleTouchCancel = () => {
+                  if (paymentTimer) {
+                    clearTimeout(paymentTimer)
+                    paymentTimer = null
+                  }
+                  longPressTriggered = false
+                }
+
+                // Обработчик правого клика (для ПК)
+                const handleContextMenu = (e: React.MouseEvent) => {
+                  if (isProcessed) return // Не показываем для обработанных
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setPaymentToDelete(payment.id)
+                  setDeletePaymentModalOpen(true)
+                }
+
                 return (
                   <div
                     key={payment.id}
                     onClick={handleSelectPayment}
+                    onTouchStart={handleTouchStart}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchCancel={handleTouchCancel}
+                    onContextMenu={handleContextMenu}
                     className={`relative flex items-center rounded-xl p-3 cursor-pointer transition-all ${
                       isProcessed
                         ? 'bg-gray-800 opacity-70 cursor-pointer border border-gray-700 hover:border-blue-500'
@@ -1945,6 +2036,37 @@ export default function RequestDetailPage() {
           </div>
         </div>
       )}
+
+        {/* Модалка удаления пополнения */}
+        {deletePaymentModalOpen && paymentToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl p-6">
+              <h3 className="text-xl font-semibold text-white mb-3">Удалить пополнение?</h3>
+              <p className="text-sm text-gray-300 mb-4 leading-relaxed">
+                Вы уверены, что хотите удалить это пополнение? Это действие нельзя отменить.
+              </p>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setDeletePaymentModalOpen(false)
+                    setPaymentToDelete(null)
+                  }}
+                  disabled={deletingPayment}
+                  className="px-4 py-2 rounded-lg border border-gray-600 text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                >
+                  Нет
+                </button>
+                <button
+                  onClick={handleDeletePayment}
+                  disabled={deletingPayment}
+                  className="px-5 py-2 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed transition-colors"
+                >
+                  {deletingPayment ? 'Удаление...' : 'Да, удалить'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Модалка подтверждения/отклонения */}
         {statusModalOpen && (
