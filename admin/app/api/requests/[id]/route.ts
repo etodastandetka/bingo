@@ -202,18 +202,20 @@ export async function PATCH(
       data: updateData,
     })
 
-    // Отправляем уведомления при изменении статуса
+    // Отправляем уведомления при изменении статуса (асинхронно, не блокируем ответ)
     if (body.status && body.status !== currentRequest.status) {
-      try {
-        // Получаем язык пользователя
-        const user = await prisma.botUser.findUnique({
-          where: { userId: currentRequest.userId },
-          select: { language: true },
-        }).catch(() => null)
-        const lang = user?.language || 'ru'
+      // Запускаем отправку уведомлений в фоне, не ждем завершения
+      ;(async () => {
+        try {
+          // Получаем язык пользователя
+          const user = await prisma.botUser.findUnique({
+            where: { userId: currentRequest.userId },
+            select: { language: true },
+          }).catch(() => null)
+          const lang = user?.language || 'ru'
 
-        // Получаем username админа
-        const adminUsername = await getAdminUsername()
+          // Получаем username админа
+          const adminUsername = await getAdminUsername()
 
         let notificationMessage = ''
         
@@ -442,10 +444,11 @@ export async function PATCH(
               })
           }
         }
-      } catch (error) {
-        // Игнорируем ошибки отправки уведомлений, чтобы не блокировать обновление заявки
-        console.error('Error sending notification:', error)
-      }
+        } catch (error) {
+          // Игнорируем ошибки отправки уведомлений, чтобы не блокировать обновление заявки
+          console.error('Error sending notification:', error)
+        }
+      })() // Запускаем асинхронно, не ждем
     }
 
     return NextResponse.json(

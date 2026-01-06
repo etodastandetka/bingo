@@ -671,22 +671,13 @@ export default function RequestDetailPage() {
               return
             }
 
-            // Если пополнение успешно, делаем полную перезагрузку данных заявки
-            const requestId = Array.isArray(params.id) ? params.id[0] : params.id
-            if (requestId) {
-              const fullDataResponse = await fetch(`/api/requests/${requestId}`)
-              const fullData = await fullDataResponse.json()
-              
-              if (fullData.success && isMountedRef.current) {
-                setRequest(fullData.data)
-                
-                // НЕ устанавливаем сумму - пользователь должен вводить сам
-                
-                // Загружаем фото профиля пользователя (с кэшем)
-                if (fullData.data.userId) {
-                  fetchProfilePhotoOnce(fullData.data.userId)
-                }
-              }
+            // Обновляем статус локально для мгновенного отклика
+            if (isMountedRef.current && request) {
+              setRequest({
+                ...request,
+                status: 'approved',
+                processedAt: new Date().toISOString(),
+              })
             }
             
             // Уведомляем другие вкладки об обновлении
@@ -695,10 +686,28 @@ export default function RequestDetailPage() {
             
             pushToast(`Баланс пополнен. Заявка подтверждена.`, 'success')
             
+            // Загружаем полные данные асинхронно (не блокируем UI)
+            const requestId = Array.isArray(params.id) ? params.id[0] : params.id
+            if (requestId) {
+              fetch(`/api/requests/${requestId}`)
+                .then(res => res.json())
+                .then(fullData => {
+                  if (fullData.success && isMountedRef.current) {
+                    setRequest(fullData.data)
+                    
+                    // Загружаем фото профиля асинхронно
+                    if (fullData.data.userId) {
+                      fetchProfilePhotoOnce(fullData.data.userId)
+                    }
+                  }
+                })
+                .catch(err => console.error('Failed to reload request data:', err))
+            }
+            
             // Редирект в дашборд после подтверждения
             setTimeout(() => {
               router.push('/dashboard/')
-            }, 1000)
+            }, 500) // Уменьшено с 1000 до 500 для более быстрого редиректа
             return
           } catch (depositError) {
             console.error('Failed to deposit balance:', depositError)
@@ -717,29 +726,14 @@ export default function RequestDetailPage() {
         const data = await response.json()
 
         if (data.success) {
-          // Полная перезагрузка данных заявки, чтобы получить все поля
-          const requestId = Array.isArray(params.id) ? params.id[0] : params.id
-          if (requestId) {
-            const fullDataResponse = await fetch(`/api/requests/${requestId}`)
-            const fullData = await fullDataResponse.json()
-            
-            if (fullData.success && isMountedRef.current) {
-              setRequest(fullData.data)
-              
-              // НЕ устанавливаем сумму - пользователь должен вводить сам
-              
-              // Загружаем фото профиля пользователя
-              if (fullData.data.userId) {
-                fetch(`/api/users/${fullData.data.userId}/profile-photo`)
-                  .then(res => res.json())
-                  .then(photoData => {
-                    if (photoData.success && photoData.data?.photoUrl && isMountedRef.current) {
-                      setProfilePhotoUrl(photoData.data.photoUrl)
-                    }
-                  })
-                  .catch(err => console.error('Failed to fetch profile photo:', err))
-              }
-            }
+          // Обновляем статус локально для мгновенного отклика
+          if (isMountedRef.current && request) {
+            setRequest({
+              ...request,
+              status: newStatus,
+              processedAt: new Date().toISOString(),
+              processedByUsername: data.data?.processedByUsername || null,
+            })
           }
           
           // Уведомляем другие вкладки об обновлении
@@ -749,10 +743,36 @@ export default function RequestDetailPage() {
           const statusLabel = newStatus === 'completed' || newStatus === 'approved' ? 'подтверждена' : 'отклонена'
           pushToast(`Заявка ${statusLabel}`, 'success')
           
+          // Загружаем полные данные и фото профиля асинхронно (не блокируем UI)
+          const requestId = Array.isArray(params.id) ? params.id[0] : params.id
+          if (requestId) {
+            // Загружаем в фоне, не ждем
+            fetch(`/api/requests/${requestId}`)
+              .then(res => res.json())
+              .then(fullData => {
+                if (fullData.success && isMountedRef.current) {
+                  setRequest(fullData.data)
+                  
+                  // Загружаем фото профиля асинхронно
+                  if (fullData.data.userId) {
+                    fetch(`/api/users/${fullData.data.userId}/profile-photo`)
+                      .then(res => res.json())
+                      .then(photoData => {
+                        if (photoData.success && photoData.data?.photoUrl && isMountedRef.current) {
+                          setProfilePhotoUrl(photoData.data.photoUrl)
+                        }
+                      })
+                      .catch(err => console.error('Failed to fetch profile photo:', err))
+                  }
+                }
+              })
+              .catch(err => console.error('Failed to reload request data:', err))
+          }
+          
           // Редирект в дашборд после подтверждения/отклонения
           setTimeout(() => {
             router.push('/dashboard/')
-          }, 1000)
+          }, 500) // Уменьшено с 1000 до 500 для более быстрого редиректа
         } else {
           pushToast(data.error || 'Ошибка при обновлении заявки', 'error')
         }
