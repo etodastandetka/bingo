@@ -221,9 +221,38 @@ export default function OperatorChatPage() {
     }
   }
 
-  // УБРАНО: Автоматическая прокрутка вниз при обновлении сообщений
-  // Это мешало пользователю читать старые сообщения сверху
-  // Прокрутка теперь происходит только при отправке нового сообщения оператором
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+
+  // Проверяем, находится ли пользователь внизу чата
+  const isNearBottom = () => {
+    if (!messagesContainerRef.current) return true
+    const container = messagesContainerRef.current
+    const threshold = 100 // 100px от низа
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold
+  }
+
+  // Отслеживаем скролл пользователя
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      setShouldAutoScroll(isNearBottom())
+    }
+
+    container.addEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Автоматическая прокрутка только если пользователь внизу
+  useEffect(() => {
+    if (shouldAutoScroll) {
+      setTimeout(() => {
+        scrollToBottom()
+      }, 100)
+    }
+  }, [messages, shouldAutoScroll])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -342,7 +371,8 @@ export default function OperatorChatPage() {
     setNewMessage('')
     removeFile()
     
-    // Скроллим вниз
+    // Принудительно скроллим вниз после отправки
+    setShouldAutoScroll(true)
     setTimeout(() => scrollToBottom(), 100)
 
     setSending(true)
@@ -800,7 +830,7 @@ export default function OperatorChatPage() {
       </div>
 
       {/* Сообщения */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-900 min-h-0">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-900 min-h-0">
         {messages.length === 0 ? (
           <div className="text-center text-gray-400 py-12">
             <p>Нет сообщений</p>
