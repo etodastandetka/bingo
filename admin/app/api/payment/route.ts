@@ -470,49 +470,58 @@ export async function POST(request: NextRequest) {
       }
 
       // Проверка на дубликаты суммы (включая копейки) для депозитов
-      // Если найдена активная заявка с такой же суммой, автоматически изменяем копейки
+      // Копейки блокируются на 10 минут после создания заявки
+      // В течение этого времени другие пользователи не получат те же копейки
       if (validType === 'deposit' && amountDecimal) {
-        // Проверяем, есть ли активная заявка с точно такой же суммой (глобально, для всех пользователей)
-        const duplicateAmountRequest = await prisma.request.findFirst({
-          where: {
-            amount: amountDecimal,
-            requestType: 'deposit',
-            status: 'pending',
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        })
-
-        if (duplicateAmountRequest) {
-          console.log('⚠️ Payment API - Duplicate amount detected, adjusting cents:', {
+        const originalAmount = parseFloat(amountDecimal.toString())
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000) // 10 минут назад
+        
+        // Функция для проверки, занята ли сумма (включая копейки) в последние 10 минут
+        const isAmountBlocked = async (amountToCheck: Prisma.Decimal): Promise<boolean> => {
+          const blockedRequest = await prisma.request.findFirst({
+            where: {
+              amount: amountToCheck,
+              requestType: 'deposit',
+              createdAt: {
+                gte: tenMinutesAgo, // За последние 10 минут
+              },
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+          })
+          return !!blockedRequest
+        }
+        
+        // Проверяем, заблокирована ли текущая сумма
+        const isBlocked = await isAmountBlocked(amountDecimal)
+        
+        if (isBlocked) {
+          console.log('⚠️ Payment API - Amount with cents is blocked (created in last 10 minutes), adjusting cents:', {
             originalAmount: amountDecimal.toString(),
-            duplicateRequestId: duplicateAmountRequest.id,
           })
           
           // Автоматически изменяем копейки: добавляем 0.01
-          // Если сумма целая (без копеек), добавляем 0.01
-          // Если есть копейки, увеличиваем их на 0.01
-          const originalAmount = parseFloat(amountDecimal.toString())
+          // Пробуем найти уникальную сумму, которая не была использована в последние 10 минут
           let adjustedAmount = originalAmount + 0.01
-          
-          // Проверяем, не совпадает ли новая сумма с другой активной заявкой
-          // Пробуем до 10 раз с разными копейками
           let attempts = 0
-          while (attempts < 10) {
-            const adjustedDecimal = new Prisma.Decimal(adjustedAmount.toFixed(2))
-            const checkDuplicate = await prisma.request.findFirst({
-              where: {
-                amount: adjustedDecimal,
-                requestType: 'deposit',
-                status: 'pending',
-              },
-            })
+          let foundUnique = false
+          
+          // Пробуем до 99 раз (все возможные копейки от 0 до 99)
+          while (attempts < 99 && !foundUnique) {
+            // Ограничиваем копейки до 99
+            if (adjustedAmount > Math.floor(originalAmount) + 0.99) {
+              adjustedAmount = Math.floor(originalAmount) + 0.01
+            }
             
-            if (!checkDuplicate) {
+            const adjustedDecimal = new Prisma.Decimal(adjustedAmount.toFixed(2))
+            const isAdjustedBlocked = await isAmountBlocked(adjustedDecimal)
+            
+            if (!isAdjustedBlocked) {
               // Нашли уникальную сумму
               amountDecimal = adjustedDecimal
-              console.log('✅ Payment API - Adjusted amount to avoid duplicate:', {
+              foundUnique = true
+              console.log('✅ Payment API - Adjusted amount to avoid duplicate (10min block):', {
                 originalAmount: originalAmount.toFixed(2),
                 adjustedAmount: adjustedAmount.toFixed(2),
                 attempts: attempts + 1,
@@ -525,10 +534,13 @@ export async function POST(request: NextRequest) {
             attempts++
           }
           
-          if (attempts >= 10) {
-            // Если не удалось найти уникальную сумму за 10 попыток, используем последнюю
+          if (!foundUnique) {
+            // Если не удалось найти уникальную сумму, используем случайную копейку
+            // Генерируем случайное число от 0 до 99 для копеек
+            const randomCents = Math.floor(Math.random() * 100)
+            adjustedAmount = Math.floor(originalAmount) + randomCents / 100
             amountDecimal = new Prisma.Decimal(adjustedAmount.toFixed(2))
-            console.warn('⚠️ Payment API - Could not find unique amount after 10 attempts, using:', adjustedAmount.toFixed(2))
+            console.warn('⚠️ Payment API - Could not find unique amount after 99 attempts, using random cents:', adjustedAmount.toFixed(2))
           }
         }
       }
