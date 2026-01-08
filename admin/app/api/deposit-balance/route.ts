@@ -89,6 +89,14 @@ export async function POST(request: NextRequest) {
     // Получаем заявку
     const requestData = await prisma.request.findUnique({
       where: { id: parseInt(requestId) },
+      select: {
+        id: true,
+        status: true,
+        processedBy: true,
+        accountId: true,
+        bookmaker: true,
+        amount: true,
+      },
     })
 
     if (!requestData) {
@@ -98,8 +106,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Проверка на дубликаты: если заявка уже обработана (completed), не выполняем повторное пополнение
-    if (requestData.status === 'completed' || requestData.status === 'approved') {
+    // Проверка на дубликаты: если заявка уже обработана, не выполняем повторное пополнение
+    if (requestData.status === 'completed' || requestData.status === 'approved' || requestData.status === 'autodeposit_success') {
+      // Если заявка уже обработана автопополнением, обновляем статус на approved без повторного пополнения
+      if (requestData.status === 'autodeposit_success') {
+        const updatedRequest = await prisma.request.update({
+          where: { id: parseInt(requestId) },
+          data: {
+            status: 'approved',
+            processedAt: new Date(),
+          },
+        })
+
+        return NextResponse.json(
+          createApiResponse({
+            success: true,
+            message: 'Заявка уже была обработана автопополнением. Статус обновлен.',
+            request: {
+              ...updatedRequest,
+              amount: updatedRequest.amount ? updatedRequest.amount.toString() : null,
+            },
+          })
+        )
+      }
+      
       return NextResponse.json(
         createApiResponse(null, `Заявка уже обработана (статус: ${requestData.status}). Повторное пополнение невозможно.`),
         { status: 400 }
@@ -142,16 +172,46 @@ export async function POST(request: NextRequest) {
     const depositResult = await depositToCasino(bookmakerToUse, accountId, amountToUse)
 
     if (!depositResult.success) {
-      // Сохраняем ошибку казино в базе данных
+      // ВАЖНО: Если депозит уже был проведен - это успешный результат, а не ошибка
+      const errorMessage = depositResult.message || 'Failed to deposit balance'
+      const isAlreadyProcessed = errorMessage.toLowerCase().includes('уже был проведен') || 
+                                  errorMessage.toLowerCase().includes('already processed') ||
+                                  errorMessage.toLowerCase().includes('повторить платеж')
+      
+      if (isAlreadyProcessed) {
+        // Если депозит уже был проведен (например, автопополнением), обновляем статус на approved
+        console.log(`✅ Deposit balance API - Deposit already processed for request ${requestId}, updating status to approved`)
+        const updatedRequest = await prisma.request.update({
+          where: { id: parseInt(requestId) },
+          data: {
+            status: 'approved',
+            processedAt: new Date(),
+            casinoError: null,
+          },
+        })
+
+        return NextResponse.json(
+          createApiResponse({
+            success: true,
+            message: 'Депозит уже был проведен. Статус обновлен.',
+            request: {
+              ...updatedRequest,
+              amount: updatedRequest.amount ? updatedRequest.amount.toString() : null,
+            },
+          })
+        )
+      }
+      
+      // Для других ошибок обрабатываем как обычно
       await prisma.request.update({
         where: { id: parseInt(requestId) },
         data: {
-          casinoError: depositResult.message || 'Failed to deposit balance',
+          casinoError: errorMessage,
         },
       })
       
       return NextResponse.json(
-        createApiResponse(null, depositResult.message || 'Failed to deposit balance'),
+        createApiResponse(null, errorMessage),
         { status: 500 }
       )
     }

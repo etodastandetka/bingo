@@ -76,8 +76,14 @@ export default function RequestDetailPage() {
   const [deletePaymentModalOpen, setDeletePaymentModalOpen] = useState(false)
   const [paymentToDelete, setPaymentToDelete] = useState<number | null>(null)
   const [deletingPayment, setDeletingPayment] = useState(false)
+  const [unlinkPaymentModalOpen, setUnlinkPaymentModalOpen] = useState(false)
+  const [paymentToUnlink, setPaymentToUnlink] = useState<number | null>(null)
+  const [unlinkingPayment, setUnlinkingPayment] = useState(false)
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
   const [scanningQr, setScanningQr] = useState(false)
+  const [isEditingAmount, setIsEditingAmount] = useState(false)
+  const [editAmount, setEditAmount] = useState('')
+  const [updatingAmount, setUpdatingAmount] = useState(false)
 
   const pushToast = (message: string, type: 'success' | 'error' | 'info' = 'info', timeout = 4000) => {
     setToast({ message, type })
@@ -1037,6 +1043,122 @@ export default function RequestDetailPage() {
     }
   }
 
+  const handleUnlinkPayment = async () => {
+    if (!paymentToUnlink) return
+    
+    setUnlinkingPayment(true)
+    try {
+      const response = await fetch(`/api/incoming-payments/${paymentToUnlink}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unlink: true }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        // Обновляем пополнение в списке - убираем привязку
+        setSimilarPayments(prev => prev.map(p => 
+          p.id === paymentToUnlink 
+            ? { ...p, isProcessed: false, requestId: null }
+            : p
+        ))
+        // Если это было выбранное пополнение, сбрасываем выбор
+        if (selectedPaymentId === paymentToUnlink) {
+          setSelectedPaymentId(null)
+          setSelectedPaymentPreview(null)
+        }
+        pushToast('Пополнение отвязано, заявка отклонена', 'success')
+        setUnlinkPaymentModalOpen(false)
+        setPaymentToUnlink(null)
+        
+        // Обновляем данные заявки, если мы на странице этой заявки
+        if (request && request.id) {
+          const requestId = Array.isArray(params.id) ? params.id[0] : params.id
+          if (requestId && parseInt(requestId) === request.id) {
+            // Обновляем статус заявки локально
+            setRequest(prev => prev ? {
+              ...prev,
+              status: 'rejected',
+            } : null)
+            
+            // Загружаем полные данные в фоне
+            fetch(`/api/requests/${requestId}`)
+              .then(res => res.json())
+              .then(fullData => {
+                if (fullData.success && isMountedRef.current) {
+                  setRequest(fullData.data)
+                }
+              })
+              .catch(err => console.error('Failed to reload request data:', err))
+          }
+        }
+      } else {
+        pushToast(data.error || 'Ошибка при отвязке пополнения', 'error')
+      }
+    } catch (error) {
+      console.error('Failed to unlink payment:', error)
+      pushToast('Ошибка при отвязке пополнения', 'error')
+    } finally {
+      setUnlinkingPayment(false)
+    }
+  }
+
+  const handleSaveAmount = async () => {
+    if (!request) return
+    
+    const newAmount = parseFloat(editAmount)
+    if (isNaN(newAmount) || newAmount <= 0) {
+      pushToast('Введите корректную сумму', 'error')
+      return
+    }
+    
+    setUpdatingAmount(true)
+    try {
+      const response = await fetch(`/api/requests/${request.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: newAmount.toString(),
+        }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        // Обновляем локальное состояние
+        setRequest(prev => prev ? {
+          ...prev,
+          amount: newAmount.toString(),
+        } : null)
+        
+        setIsEditingAmount(false)
+        setEditAmount('')
+        pushToast('Сумма обновлена', 'success')
+        
+        // Обновляем данные в фоне
+        const requestId = Array.isArray(params.id) ? params.id[0] : params.id
+        if (requestId) {
+          fetch(`/api/requests/${requestId}`)
+            .then(res => res.json())
+            .then(fullData => {
+              if (fullData.success && isMountedRef.current) {
+                setRequest(fullData.data)
+              }
+            })
+            .catch(err => console.error('Failed to reload request data:', err))
+        }
+      } else {
+        pushToast(data.error || 'Ошибка при обновлении суммы', 'error')
+      }
+    } catch (error) {
+      console.error('Failed to update amount:', error)
+      pushToast('Ошибка при обновлении суммы', 'error')
+    } finally {
+      setUpdatingAmount(false)
+    }
+  }
+
   const handleScanQrFromPhoto = async () => {
     if (!request || !request.photoFileUrl) {
       pushToast('Фото QR-кода не найдено в заявке', 'error')
@@ -1383,9 +1505,71 @@ export default function RequestDetailPage() {
           <p className="text-xs text-gray-400">
             {isDeposit ? 'Пополнение' : 'Вывод'}
           </p>
-          <p className={`text-xl font-bold ${showMinus ? 'text-red-500' : (isDeposit ? 'text-green-500' : 'text-red-500')}`}>
-            {showMinus ? '-' : (isDeposit ? '+' : '-')}{displayAmount}
-          </p>
+          <div className="flex items-center gap-2">
+            {isEditingAmount ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveAmount()
+                    } else if (e.key === 'Escape') {
+                      setIsEditingAmount(false)
+                      setEditAmount('')
+                    }
+                  }}
+                  className="text-xl font-bold bg-gray-700 border border-gray-600 rounded-lg px-2 py-1 w-32 text-right focus:outline-none focus:border-blue-500"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveAmount}
+                  disabled={updatingAmount}
+                  className="p-1 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                  title="Сохранить"
+                >
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditingAmount(false)
+                    setEditAmount('')
+                  }}
+                  disabled={updatingAmount}
+                  className="p-1 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                  title="Отмена"
+                >
+                  <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className={`text-xl font-bold ${showMinus ? 'text-red-500' : (isDeposit ? 'text-green-500' : 'text-red-500')}`}>
+                  {showMinus ? '-' : (isDeposit ? '+' : '-')}{displayAmount}
+                </p>
+                {!isSuccessStatus && (
+                  <button
+                    onClick={() => {
+                      setEditAmount(request.amount || '')
+                      setIsEditingAmount(true)
+                    }}
+                    className="p-1 hover:bg-gray-700 rounded-lg transition-colors"
+                    title="Изменить сумму"
+                  >
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1661,25 +1845,33 @@ export default function RequestDetailPage() {
                 })
 
                 const handleSelectPayment = () => {
+                  // Для обработанных пополнений не делаем ничего при клике на элемент
                   if (isProcessed) {
-                    // Для обработанных пополнений переходим к деталям связанной заявки
-                    if (payment.requestId) {
-                      router.push(`/dashboard/requests/${payment.requestId}`)
-                    }
                     return
                   }
+                  // Для необработанных - выбираем/снимаем выбор
                   const nextSelected = isSelected ? null : payment.id
                   setSelectedPaymentId(nextSelected)
                   setSelectedPaymentPreview(nextSelected ? formattedAmount : null)
+                }
+
+                const handleArrowClick = (e: React.MouseEvent | React.TouchEvent) => {
+                  e.stopPropagation()
+                  // Переход к заявке только при клике на стрелку
+                  if (isProcessed && payment.requestId) {
+                    router.push(`/dashboard/requests/${payment.requestId}`)
+                  }
                 }
 
                 // Локальная переменная для отслеживания долгого нажатия для этого платежа
                 let longPressTriggered = false
                 let paymentTimer: NodeJS.Timeout | null = null
                 
-                // Обработчик долгого нажатия (для мобильных)
+                // Обработчик долгого нажатия (для мобильных) - только для обработанных пополнений
                 const handleTouchStart = (e: React.TouchEvent) => {
-                  if (isProcessed) return // Не показываем для обработанных
+                  // Только для обработанных пополнений
+                  if (!isProcessed) return
+                  
                   longPressTriggered = false
                   paymentTimer = setTimeout(() => {
                     longPressTriggered = true
@@ -1687,8 +1879,9 @@ export default function RequestDetailPage() {
                     if (navigator.vibrate) {
                       navigator.vibrate(50)
                     }
-                    setPaymentToDelete(payment.id)
-                    setDeletePaymentModalOpen(true)
+                    // Для обработанных - показываем модальное окно отвязки
+                    setPaymentToUnlink(payment.id)
+                    setUnlinkPaymentModalOpen(true)
                   }, 500) // 500ms = полсекунды
                 }
 
@@ -1697,8 +1890,8 @@ export default function RequestDetailPage() {
                     clearTimeout(paymentTimer)
                     paymentTimer = null
                   }
-                  // Если долгое нажатие не сработало, выполняем обычный клик
-                  if (!longPressTriggered) {
+                  // Если долгое нажатие не сработало, выполняем обычный клик (только для необработанных)
+                  if (!longPressTriggered && !isProcessed) {
                     // Небольшая задержка, чтобы не конфликтовать с onClick
                     setTimeout(() => {
                       handleSelectPayment()
@@ -1714,29 +1907,32 @@ export default function RequestDetailPage() {
                   longPressTriggered = false
                 }
 
-                // Обработчик правого клика (для ПК)
+                // Обработчик правого клика (для ПК) - только для обработанных пополнений
                 const handleContextMenu = (e: React.MouseEvent) => {
-                  if (isProcessed) return // Не показываем для обработанных
+                  // Только для обработанных пополнений
+                  if (!isProcessed) return
+                  
                   e.preventDefault()
                   e.stopPropagation()
-                  setPaymentToDelete(payment.id)
-                  setDeletePaymentModalOpen(true)
+                  // Для обработанных - показываем модальное окно отвязки
+                  setPaymentToUnlink(payment.id)
+                  setUnlinkPaymentModalOpen(true)
                 }
 
                 return (
                   <div
                     key={payment.id}
-                    onClick={handleSelectPayment}
-                    onTouchStart={handleTouchStart}
-                    onTouchEnd={handleTouchEnd}
-                    onTouchCancel={handleTouchCancel}
-                    onContextMenu={handleContextMenu}
-                    className={`relative flex items-center rounded-xl p-3 cursor-pointer transition-all ${
+                    onClick={!isProcessed ? handleSelectPayment : undefined}
+                    onTouchStart={isProcessed ? handleTouchStart : undefined}
+                    onTouchEnd={!isProcessed ? handleTouchEnd : undefined}
+                    onTouchCancel={isProcessed ? handleTouchCancel : undefined}
+                    onContextMenu={isProcessed ? handleContextMenu : undefined}
+                    className={`relative flex items-center rounded-xl p-3 transition-all ${
                       isProcessed
-                        ? 'bg-gray-800 opacity-70 cursor-pointer border border-gray-700 hover:border-blue-500'
+                        ? 'bg-gray-800 opacity-70 border border-gray-700'
                         : isSelected
-                        ? 'bg-blue-500 bg-opacity-20 border-2 border-blue-500'
-                        : 'bg-gray-900 border border-gray-700 hover:border-green-500'
+                        ? 'bg-blue-500 bg-opacity-20 border-2 border-blue-500 cursor-pointer hover:border-blue-600'
+                        : 'bg-gray-900 border border-gray-700 cursor-pointer hover:border-green-500'
                     }`}
                   >
                     {/* Левая полоска */}
@@ -1758,9 +1954,16 @@ export default function RequestDetailPage() {
                         +{formattedAmount}
                       </p>
                       {isProcessed ? (
-                        <svg className="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                        </svg>
+                        <button
+                          onClick={handleArrowClick}
+                          onTouchEnd={handleArrowClick}
+                          className="p-1 hover:bg-gray-700 rounded-lg transition-colors cursor-pointer"
+                          title="Перейти к заявке"
+                        >
+                          <svg className="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
+                        </button>
                       ) : (
                         <svg className="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -2201,6 +2404,37 @@ export default function RequestDetailPage() {
                   className="px-5 py-2 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed transition-colors"
                 >
                   {deletingPayment ? 'Удаление...' : 'Да, удалить'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Модалка отвязки пополнения */}
+        {unlinkPaymentModalOpen && paymentToUnlink && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl p-6">
+              <h3 className="text-xl font-semibold text-white mb-3">Отвязать пополнение?</h3>
+              <p className="text-sm text-gray-300 mb-4 leading-relaxed">
+                Вы уверены, что хотите отвязать это пополнение от заявки? Заявка будет автоматически отклонена. Это действие нельзя отменить.
+              </p>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setUnlinkPaymentModalOpen(false)
+                    setPaymentToUnlink(null)
+                  }}
+                  disabled={unlinkingPayment}
+                  className="px-4 py-2 rounded-lg border border-gray-600 text-gray-200 hover:bg-gray-800 disabled:opacity-60"
+                >
+                  Нет
+                </button>
+                <button
+                  onClick={handleUnlinkPayment}
+                  disabled={unlinkingPayment}
+                  className="px-5 py-2 rounded-lg font-semibold text-white bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:cursor-not-allowed transition-colors"
+                >
+                  {unlinkingPayment ? 'Отвязка...' : 'Да, отвязать'}
                 </button>
               </div>
             </div>
