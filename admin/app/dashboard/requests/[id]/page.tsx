@@ -1919,10 +1919,23 @@ export default function RequestDetailPage() {
                   setUnlinkPaymentModalOpen(true)
                 }
 
+                // Обработчик двойного клика - только для обработанных пополнений
+                const handleDoubleClick = (e: React.MouseEvent) => {
+                  // Только для обработанных пополнений
+                  if (!isProcessed) return
+                  
+                  e.preventDefault()
+                  e.stopPropagation()
+                  // Для обработанных - показываем модальное окно отвязки
+                  setPaymentToUnlink(payment.id)
+                  setUnlinkPaymentModalOpen(true)
+                }
+
                 return (
                   <div
                     key={payment.id}
                     onClick={!isProcessed ? handleSelectPayment : undefined}
+                    onDoubleClick={isProcessed ? handleDoubleClick : undefined}
                     onTouchStart={isProcessed ? handleTouchStart : undefined}
                     onTouchEnd={!isProcessed ? handleTouchEnd : undefined}
                     onTouchCancel={isProcessed ? handleTouchCancel : undefined}
