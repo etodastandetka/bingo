@@ -202,6 +202,40 @@ export async function PATCH(
       data: updateData,
     })
 
+    // Если подтверждаем депозит и нет привязанного платежа - создаем поступление
+    if (body.status && ['completed', 'approved'].includes(body.status) && 
+        currentRequest.requestType === 'deposit' && 
+        currentRequest.amount) {
+      // Проверяем, есть ли уже привязанные платежи к этой заявке
+      const existingPayments = await prisma.incomingPayment.findMany({
+        where: {
+          requestId: id,
+          isProcessed: true,
+        },
+      })
+
+      // Если нет привязанных платежей - создаем новый
+      if (existingPayments.length === 0) {
+        try {
+          const paymentAmount = parseFloat(currentRequest.amount.toString())
+          const newPayment = await prisma.incomingPayment.create({
+            data: {
+              amount: paymentAmount,
+              bank: currentRequest.bank || null,
+              paymentDate: new Date(),
+              notificationText: `Создано автоматически при подтверждении заявки #${id}`,
+              requestId: id,
+              isProcessed: true,
+            },
+          })
+          console.log(`✅ Created incoming payment ${newPayment.id} for request ${id} (amount: ${paymentAmount})`)
+        } catch (error: any) {
+          console.error(`❌ Failed to create incoming payment for request ${id}:`, error)
+          // Не прерываем выполнение, если не удалось создать платеж
+        }
+      }
+    }
+
     // Отправляем уведомления при изменении статуса (асинхронно, не блокируем ответ)
     if (body.status && body.status !== currentRequest.status) {
       // Запускаем отправку уведомлений в фоне, не ждем завершения
