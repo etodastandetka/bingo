@@ -221,8 +221,15 @@ export default function OperatorChatPage() {
   }
 
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const isFirstLoadRef = useRef(true)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Убрана автоматическая прокрутка - пользователь сам контролирует скролл
+  // Прокрутка вниз только при первой загрузке чата
+  const scrollToBottom = () => {
+    if (messagesEndRef.current && messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+    }
+  }
 
   const fetchChatData = async () => {
     try {
@@ -270,6 +277,14 @@ export default function OperatorChatPage() {
           const sorted = uniqueMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
           return sorted
         })
+        
+        // Прокручиваем вниз только при первой загрузке
+        if (isFirstLoadRef.current) {
+          setTimeout(() => {
+            scrollToBottom()
+            isFirstLoadRef.current = false
+          }, 100)
+        }
       }
 
       if (userData.success && userData.data) {
@@ -904,6 +919,7 @@ export default function OperatorChatPage() {
             )
           })
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Контекстное меню */}

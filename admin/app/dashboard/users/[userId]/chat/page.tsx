@@ -48,8 +48,15 @@ export default function ChatPage() {
   }, [params.userId])
 
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const isFirstLoadRef = useRef(true)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Убрана автоматическая прокрутка - пользователь сам контролирует скролл
+  // Прокрутка вниз только при первой загрузке чата
+  const scrollToBottom = () => {
+    if (messagesEndRef.current && messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+    }
+  }
 
   const fetchChatData = async () => {
     try {
@@ -71,6 +78,14 @@ export default function ChatPage() {
         // Разворачиваем, чтобы старые были сверху
         const reversedMessages = [...chatData.data.messages].reverse()
         setMessages(reversedMessages)
+        
+        // Прокручиваем вниз только при первой загрузке
+        if (isFirstLoadRef.current) {
+          setTimeout(() => {
+            scrollToBottom()
+            isFirstLoadRef.current = false
+          }, 100)
+        }
       } else {
         setMessages([])
       }
@@ -275,6 +290,7 @@ export default function ChatPage() {
             </div>
           ))
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Поле ввода */}
