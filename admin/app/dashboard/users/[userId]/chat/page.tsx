@@ -33,7 +33,6 @@ export default function ChatPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -49,41 +48,8 @@ export default function ChatPage() {
   }, [params.userId])
 
   const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
 
-  // Проверяем, находится ли пользователь внизу чата
-  const isNearBottom = () => {
-    if (!messagesContainerRef.current) return true
-    const container = messagesContainerRef.current
-    const threshold = 100 // 100px от низа
-    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold
-  }
-
-  // Отслеживаем скролл пользователя
-  useEffect(() => {
-    const container = messagesContainerRef.current
-    if (!container) return
-
-    const handleScroll = () => {
-      setShouldAutoScroll(isNearBottom())
-    }
-
-    container.addEventListener('scroll', handleScroll)
-    return () => container.removeEventListener('scroll', handleScroll)
-  }, [])
-
-  // Автоматическая прокрутка только если пользователь внизу
-  useEffect(() => {
-    if (shouldAutoScroll) {
-      setTimeout(() => {
-        scrollToBottom()
-      }, 100)
-    }
-  }, [messages, shouldAutoScroll])
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  // Убрана автоматическая прокрутка - пользователь сам контролирует скролл
 
   const fetchChatData = async () => {
     try {
@@ -176,9 +142,6 @@ export default function ChatPage() {
       if (data.success) {
         setNewMessage('')
         removeFile()
-        // Принудительно скроллим вниз после отправки
-        setShouldAutoScroll(true)
-        setTimeout(() => scrollToBottom(), 100)
         // Обновляем чат
         await fetchChatData()
       } else {
@@ -312,7 +275,6 @@ export default function ChatPage() {
             </div>
           ))
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Поле ввода */}

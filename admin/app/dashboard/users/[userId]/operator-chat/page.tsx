@@ -82,7 +82,6 @@ export default function OperatorChatPage() {
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -222,41 +221,8 @@ export default function OperatorChatPage() {
   }
 
   const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
 
-  // Проверяем, находится ли пользователь внизу чата
-  const isNearBottom = () => {
-    if (!messagesContainerRef.current) return true
-    const container = messagesContainerRef.current
-    const threshold = 100 // 100px от низа
-    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold
-  }
-
-  // Отслеживаем скролл пользователя
-  useEffect(() => {
-    const container = messagesContainerRef.current
-    if (!container) return
-
-    const handleScroll = () => {
-      setShouldAutoScroll(isNearBottom())
-    }
-
-    container.addEventListener('scroll', handleScroll)
-    return () => container.removeEventListener('scroll', handleScroll)
-  }, [])
-
-  // Автоматическая прокрутка только если пользователь внизу
-  useEffect(() => {
-    if (shouldAutoScroll) {
-      setTimeout(() => {
-        scrollToBottom()
-      }, 100)
-    }
-  }, [messages, shouldAutoScroll])
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  // Убрана автоматическая прокрутка - пользователь сам контролирует скролл
 
   const fetchChatData = async () => {
     try {
@@ -370,10 +336,6 @@ export default function OperatorChatPage() {
     setMessages(prev => [tempMessage, ...prev])
     setNewMessage('')
     removeFile()
-    
-    // Принудительно скроллим вниз после отправки
-    setShouldAutoScroll(true)
-    setTimeout(() => scrollToBottom(), 100)
 
     setSending(true)
     try {
@@ -942,7 +904,6 @@ export default function OperatorChatPage() {
             )
           })
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Контекстное меню */}
