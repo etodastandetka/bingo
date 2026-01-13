@@ -319,6 +319,14 @@ async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
     """Казино выбрано, запрашиваем ID счета"""
     lang = await get_lang_from_state(state)
     casino_id = callback.data.replace('casino_', '')
+    
+    # Проверяем, включено ли казино
+    settings = await APIClient.get_payment_settings()
+    enabled_casinos = settings.get('casinos', {})
+    if enabled_casinos.get(casino_id, True) is False:
+        await callback.answer(get_text(lang, 'deposit', 'casino_disabled', default='❌ Это казино временно отключено'), show_alert=True)
+        return
+    
     casino_name = next((c['name'] for c in Config.CASINOS if c['id'] == casino_id), casino_id)
     
     await state.update_data(casino_id=casino_id, casino_name=casino_name)
@@ -652,6 +660,12 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                             url=bank_url
                         ))
             
+            # Проверяем, есть ли доступные банки
+            if not bank_buttons:
+                # Все банки отключены - показываем сообщение
+                await message.answer(get_text(lang, 'deposit', 'banks_disabled'))
+                return
+            
             # Разбиваем кнопки по 2 в ряд
             keyboard_rows = []
             for i in range(0, len(bank_buttons), 2):
@@ -671,12 +685,6 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                         text=get_text(lang, 'deposit', 'cancel'),
                         callback_data='deposit_cancel'
                     )])
-            else:
-                # Если нет кнопок банков, создаем только кнопку отмены
-                keyboard_rows.append([InlineKeyboardButton(
-                    text=get_text(lang, 'deposit', 'cancel'),
-                    callback_data='deposit_cancel'
-                )])
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows) if keyboard_rows else None
             

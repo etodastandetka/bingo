@@ -53,13 +53,19 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
         print(f"Error checking blocked status: {e}")
         # Продолжаем работу, если проверка не удалась
     
-    # Проверяем pause режим
+    # Проверяем pause режим и включение казино
     settings = {}
     try:
         settings = await APIClient.get_payment_settings()
         if settings.get('pause', False):
             maintenance_message = settings.get('maintenance_message', get_text(lang, 'start', 'bot_paused'))
             await message.answer(maintenance_message)
+            return
+        
+        # Проверяем, включено ли казино Mostbet
+        enabled_casinos = settings.get('casinos', {})
+        if enabled_casinos.get('mostbet', True) is False:
+            await message.answer(get_text(lang, 'deposit', 'casino_disabled', default='❌ Mostbet временно отключен'))
             return
     except Exception:
         pass  # Если не удалось получить настройки, продолжаем работу
@@ -129,6 +135,12 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
         settings = await APIClient.get_payment_settings()
     except Exception:
         pass
+    
+    # Проверяем, включено ли казино Mostbet
+    enabled_casinos = settings.get('casinos', {})
+    if enabled_casinos.get('mostbet', True) is False:
+        await callback.answer(get_text(lang, 'deposit', 'casino_disabled', default='❌ Mostbet временно отключен'), show_alert=True)
+        return
     
     channel = settings.get('channel') or Config.CHANNEL
     # Убеждаемся что channel - строка

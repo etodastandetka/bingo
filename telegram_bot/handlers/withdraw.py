@@ -158,11 +158,9 @@ async def withdraw_casino_selected(callback: CallbackQuery, state: FSMContext):
     # Получаем настройки из админки для фильтрации банков
     settings = await APIClient.get_payment_settings()
     withdrawals_settings = settings.get('withdrawals', {})
-    enabled_banks = withdrawals_settings.get('banks', []) if isinstance(withdrawals_settings, dict) else []
-    
-    # Если список пустой или настройки не получены, используем все банки из конфига
-    if not enabled_banks:
-        enabled_banks = [bank['id'] for bank in Config.WITHDRAW_BANKS]
+    # Используем дефолтный список всех банков из конфига, если настройки не получены
+    default_banks = [bank['id'] for bank in Config.WITHDRAW_BANKS]
+    enabled_banks = withdrawals_settings.get('banks', default_banks) if isinstance(withdrawals_settings, dict) else default_banks
     
     # Создаем инлайн клавиатуру для банков
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
@@ -183,18 +181,9 @@ async def withdraw_casino_selected(callback: CallbackQuery, state: FSMContext):
     
     # Проверяем, что есть хотя бы одна кнопка
     if not keyboard.inline_keyboard:
-        # Если кнопок нет, показываем все банки как fallback
-        row = []
-        for bank in Config.WITHDRAW_BANKS:
-            row.append(InlineKeyboardButton(
-                text=bank['name'],
-                callback_data=f'withdraw_bank_{bank["id"]}'
-            ))
-            if len(row) == 2:
-                keyboard.inline_keyboard.append(row)
-                row = []
-        if row:
-            keyboard.inline_keyboard.append(row)
+        # Все банки отключены - показываем сообщение
+        await callback.message.answer(get_text(lang, 'withdraw', 'banks_disabled'))
+        return
     
     await callback.message.answer(
         get_text(lang, 'withdraw', 'select_bank', casino=casino_name),

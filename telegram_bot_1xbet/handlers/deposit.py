@@ -38,6 +38,26 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
                 # Таймер истек
                 logger.info(f"[Timer] Expired for message {message_id}, deleting message and returning to main menu")
                 
+                # ВАЖНО: Отклоняем заявку при истечении таймера
+                if state:
+                    # Пытаемся получить request_id из state
+                    try:
+                        data = await state.get_data()
+                        pending_request_id = data.get('pending_request_id') or data.get('request_id')
+                        if pending_request_id:
+                            from api_client import APIClient
+                            reject_result = await APIClient.update_request(
+                                request_id=str(pending_request_id),
+                                status='rejected',
+                                status_detail='Таймер истек'
+                            )
+                            if reject_result.get('success'):
+                                logger.info(f"[Timer] Auto-rejected request {pending_request_id} due to timer expiration")
+                            else:
+                                logger.warning(f"[Timer] Failed to reject request {pending_request_id}: {reject_result.get('error')}")
+                    except Exception as e:
+                        logger.warning(f"[Timer] Could not reject request from state: {e}")
+                
                 # Удаляем сообщение с QR-кодом
                 try:
                     await bot.delete_message(chat_id=chat_id, message_id=message_id)
@@ -575,6 +595,13 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                             url=bank_url
                         ))
             
+            # Проверяем, есть ли доступные банки
+            if not bank_buttons:
+                # Все банки отключены - показываем сообщение
+                await generating_msg.delete()
+                await message.answer(get_text(lang, 'deposit', 'banks_disabled'))
+                return
+            
             # Разбиваем кнопки по 2 в ряд
             keyboard_rows = []
             for i in range(0, len(bank_buttons), 2):
@@ -594,12 +621,6 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                         text=get_text(lang, 'deposit', 'cancel'),
                         callback_data='deposit_cancel'
                     )])
-            else:
-                # Если нет кнопок банков, создаем только кнопку отмены
-                keyboard_rows.append([InlineKeyboardButton(
-                    text=get_text(lang, 'deposit', 'cancel'),
-                    callback_data='deposit_cancel'
-                )])
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows) if keyboard_rows else None
             

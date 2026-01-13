@@ -91,15 +91,20 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     
     console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in window ±5min from request createdAt (${requestCreatedAt.toISOString()}) for request ${requestId}`)
     
-    // Фильтруем по ТОЧНОМУ совпадению суммы (без допуска)
+    // Фильтруем по ТОЧНОМУ совпадению суммы (до копейки)
     const exactMatches = matchingPayments.filter((payment) => {
       const paymentAmount = parseFloat(payment.amount.toString())
-      // Точное сравнение: суммы должны совпадать полностью (включая копейки)
-      // Используем очень маленький допуск (0.0001) только для ошибок округления float
+      // ТОЧНОЕ сравнение: суммы должны совпадать в точности до копейки (2 знака после запятой)
+      // Округляем до 2 знаков после запятой для корректного сравнения денежных сумм
+      const paymentRounded = Math.round(paymentAmount * 100) / 100 // Округление до 2 знаков
+      const amountRounded = Math.round(amount * 100) / 100 // Округление до 2 знаков
+      const matches = paymentRounded === amountRounded // Точное равенство без допуска
       const diff = Math.abs(paymentAmount - amount)
-      const matches = diff < 0.0001 // Только для ошибок округления, не для допуска копеек
+      
       if (matches) {
         console.log(`✅ [Auto-Deposit] Exact match found: Payment ${payment.id} (${paymentAmount}) = Request ${requestId} (${amount}), diff: ${diff.toFixed(6)}`)
+      } else {
+        console.log(`❌ [Auto-Deposit] Amount mismatch: Payment ${payment.id} (${paymentAmount.toFixed(2)}) ≠ Request ${requestId} (${amount.toFixed(2)}), diff: ${diff.toFixed(2)}`)
       }
       return matches
     })
@@ -259,13 +264,17 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     }
     
     const reqAmount = parseFloat(req.amount.toString())
-    // Точное сравнение: суммы должны совпадать полностью (включая копейки)
-    // Используем очень маленький допуск (0.0001) только для ошибок округления float
+    // ТОЧНОЕ сравнение: суммы должны совпадать в точности до копейки (2 знака после запятой)
+    // Округляем до 2 знаков после запятой для корректного сравнения денежных сумм
+    const reqAmountRounded = Math.round(reqAmount * 100) / 100 // Округление до 2 знаков
+    const amountRounded = Math.round(amount * 100) / 100 // Округление до 2 знаков
+    const matches = reqAmountRounded === amountRounded // Точное равенство без допуска
     const diff = Math.abs(reqAmount - amount)
-    const matches = diff < 0.0001 // Только для ошибок округления, не для допуска копеек
     
     if (matches) {
       console.log(`✅ [Auto-Deposit] Exact match: Request ${req.id} (${reqAmount}) = Payment ${amount} (diff: ${diff.toFixed(6)}, time diff: ${Math.floor(timeDiff / 1000)}s)`)
+    } else {
+      console.log(`❌ [Auto-Deposit] Amount mismatch: Request ${req.id} (${reqAmount.toFixed(2)}) ≠ Payment (${amount.toFixed(2)}), diff: ${diff.toFixed(2)}, time diff: ${Math.floor(timeDiff / 1000)}s`)
     }
     
     return matches

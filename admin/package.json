@@ -16,6 +16,8 @@
     "create-user": "tsx scripts/create-user.ts",
     "update-casino-passwords": "tsx scripts/update-casino-passwords.ts",
     "check-casino-config": "tsx scripts/check-casino-config.ts",
+    "get-mostbet-config": "tsx scripts/get-mostbet-config.ts",
+    "update-mostbet-config": "tsx scripts/update-mostbet-config.ts",
     "test:operator-chat": "tsx scripts/test-operator-chat.ts",
     "test:operator-chat-direct": "tsx scripts/test-chat-direct.ts",
     "init:quick-replies": "tsx scripts/init-quick-replies.ts",

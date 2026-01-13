@@ -76,9 +76,6 @@ export default function RequestDetailPage() {
   const [deletePaymentModalOpen, setDeletePaymentModalOpen] = useState(false)
   const [paymentToDelete, setPaymentToDelete] = useState<number | null>(null)
   const [deletingPayment, setDeletingPayment] = useState(false)
-  const [unlinkPaymentModalOpen, setUnlinkPaymentModalOpen] = useState(false)
-  const [paymentToUnlink, setPaymentToUnlink] = useState<number | null>(null)
-  const [unlinkingPayment, setUnlinkingPayment] = useState(false)
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
   const [scanningQr, setScanningQr] = useState(false)
   const [isEditingAmount, setIsEditingAmount] = useState(false)
@@ -1043,67 +1040,6 @@ export default function RequestDetailPage() {
     }
   }
 
-  const handleUnlinkPayment = async () => {
-    if (!paymentToUnlink) return
-    
-    setUnlinkingPayment(true)
-    try {
-      const response = await fetch(`/api/incoming-payments/${paymentToUnlink}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ unlink: true }),
-      })
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        // Обновляем пополнение в списке - убираем привязку
-        setSimilarPayments(prev => prev.map(p => 
-          p.id === paymentToUnlink 
-            ? { ...p, isProcessed: false, requestId: null }
-            : p
-        ))
-        // Если это было выбранное пополнение, сбрасываем выбор
-        if (selectedPaymentId === paymentToUnlink) {
-          setSelectedPaymentId(null)
-          setSelectedPaymentPreview(null)
-        }
-        pushToast('Пополнение отвязано, заявка отклонена', 'success')
-        setUnlinkPaymentModalOpen(false)
-        setPaymentToUnlink(null)
-        
-        // Обновляем данные заявки, если мы на странице этой заявки
-        if (request && request.id) {
-          const requestId = Array.isArray(params.id) ? params.id[0] : params.id
-          if (requestId && parseInt(requestId) === request.id) {
-            // Обновляем статус заявки локально
-            setRequest(prev => prev ? {
-              ...prev,
-              status: 'rejected',
-            } : null)
-            
-            // Загружаем полные данные в фоне
-            fetch(`/api/requests/${requestId}`)
-              .then(res => res.json())
-              .then(fullData => {
-                if (fullData.success && isMountedRef.current) {
-                  setRequest(fullData.data)
-                }
-              })
-              .catch(err => console.error('Failed to reload request data:', err))
-          }
-        }
-      } else {
-        pushToast(data.error || 'Ошибка при отвязке пополнения', 'error')
-      }
-    } catch (error) {
-      console.error('Failed to unlink payment:', error)
-      pushToast('Ошибка при отвязке пополнения', 'error')
-    } finally {
-      setUnlinkingPayment(false)
-    }
-  }
-
   const handleSaveAmount = async () => {
     if (!request) return
     
@@ -1863,83 +1799,11 @@ export default function RequestDetailPage() {
                   }
                 }
 
-                // Локальная переменная для отслеживания долгого нажатия для этого платежа
-                let longPressTriggered = false
-                let paymentTimer: NodeJS.Timeout | null = null
-                
-                // Обработчик долгого нажатия (для мобильных) - только для обработанных пополнений
-                const handleTouchStart = (e: React.TouchEvent) => {
-                  // Только для обработанных пополнений
-                  if (!isProcessed) return
-                  
-                  longPressTriggered = false
-                  paymentTimer = setTimeout(() => {
-                    longPressTriggered = true
-                    // Вибрация (если поддерживается)
-                    if (navigator.vibrate) {
-                      navigator.vibrate(50)
-                    }
-                    // Для обработанных - показываем модальное окно отвязки
-                    setPaymentToUnlink(payment.id)
-                    setUnlinkPaymentModalOpen(true)
-                  }, 500) // 500ms = полсекунды
-                }
-
-                const handleTouchEnd = (e: React.TouchEvent) => {
-                  if (paymentTimer) {
-                    clearTimeout(paymentTimer)
-                    paymentTimer = null
-                  }
-                  // Если долгое нажатие не сработало, выполняем обычный клик (только для необработанных)
-                  if (!longPressTriggered && !isProcessed) {
-                    // Небольшая задержка, чтобы не конфликтовать с onClick
-                    setTimeout(() => {
-                      handleSelectPayment()
-                    }, 50)
-                  }
-                }
-
-                const handleTouchCancel = () => {
-                  if (paymentTimer) {
-                    clearTimeout(paymentTimer)
-                    paymentTimer = null
-                  }
-                  longPressTriggered = false
-                }
-
-                // Обработчик правого клика (для ПК) - только для обработанных пополнений
-                const handleContextMenu = (e: React.MouseEvent) => {
-                  // Только для обработанных пополнений
-                  if (!isProcessed) return
-                  
-                  e.preventDefault()
-                  e.stopPropagation()
-                  // Для обработанных - показываем модальное окно отвязки
-                  setPaymentToUnlink(payment.id)
-                  setUnlinkPaymentModalOpen(true)
-                }
-
-                // Обработчик двойного клика - только для обработанных пополнений
-                const handleDoubleClick = (e: React.MouseEvent) => {
-                  // Только для обработанных пополнений
-                  if (!isProcessed) return
-                  
-                  e.preventDefault()
-                  e.stopPropagation()
-                  // Для обработанных - показываем модальное окно отвязки
-                  setPaymentToUnlink(payment.id)
-                  setUnlinkPaymentModalOpen(true)
-                }
 
                 return (
                   <div
                     key={payment.id}
                     onClick={!isProcessed ? handleSelectPayment : undefined}
-                    onDoubleClick={isProcessed ? handleDoubleClick : undefined}
-                    onTouchStart={isProcessed ? handleTouchStart : undefined}
-                    onTouchEnd={!isProcessed ? handleTouchEnd : undefined}
-                    onTouchCancel={isProcessed ? handleTouchCancel : undefined}
-                    onContextMenu={isProcessed ? handleContextMenu : undefined}
                     className={`relative flex items-center rounded-xl p-3 transition-all ${
                       isProcessed
                         ? 'bg-gray-800 opacity-70 border border-gray-700'
@@ -2417,37 +2281,6 @@ export default function RequestDetailPage() {
                   className="px-5 py-2 rounded-lg font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed transition-colors"
                 >
                   {deletingPayment ? 'Удаление...' : 'Да, удалить'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Модалка отвязки пополнения */}
-        {unlinkPaymentModalOpen && paymentToUnlink && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
-            <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl p-6">
-              <h3 className="text-xl font-semibold text-white mb-3">Отвязать пополнение?</h3>
-              <p className="text-sm text-gray-300 mb-4 leading-relaxed">
-                Вы уверены, что хотите отвязать это пополнение от заявки? Заявка будет автоматически отклонена. Это действие нельзя отменить.
-              </p>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => {
-                    setUnlinkPaymentModalOpen(false)
-                    setPaymentToUnlink(null)
-                  }}
-                  disabled={unlinkingPayment}
-                  className="px-4 py-2 rounded-lg border border-gray-600 text-gray-200 hover:bg-gray-800 disabled:opacity-60"
-                >
-                  Нет
-                </button>
-                <button
-                  onClick={handleUnlinkPayment}
-                  disabled={unlinkingPayment}
-                  className="px-5 py-2 rounded-lg font-semibold text-white bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:cursor-not-allowed transition-colors"
-                >
-                  {unlinkingPayment ? 'Отвязка...' : 'Да, отвязать'}
                 </button>
               </div>
             </div>
