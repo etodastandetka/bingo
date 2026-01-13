@@ -787,6 +787,22 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
         # Не отправляем сообщение, просто игнорируем фото
         return
     
+    # КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем, не истек ли таймер
+    import time
+    qr_created_at = data.get('qr_created_at')
+    timer_duration = data.get('timer_duration')
+    if qr_created_at and timer_duration:
+        current_time = int(time.time())
+        elapsed = current_time - qr_created_at
+        if elapsed >= timer_duration:
+            # Таймер истек, очищаем состояние и отклоняем фото
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"[Deposit] Photo received after timer expiration for user {message.from_user.id}, clearing state")
+            await state.clear()
+            await message.answer(get_text(lang, 'deposit', 'timer_expired', default='⏰ Время на оплату истекло. Пожалуйста, начните заново.'))
+            return
+    
     # Останавливаем таймер и удаляем сообщение с QR-кодом если есть
     qr_message_id = data.get('qr_message_id')
     if qr_message_id:
