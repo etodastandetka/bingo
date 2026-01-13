@@ -178,20 +178,18 @@ async function processEmail(
               ? new Date(isoDatetime)
               : emailDate // Используем дату письма, если не удалось распарсить дату из текста
 
-            // ВАЖНО: Проверяем, не существует ли уже такой платеж (по сумме, дате и банку)
+            // ВАЖНО: Проверяем, не было ли уже обработано это письмо (по notificationText)
             // Это предотвращает дубликаты при повторной обработке писем
-            // Используем строгое окно ±2 минуты для более точной проверки дубликатов
-            // Проверяем ВСЕ платежи (обработанные и необработанные) для надежности
+            // НЕ проверяем по сумме и дате, так как могут быть разные реальные платежи с одинаковой суммой
+            // Используем notificationText для идентификации конкретного письма
+            const notificationTextPreview = text.substring(0, 500)
             const existingPayment = await prisma.incomingPayment.findFirst({
               where: {
-                amount: {
-                  gte: amount - 0.0001, // Точное сравнение с учетом ошибок округления
-                  lte: amount + 0.0001,
-                },
+                notificationText: notificationTextPreview,
                 bank: bank,
-                paymentDate: {
-                  gte: new Date(paymentDate.getTime() - 2 * 60000), // ±2 минуты (более строго)
-                  lte: new Date(paymentDate.getTime() + 2 * 60000),
+                // Проверяем только платежи, созданные в последние 7 дней (чтобы не искать слишком далеко)
+                createdAt: {
+                  gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
                 },
               },
               orderBy: { createdAt: 'desc' },
