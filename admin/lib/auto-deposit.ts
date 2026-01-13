@@ -275,6 +275,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     select: {
       id: true,
       paymentDate: true,
+      createdAt: true, // ВАЖНО: Проверяем когда платеж был создан в БД
       isProcessed: true,
       amount: true,
     },
@@ -290,19 +291,28 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     return null
   }
   
-  // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Платеж не должен быть старше 15 минут от текущего момента
-  // Это предотвращает обработку очень старых платежей (например, вчерашних)
-  const maxPaymentAge = new Date(Date.now() - 15 * 60 * 1000) // 15 минут назад
-  if (paymentInfo.paymentDate < maxPaymentAge) {
-    console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} is too old (${paymentInfo.paymentDate.toISOString()}), skipping`)
+  // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Платеж не должен быть создан в БД более 10 минут назад
+  // ВАЖНО: Проверяем createdAt (когда создан в БД), а не paymentDate (из письма)
+  // paymentDate может быть в прошлом (когда платеж был совершен), но createdAt - это когда письмо обработано
+  const maxPaymentAge = new Date(Date.now() - 10 * 60 * 1000) // 10 минут назад
+  if (paymentInfo.createdAt < maxPaymentAge) {
+    console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} createdAt is too old (${paymentInfo.createdAt.toISOString()}), skipping`)
     return null
   }
+  
+  console.log(`✅ [Auto-Deposit] Payment ${paymentId} is recent: createdAt=${paymentInfo.createdAt.toISOString()}, paymentDate=${paymentInfo.paymentDate.toISOString()}`)
   
   // Ищем заявки на пополнение со статусом pending за последние 10 минут
   // Увеличено до 10 минут для учета задержек обработки email и создания заявок
   // Это защищает от случайного пополнения если пользователь не пополнял
   // И предотвращает обработку старых заявок с одинаковыми суммами
   const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+  
+  console.log(`🔍 [Auto-Deposit] matchAndProcessPayment searching requests for payment ${paymentId}:`)
+  console.log(`   Payment amount: ${amount}`)
+  console.log(`   Payment createdAt: ${paymentInfo.createdAt.toISOString()}`)
+  console.log(`   Payment paymentDate: ${paymentInfo.paymentDate.toISOString()}`)
+  console.log(`   Searching requests created after: ${tenMinutesAgo.toISOString()}`)
 
     // Оптимизированный поиск заявок - минимум запросов для максимальной скорости
     // Ищем за последние 10 минут чтобы учесть возможные задержки
@@ -328,6 +338,15 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
         incomingPayments: { select: { id: true, isProcessed: true } },
       },
     })
+    
+    console.log(`🔍 [Auto-Deposit] Found ${matchingRequests.length} pending requests in last 10 minutes`)
+    if (matchingRequests.length > 0) {
+      matchingRequests.forEach((req) => {
+        const reqAmount = req.amount ? parseFloat(req.amount.toString()) : 0
+        const diff = Math.abs(reqAmount - amount)
+        console.log(`   Request ${req.id}: amount=${reqAmount}, createdAt=${req.createdAt.toISOString()}, diff=${diff.toFixed(4)}`)
+      })
+    }
 
     // Быстрая фильтрация по точному совпадению суммы И времени
     const exactMatches = matchingRequests.filter((req) => {
@@ -373,6 +392,9 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
 
   if (exactMatches.length === 0) {
     console.log(`ℹ️ [Auto-Deposit] No exact matches found for payment ${paymentId} (amount: ${amount})`)
+    if (matchingRequests.length > 0) {
+      console.log(`   Checked ${matchingRequests.length} requests, amounts: ${matchingRequests.map(r => r.amount || 'N/A').join(', ')}`)
+    }
     return null
   }
   
