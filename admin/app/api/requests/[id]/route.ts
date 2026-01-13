@@ -100,11 +100,8 @@ export async function GET(
       })
     }
 
-    // Логируем размер photoFileUrl для диагностики
+    // Вычисляем размер photoFileUrl для проверки (без логирования, чтобы не спамить)
     const photoSize = requestData.photoFileUrl ? requestData.photoFileUrl.length : 0
-    if (photoSize > 0) {
-      console.log(`📸 [Request ${id}] Photo size: ${photoSize} bytes (${(photoSize / 1024).toFixed(2)} KB)`)
-    }
 
     return NextResponse.json(
       createApiResponse({
