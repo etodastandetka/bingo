@@ -179,21 +179,14 @@ async function processEmail(
               : emailDate // Используем дату письма, если не удалось распарсить дату из текста
 
             // ВАЖНО: Проверяем, не было ли уже обработано это письмо
-            // Проверяем по сумме + дате + notificationText для более точного определения дубликатов
-            // Это предотвращает дубликаты при повторной обработке писем
+            // Проверяем ТОЛЬКО по notificationText и bank - это уникальный идентификатор письма
+            // НЕ проверяем по amount и paymentDate, так как разные платежи могут иметь одинаковую сумму и близкие даты
             const notificationTextPreview = text.substring(0, 500)
             const existingPayment = await prisma.incomingPayment.findFirst({
               where: {
                 AND: [
                   { notificationText: notificationTextPreview },
                   { bank: bank },
-                  { amount: amount }, // Точное совпадение суммы
-                  { 
-                    paymentDate: {
-                      gte: new Date(paymentDate.getTime() - 2 * 60 * 1000), // ±2 минуты от даты платежа
-                      lte: new Date(paymentDate.getTime() + 2 * 60 * 1000),
-                    }
-                  },
                   // Проверяем только платежи, созданные в последние 7 дней
                   {
                     createdAt: {
@@ -206,8 +199,8 @@ async function processEmail(
             })
 
             if (existingPayment) {
-              console.log(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Payment already exists: ID ${existingPayment.id}, amount: ${amount}, date: ${paymentDate.toISOString()}`)
-              console.log(`   Skipping duplicate payment. Email UID ${uid} already processed.`)
+              console.log(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Payment already exists: ID ${existingPayment.id}, amount: ${existingPayment.amount}, date: ${existingPayment.paymentDate.toISOString()}`)
+              console.log(`   Skipping duplicate payment. Email UID ${uid} already processed (same notificationText and bank).`)
               // Письмо уже помечено как прочитанное выше, просто завершаем
               resolve()
               return
