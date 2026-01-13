@@ -947,13 +947,14 @@ export async function startWatcher(): Promise<void> {
     console.warn('⚠️ Initial timeout check failed:', error.message)
   })
 
-  // Запускаем периодическую проверку pending заявок с фото чека каждые 30 секунд
+  // Запускаем периодическую проверку pending заявок с фото чека каждую секунду
   // Это обрабатывает случаи, когда платеж приходит ПОСЛЕ создания заявки
+  // Проверка каждую секунду для мгновенной реакции на новые платежи
   const pendingCheckInterval = setInterval(() => {
     checkPendingRequestsWithPhotos().catch((error) => {
       console.warn('⚠️ Pending requests check failed:', error.message)
     })
-  }, 30000) // Каждые 30 секунд
+  }, 1000) // Каждую секунду для мгновенной реакции
 
   // Проверяем pending заявки сразу при запуске
   checkPendingRequestsWithPhotos().catch((error) => {
