@@ -332,6 +332,28 @@ export async function POST(request: NextRequest) {
     // Обрабатываем фото чека
     const processedPhoto = cleanBase64(receipt_photo)
     
+    // Детальное логирование фото для отладки
+    if (receipt_photo !== undefined) {
+      console.log('📸 Payment API - Photo processing:', {
+        receipt_photo_type: typeof receipt_photo,
+        receipt_photo_is_null: receipt_photo === null,
+        receipt_photo_is_undefined: receipt_photo === undefined,
+        receipt_photo_length: receipt_photo ? String(receipt_photo).length : 0,
+        receipt_photo_preview: receipt_photo ? String(receipt_photo).substring(0, 100) : 'N/A',
+        processed_photo_result: processedPhoto ? 'VALID' : 'NULL/INVALID',
+        processed_photo_length: processedPhoto ? processedPhoto.length : 0,
+        photo_will_be_saved: !!processedPhoto
+      })
+      
+      if (!processedPhoto && receipt_photo) {
+        console.warn('⚠️ Payment API - Photo was provided but not processed!', {
+          receipt_photo_length: String(receipt_photo).length,
+          receipt_photo_starts_with: String(receipt_photo).substring(0, 50),
+          reason: String(receipt_photo).length < 20 ? 'TOO_SHORT' : 'UNKNOWN'
+        })
+      }
+    }
+    
     console.log('💾 Payment API - Saving to database:', {
       userId: userIdBigInt.toString(),
       username: telegram_username,
@@ -346,7 +368,8 @@ export async function POST(request: NextRequest) {
       has_receipt_photo: !!receipt_photo,
       receipt_photo_length: receipt_photo ? receipt_photo.length : 0,
       processed_photo_length: processedPhoto ? processedPhoto.length : 0,
-      photo_has_prefix: processedPhoto ? processedPhoto.startsWith('data:image') : false
+      photo_has_prefix: processedPhoto ? processedPhoto.startsWith('data:image') : false,
+      photo_will_be_saved: !!processedPhoto
     })
 
     try {
