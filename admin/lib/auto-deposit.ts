@@ -58,12 +58,13 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       return null
     }
     
-    // КРИТИЧЕСКИ ВАЖНО: Ищем платежи в окне ±5 минут от времени создания заявки
+    // КРИТИЧЕСКИ ВАЖНО: Ищем платежи в окне ±10 минут от времени создания заявки
     // Это предотвращает обработку старых платежей (например, вчерашних)
     // которые не были привязаны к заявке
+    // Увеличено до 10 минут для учета задержек обработки email и создания заявок
     const requestCreatedAt = requestCheck.createdAt
-    const windowStart = new Date(requestCreatedAt.getTime() - 5 * 60 * 1000) // 5 минут до
-    const windowEnd = new Date(requestCreatedAt.getTime() + 5 * 60 * 1000) // 5 минут после
+    const windowStart = new Date(requestCreatedAt.getTime() - 10 * 60 * 1000) // 10 минут до
+    const windowEnd = new Date(requestCreatedAt.getTime() + 10 * 60 * 1000) // 10 минут после
     
     // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Платеж не должен быть старше 15 минут от текущего момента
     // Это предотвращает обработку очень старых платежей (например, вчерашних)
@@ -75,7 +76,7 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     const amountMin = amount - 0.0001
     const amountMax = amount + 0.0001
     
-    // Ищем платежи в окне ±5 минут от времени создания заявки
+    // Ищем платежи в окне ±10 минут от времени создания заявки
     // И дополнительно проверяем, что платеж не старше 15 минут от текущего момента
     const matchingPayments = await prisma.incomingPayment.findMany({
       where: {
@@ -90,7 +91,7 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
         },
       },
       orderBy: { paymentDate: 'asc' }, // Берем самые ранние платежи (FIFO)
-      take: 10, // В окне ±5 минут не должно быть много платежей
+      take: 10, // В окне ±10 минут не должно быть много платежей
       select: {
         id: true,
         amount: true,
@@ -98,7 +99,7 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       },
     })
     
-    console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in window ±5min from request createdAt (${requestCreatedAt.toISOString()}) for request ${requestId}`)
+    console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in window ±10min from request createdAt (${requestCreatedAt.toISOString()}) for request ${requestId}`)
     
     // Фильтруем по ТОЧНОМУ совпадению суммы (до копейки)
     const exactMatches = matchingPayments.filter((payment) => {
@@ -133,14 +134,14 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     // Берем самый первый платеж (самый ранний в окне)
     const payment = exactMatches[0]
     
-    // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что платеж действительно в окне ±5 минут
+    // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что платеж действительно в окне ±10 минут
     const paymentTime = payment.paymentDate.getTime()
     const requestTime = requestCreatedAt.getTime()
     const timeDiff = Math.abs(paymentTime - requestTime)
-    const maxTimeDiff = 5 * 60 * 1000 // 5 минут в миллисекундах
+    const maxTimeDiff = 10 * 60 * 1000 // 10 минут в миллисекундах
     
     if (timeDiff > maxTimeDiff) {
-      console.log(`⚠️ [Auto-Deposit] Payment ${payment.id} is outside ±5min window (diff: ${Math.floor(timeDiff / 1000)}s), skipping`)
+      console.log(`⚠️ [Auto-Deposit] Payment ${payment.id} is outside ±10min window (diff: ${Math.floor(timeDiff / 1000)}s), skipping`)
       return null
     }
     
@@ -262,15 +263,16 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       return false
     }
     
-    // КРИТИЧЕСКИ ВАЖНО: Проверяем, что платеж находится в окне ±5 минут от времени создания заявки
+    // КРИТИЧЕСКИ ВАЖНО: Проверяем, что платеж находится в окне ±10 минут от времени создания заявки
     // Это предотвращает обработку старых платежей (например, вчерашних), которые не были привязаны
+    // Увеличено до 10 минут для учета задержек обработки email и создания заявок
     const paymentTime = paymentInfo.paymentDate.getTime()
     const requestTime = req.createdAt.getTime()
     const timeDiff = Math.abs(paymentTime - requestTime)
-    const maxTimeDiff = 5 * 60 * 1000 // 5 минут в миллисекундах
+    const maxTimeDiff = 10 * 60 * 1000 // 10 минут в миллисекундах
     
     if (timeDiff > maxTimeDiff) {
-      console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} is outside ±5min window from request ${req.id} createdAt (diff: ${Math.floor(timeDiff / 1000)}s), skipping`)
+      console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} is outside ±10min window from request ${req.id} createdAt (diff: ${Math.floor(timeDiff / 1000)}s), skipping`)
       return false
     }
     
