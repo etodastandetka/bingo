@@ -119,10 +119,12 @@ async function processEmail(
   uid: number,
   settings: WatcherSettings
 ): Promise<void> {
+  console.log(`🚀 [Wallet ${settings.walletId || 'N/A'}] processEmail called for UID ${uid}`)
   return new Promise((resolve, reject) => {
     const fetch = imap.fetch(uid, { bodies: '' })
 
     fetch.on('message', (msg) => {
+      console.log(`📥 [Wallet ${settings.walletId || 'N/A'}] Fetching email UID ${uid}...`)
       msg.on('body', (stream) => {
         const chunks: Buffer[] = []
 
@@ -131,6 +133,7 @@ async function processEmail(
         })
 
         stream.once('end', async () => {
+          console.log(`📦 [Wallet ${settings.walletId || 'N/A'}] Email UID ${uid} body received, ${chunks.length} chunks, total size: ${chunks.reduce((sum, c) => sum + c.length, 0)} bytes`)
           try {
             // Собираем полный буфер
             // @ts-ignore - Buffer.concat возвращает Buffer, который совместим с mailparser
@@ -159,11 +162,15 @@ async function processEmail(
             }
 
             // Парсим сумму и дату из письма
+            console.log(`🔍 [Wallet ${settings.walletId || 'N/A'}] Parsing email UID ${uid} with bank: ${settings.bank}`)
+            console.log(`   Text preview (first 200 chars): ${text.substring(0, 200)}`)
             const paymentData = parseEmailByBank(text, settings.bank)
 
           if (!paymentData) {
-            console.log(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Could not parse email (UID: ${uid})`)
-            console.log(`   Bank setting: ${settings.bank}`)
+            console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Could not parse email (UID: ${uid})`)
+            console.error(`   Bank setting: ${settings.bank}`)
+            console.error(`   Text length: ${text.length}`)
+            console.error(`   Text sample: ${text.substring(0, 500)}`)
             // Письмо уже помечено как прочитанное выше, просто завершаем
             resolve()
             return
@@ -241,6 +248,7 @@ async function processEmail(
             resolve()
           } catch (error: any) {
             console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error processing email (UID: ${uid}):`, error.message || error)
+            console.error(`   Error stack:`, error.stack)
             // НЕ reject'им - просто resolve, чтобы не прерывать обработку других писем
             // Письмо уже помечено как прочитанное, так что оно не будет обработано повторно
             resolve()
@@ -251,6 +259,7 @@ async function processEmail(
 
     fetch.once('error', (err: Error) => {
       console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error fetching email UID ${uid}:`, err.message || err)
+      console.error(`   Error stack:`, err.stack)
       // НЕ reject'им - просто resolve, чтобы не прерывать обработку других писем
       resolve()
     })
