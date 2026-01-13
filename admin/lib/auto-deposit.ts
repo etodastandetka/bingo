@@ -12,12 +12,15 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     // КРИТИЧЕСКАЯ ЗАЩИТА: Проверяем статус заявки ПЕРЕД поиском платежей
     // Если заявка уже обработана - сразу выходим, не тратим время на поиск платежей
     // ВАЖНО: Получаем также createdAt для определения временного окна
+    // И проверяем наличие фото чека
     const requestCheck = await prisma.request.findUnique({
       where: { id: requestId },
       select: { 
         status: true, 
         processedBy: true,
         createdAt: true, // Получаем время создания заявки
+        photoFileId: true, // Проверяем наличие фото чека
+        photoFileUrl: true, // Проверяем наличие фото чека
         incomingPayments: {
           where: { isProcessed: true },
           select: { id: true },
@@ -46,6 +49,12 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     
     if (!requestCheck?.createdAt) {
       console.log(`⚠️ [Auto-Deposit] Request ${requestId} has no createdAt, skipping payment search`)
+      return null
+    }
+    
+    // ВАЖНО: Проверяем наличие фото чека - автопополнение не работает без фото
+    if (!requestCheck.photoFileId && !requestCheck.photoFileUrl) {
+      console.log(`⚠️ [Auto-Deposit] Request ${requestId} has no receipt photo (photoFileId and photoFileUrl are empty), skipping autodeposit`)
       return null
     }
     
@@ -209,39 +218,52 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
   // И предотвращает обработку старых заявок с одинаковыми суммами
   const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
 
-  // Оптимизированный поиск заявок - минимум запросов для максимальной скорости
-  // Ищем за последние 10 минут чтобы учесть возможные задержки
-  // Обрабатываем ВСЕ заявки без ограничений
-  const matchingRequests = await prisma.request.findMany({
-    where: {
-      requestType: 'deposit',
-      status: 'pending',
-      createdAt: { gte: tenMinutesAgo }, // Последние 10 минут
-      incomingPayments: { none: { isProcessed: true } },
-    },
-    orderBy: { createdAt: 'asc' }, // Берем самые старые заявки (FIFO)
-    select: {
-      id: true,
-      userId: true,
-      accountId: true,
-      bookmaker: true,
-      amount: true,
-      status: true,
-      createdAt: true,
-      incomingPayments: { select: { id: true, isProcessed: true } },
-    },
-  })
+    // Оптимизированный поиск заявок - минимум запросов для максимальной скорости
+    // Ищем за последние 10 минут чтобы учесть возможные задержки
+    // Обрабатываем ВСЕ заявки без ограничений
+    // ВАЖНО: Ищем только заявки с фото чека (хотя бы одно из полей должно быть заполнено)
+    const matchingRequests = await prisma.request.findMany({
+      where: {
+        requestType: 'deposit',
+        status: 'pending',
+        createdAt: { gte: tenMinutesAgo }, // Последние 10 минут
+        incomingPayments: { none: { isProcessed: true } },
+        OR: [
+          { photoFileId: { not: null } },
+          { photoFileUrl: { not: null } },
+        ],
+      },
+      orderBy: { createdAt: 'asc' }, // Берем самые старые заявки (FIFO)
+      select: {
+        id: true,
+        userId: true,
+        accountId: true,
+        bookmaker: true,
+        amount: true,
+        status: true,
+        createdAt: true,
+        photoFileId: true, // Проверяем наличие фото чека
+        photoFileUrl: true, // Проверяем наличие фото чека
+        incomingPayments: { select: { id: true, isProcessed: true } },
+      },
+    })
 
-  // Быстрая фильтрация по точному совпадению суммы И времени
-  const exactMatches = matchingRequests.filter((req) => {
-    if (req.status !== 'pending' || !req.amount) return false
-    
-    // Пропускаем заявки, у которых уже есть обработанный платеж
-    const hasProcessedPayment = req.incomingPayments?.some(p => p.isProcessed === true)
-    if (hasProcessedPayment) {
-      console.log(`⚠️ [Auto-Deposit] Request ${req.id} already has processed payment, skipping`)
-      return false
-    }
+    // Быстрая фильтрация по точному совпадению суммы И времени
+    const exactMatches = matchingRequests.filter((req) => {
+      if (req.status !== 'pending' || !req.amount) return false
+      
+      // ВАЖНО: Пропускаем заявки без фото чека
+      if (!req.photoFileId && !req.photoFileUrl) {
+        console.log(`⚠️ [Auto-Deposit] Request ${req.id} has no receipt photo, skipping autodeposit`)
+        return false
+      }
+      
+      // Пропускаем заявки, у которых уже есть обработанный платеж
+      const hasProcessedPayment = req.incomingPayments?.some(p => p.isProcessed === true)
+      if (hasProcessedPayment) {
+        console.log(`⚠️ [Auto-Deposit] Request ${req.id} already has processed payment, skipping`)
+        return false
+      }
     
     // Дополнительная проверка: заявка должна быть создана не более 10 минут назад
     const requestAge = Date.now() - req.createdAt.getTime()
