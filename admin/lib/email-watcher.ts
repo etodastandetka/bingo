@@ -187,14 +187,21 @@ async function processEmail(
               : emailDate // Используем дату письма, если не удалось распарсить дату из текста
 
             // ВАЖНО: Проверяем, не было ли уже обработано это письмо
-            // Проверяем ТОЛЬКО по notificationText и bank - это уникальный идентификатор письма
-            // НЕ проверяем по amount и paymentDate, так как разные платежи могут иметь одинаковую сумму и близкие даты
+            // Проверяем по notificationText + bank + amount + paymentDate для точного определения дубликатов
+            // Это предотвращает пропуск платежей с одинаковым текстом, но разными суммами
             const notificationTextPreview = text.substring(0, 500)
             const existingPayment = await prisma.incomingPayment.findFirst({
               where: {
                 AND: [
                   { notificationText: notificationTextPreview },
                   { bank: bank },
+                  { amount: amount }, // ВАЖНО: Проверяем сумму тоже!
+                  { 
+                    paymentDate: {
+                      gte: new Date(paymentDate.getTime() - 1 * 60 * 1000), // ±1 минута от даты платежа
+                      lte: new Date(paymentDate.getTime() + 1 * 60 * 1000),
+                    }
+                  },
                   // Проверяем только платежи, созданные в последние 7 дней
                   {
                     createdAt: {
@@ -207,8 +214,12 @@ async function processEmail(
             })
 
             if (existingPayment) {
-              console.log(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Payment already exists: ID ${existingPayment.id}, amount: ${existingPayment.amount}, date: ${existingPayment.paymentDate.toISOString()}`)
-              console.log(`   Skipping duplicate payment. Email UID ${uid} already processed (same notificationText and bank).`)
+              const existingAmount = parseFloat(existingPayment.amount.toString())
+              const currentAmount = parseFloat(amount.toString())
+              console.log(`⚠️ [Wallet ${settings.walletId || 'N/A'}] Payment already exists: ID ${existingPayment.id}`)
+              console.log(`   Existing: amount=${existingAmount}, date=${existingPayment.paymentDate.toISOString()}`)
+              console.log(`   Current: amount=${currentAmount}, date=${paymentDate.toISOString()}`)
+              console.log(`   Skipping duplicate payment. Email UID ${uid} already processed.`)
               // Письмо уже помечено как прочитанное выше, просто завершаем
               resolve()
               return
