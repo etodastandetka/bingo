@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('user_id')
     const type = searchParams.get('type') // deposit, withdraw, or empty for all
+    const skip = parseInt(searchParams.get('skip') || '0')
+    const take = parseInt(searchParams.get('take') || '50') // По умолчанию 50 за раз
 
     const where: any = {}
     if (userId) {
@@ -30,11 +32,12 @@ export async function GET(request: NextRequest) {
       where.requestType = type
     }
 
-    // Ограничиваем количество записей для оптимизации
+    // Пагинация для бесконечной прокрутки
     const requests = await prisma.request.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: userId ? 50 : 100,
+      skip,
+      take,
       select: {
         id: true,
         userId: true,
@@ -90,7 +93,18 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const response = NextResponse.json(createApiResponse({ transactions }))
+    // Получаем общее количество для информации (опционально, можно убрать для производительности)
+    const total = await prisma.request.count({ where })
+
+    const response = NextResponse.json(createApiResponse({ 
+      transactions,
+      pagination: {
+        skip,
+        take,
+        total,
+        hasMore: skip + take < total
+      }
+    }))
     response.headers.set('Access-Control-Allow-Origin', '*')
     // Отключаем кеширование для актуальных данных
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')

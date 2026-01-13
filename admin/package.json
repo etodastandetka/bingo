@@ -24,6 +24,7 @@
     "start:email-watcher": "tsx scripts/start-email-watcher.ts",
     "enable-autodeposit": "tsx scripts/enable-autodeposit.ts",
     "delete-pending-requests": "tsx scripts/delete-pending-requests.ts",
+    "request-statistics": "tsx scripts/request-statistics.ts",
     "generate-icons": "node scripts/generate-pwa-icons.js"
   },
   "dependencies": {

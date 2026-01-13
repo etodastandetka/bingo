@@ -29,15 +29,23 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'all' | 'deposit' | 'withdraw'>('all')
   const [isFetching, setIsFetching] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [skip, setSkip] = useState(0)
+  const pageSize = 1000 // Увеличено до 1000 за раз для загрузки большого количества заявок
 
-  const fetchHistory = async (showLoading = true) => {
+  const fetchHistory = async (loadMore = false, showLoading = true) => {
     // Предотвращаем множественные запросы
     if (isFetching) {
       return
     }
 
+    // Если загружаем больше и больше нет - не делаем запрос
+    if (loadMore && !hasMore) {
+      return
+    }
+
     setIsFetching(true)
-    if (showLoading) {
+    if (showLoading && !loadMore) {
       setLoading(true)
     }
     try {
@@ -45,10 +53,15 @@ export default function HistoryPage() {
       if (activeTab !== 'all') {
         params.append('type', activeTab === 'deposit' ? 'deposit' : 'withdraw')
       }
+      
+      // Для пагинации
+      const currentSkip = loadMore ? skip : 0
+      params.append('skip', currentSkip.toString())
+      params.append('take', pageSize.toString())
 
-      // Добавляем таймаут для запроса
+      // Увеличиваем таймаут для больших запросов
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 секунд
+      const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 секунд для больших запросов
 
       const response = await fetch(`/api/transaction-history?${params.toString()}`, {
         signal: controller.signal
@@ -60,29 +73,47 @@ export default function HistoryPage() {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
       const data = await response.json()
 
       if (data.success && data.data) {
         const newTransactions = data.data.transactions || []
-        // Обновляем список транзакций - новые транзакции появятся автоматически
-        setTransactions(newTransactions)
-        console.log(`📋 History updated: ${newTransactions.length} transactions loaded`)
+        const pagination = data.data.pagination
+        
+        if (loadMore) {
+          // Добавляем к существующим транзакциям
+          setTransactions(prev => [...prev, ...newTransactions])
+          setSkip(currentSkip + newTransactions.length)
+        } else {
+          // Заменяем все транзакции (первая загрузка или смена таба)
+          setTransactions(newTransactions)
+          setSkip(newTransactions.length)
+        }
+        
+        // Обновляем hasMore на основе информации о пагинации
+        if (pagination) {
+          setHasMore(pagination.hasMore || false)
+        } else {
+          // Если нет информации о пагинации, проверяем по количеству
+          setHasMore(newTransactions.length === pageSize)
+        }
+        
+        console.log(`📋 History ${loadMore ? 'loaded more' : 'updated'}: ${newTransactions.length} transactions (total: ${loadMore ? transactions.length + newTransactions.length : newTransactions.length})`)
       } else {
         console.error('API returned error:', data.error || 'Unknown error')
-        setTransactions([])
+        if (!loadMore) {
+          setTransactions([])
+        }
       }
     } catch (error: any) {
       console.error('Failed to fetch history:', error)
       if (error.name === 'AbortError') {
         console.error('Request timeout')
       }
-      setTransactions([])
+      if (!loadMore) {
+        setTransactions([])
+      }
     } finally {
-      if (showLoading) {
+      if (showLoading && !loadMore) {
         setLoading(false)
       }
       setIsFetching(false)
@@ -90,23 +121,34 @@ export default function HistoryPage() {
   }
 
   useEffect(() => {
-    fetchHistory()
+    // Сбрасываем состояние при смене таба
+    setSkip(0)
+    setHasMore(true)
+    setTransactions([])
+    fetchHistory(false, true) // Первая загрузка
     
     // Автоматическое обновление каждые 10 секунд для загрузки новых транзакций
     const interval = setInterval(() => {
-      fetchHistory(false) // Не показываем loading при автообновлении
+      // При автообновлении загружаем только первые записи (новые)
+      setSkip(0)
+      setHasMore(true)
+      fetchHistory(false, false) // Не показываем loading при автообновлении
     }, 10000)
     
     // Обновление при фокусе страницы
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        fetchHistory(false) // Не показываем loading при автообновлении
+        setSkip(0)
+        setHasMore(true)
+        fetchHistory(false, false) // Не показываем loading при автообновлении
       }
     }
     
     // Обновление при возврате фокуса
     const handleFocus = () => {
-      fetchHistory(false) // Не показываем loading при автообновлении
+      setSkip(0)
+      setHasMore(true)
+      fetchHistory(false, false) // Не показываем loading при автообновлении
     }
     
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -119,6 +161,24 @@ export default function HistoryPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
+
+  // Бесконечная прокрутка - загрузка при скролле вниз
+  useEffect(() => {
+    const handleScroll = () => {
+      // Проверяем, достигли ли мы конца страницы (с небольшим запасом)
+      if (
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 500 &&
+        hasMore &&
+        !isFetching
+      ) {
+        fetchHistory(true, false) // Загружаем больше
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, isFetching])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -430,6 +490,23 @@ export default function HistoryPage() {
               </Link>
             )
           })}
+          
+          {/* Индикатор загрузки при подгрузке */}
+          {isFetching && transactions.length > 0 && (
+            <div className="text-center py-4">
+              <div className="inline-flex items-center gap-2 text-gray-400">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                <span className="text-sm">Загрузка...</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Сообщение о конце списка */}
+          {!hasMore && transactions.length > 0 && (
+            <div className="text-center py-4 text-gray-400 text-sm">
+              Все заявки загружены ({transactions.length.toLocaleString()})
+            </div>
+          )}
         </div>
       )}
     </div>
