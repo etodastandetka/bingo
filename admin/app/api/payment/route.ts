@@ -992,7 +992,32 @@ export async function PUT(request: NextRequest) {
 
     // Обновляем фото чека, если передано (используем cleanBase64 для сохранения целостности base64)
     if (receipt_photo !== undefined) {
-      updateData.photoFileUrl = cleanBase64(receipt_photo)
+      const processedPhoto = cleanBase64(receipt_photo)
+      
+      // Детальное логирование фото для отладки (PUT запрос)
+      console.log('📸 Payment API PUT - Photo processing:', {
+        request_id: id,
+        receipt_photo_type: typeof receipt_photo,
+        receipt_photo_is_null: receipt_photo === null,
+        receipt_photo_is_undefined: receipt_photo === undefined,
+        receipt_photo_length: receipt_photo ? String(receipt_photo).length : 0,
+        receipt_photo_preview: receipt_photo ? String(receipt_photo).substring(0, 100) : 'N/A',
+        processed_photo_result: processedPhoto ? 'VALID' : 'NULL/INVALID',
+        processed_photo_length: processedPhoto ? processedPhoto.length : 0,
+        photo_will_be_saved: !!processedPhoto,
+        existing_photo: !!existingRequest.photoFileUrl
+      })
+      
+      if (!processedPhoto && receipt_photo) {
+        console.warn('⚠️ Payment API PUT - Photo was provided but not processed!', {
+          request_id: id,
+          receipt_photo_length: String(receipt_photo).length,
+          receipt_photo_starts_with: String(receipt_photo).substring(0, 50),
+          reason: String(receipt_photo).length < 20 ? 'TOO_SHORT' : 'UNKNOWN'
+        })
+      }
+      
+      updateData.photoFileUrl = processedPhoto
     }
 
     // Обновляем другие поля, если переданы
@@ -1061,13 +1086,33 @@ export async function PUT(request: NextRequest) {
     console.log('📝 Payment API PUT - Updating request:', {
       id,
       updateData: Object.keys(updateData),
-      has_receipt: !!updateData.photoFileUrl
+      has_receipt: !!updateData.photoFileUrl,
+      receipt_photo_provided: receipt_photo !== undefined,
+      receipt_photo_value: receipt_photo !== undefined ? (receipt_photo ? 'PROVIDED' : 'NULL') : 'NOT_PROVIDED'
     })
 
     const updatedRequest = await prisma.request.update({
       where: { id: parseInt(id) },
       data: updateData,
     })
+    
+    // Логируем результат обновления фото
+    if (receipt_photo !== undefined) {
+      console.log('✅ Payment API PUT - Request updated:', {
+        request_id: updatedRequest.id,
+        photoFileUrl_saved: !!updatedRequest.photoFileUrl,
+        photoFileUrl_length: updatedRequest.photoFileUrl ? updatedRequest.photoFileUrl.length : 0,
+        photoFileUrl_preview: updatedRequest.photoFileUrl ? updatedRequest.photoFileUrl.substring(0, 50) + '...' : 'NULL'
+      })
+      
+      if (!updatedRequest.photoFileUrl && receipt_photo) {
+        console.error('❌ Payment API PUT - Photo was provided but NOT saved to database!', {
+          request_id: updatedRequest.id,
+          receipt_photo_length: String(receipt_photo).length,
+          updateData_photoFileUrl: !!updateData.photoFileUrl
+        })
+      }
+    }
 
     // ЗАЩИТА ОТ ДВОЙНОГО ЗАЧИСЛЕНИЯ + ОПТИМИЗАЦИЯ:
     // Автопополнение вызывается ТОЛЬКО если:
