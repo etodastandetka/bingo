@@ -39,6 +39,9 @@ export async function GET(request: NextRequest) {
     // Строим условие для поиска
     const where: any = {}
 
+    // Проверяем, есть ли копейки в запросе (если сумма целая, например 3000, то копейки = 0)
+    const hasCents = amountValue % 1 !== 0
+
     if (exactAmount) {
       // Когда "Точная сумма" включена - ищем ТОЧНОЕ совпадение суммы (500.52 = 500.52)
       // Используем диапазон с минимальной погрешностью для точного сравнения Decimal
@@ -49,7 +52,8 @@ export async function GET(request: NextRequest) {
         lte: amountValue + tolerance,
       }
     } else {
-      // Когда "Точная сумма" выключена - ищем по целой части (например, все пополнения на 400.XX)
+      // Когда "Точная сумма" выключена - ищем по целой части (например, все пополнения на 3000.XX)
+      // Это позволяет найти все варианты с разными копейками (3000.01, 3000.82, 3000.99 и т.д.)
       const wholePart = Math.floor(amountValue)
       where.amount = {
         gte: wholePart,
@@ -92,9 +96,27 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    // Если exactAmount=false, сортируем результаты: сначала все варианты с разными копейками
+    // Сортируем по сумме (чтобы варианты с разными копейками были вместе), затем по дате
+    let sortedPayments = payments
+    if (!exactAmount) {
+      sortedPayments = [...payments].sort((a, b) => {
+        const amountA = parseFloat(a.amount.toString())
+        const amountB = parseFloat(b.amount.toString())
+        // Сначала сортируем по сумме (чтобы все 3000.XX были вместе)
+        if (amountA !== amountB) {
+          return amountA - amountB
+        }
+        // Если суммы равны, сортируем по дате (новые сначала)
+        const dateA = a.paymentDate ? new Date(a.paymentDate).getTime() : 0
+        const dateB = b.paymentDate ? new Date(b.paymentDate).getTime() : 0
+        return dateB - dateA
+      })
+    }
+
     return NextResponse.json(
       createApiResponse({
-        payments: payments.map(p => ({
+        payments: sortedPayments.map(p => ({
           id: p.id,
           amount: p.amount.toString(),
           bank: p.bank,
