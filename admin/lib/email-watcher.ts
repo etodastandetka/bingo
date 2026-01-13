@@ -178,19 +178,29 @@ async function processEmail(
               ? new Date(isoDatetime)
               : emailDate // Используем дату письма, если не удалось распарсить дату из текста
 
-            // ВАЖНО: Проверяем, не было ли уже обработано это письмо (по notificationText)
+            // ВАЖНО: Проверяем, не было ли уже обработано это письмо
+            // Проверяем по сумме + дате + notificationText для более точного определения дубликатов
             // Это предотвращает дубликаты при повторной обработке писем
-            // НЕ проверяем по сумме и дате, так как могут быть разные реальные платежи с одинаковой суммой
-            // Используем notificationText для идентификации конкретного письма
             const notificationTextPreview = text.substring(0, 500)
             const existingPayment = await prisma.incomingPayment.findFirst({
               where: {
-                notificationText: notificationTextPreview,
-                bank: bank,
-                // Проверяем только платежи, созданные в последние 7 дней (чтобы не искать слишком далеко)
-                createdAt: {
-                  gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-                },
+                AND: [
+                  { notificationText: notificationTextPreview },
+                  { bank: bank },
+                  { amount: amount }, // Точное совпадение суммы
+                  { 
+                    paymentDate: {
+                      gte: new Date(paymentDate.getTime() - 2 * 60 * 1000), // ±2 минуты от даты платежа
+                      lte: new Date(paymentDate.getTime() + 2 * 60 * 1000),
+                    }
+                  },
+                  // Проверяем только платежи, созданные в последние 7 дней
+                  {
+                    createdAt: {
+                      gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+                    },
+                  },
+                ],
               },
               orderBy: { createdAt: 'desc' },
             })
@@ -216,60 +226,20 @@ async function processEmail(
 
             console.log(`✅ [Wallet ${settings.walletId || 'N/A'}] IncomingPayment saved: ID ${incomingPayment.id}, amount: ${amount} KGS`)
 
-            // ФОНОВОЕ АВТОПОПОЛНЕНИЕ: Ищем ВСЕ pending заявки с такой же суммой и вызываем автопополнение
-            // Это обрабатывает заявки как с фото чека, так и без него
-            // Заявки без чека не показываются в дашборде, но автопополнение работает для них в фоне
-            // Обрабатываем ВСЕ заявки без ограничений
-            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
-            const matchingRequests = await prisma.request.findMany({
-              where: {
-                requestType: 'deposit',
-                status: 'pending',
-                createdAt: { gte: tenMinutesAgo },
-                // Обрабатываем ВСЕ заявки (с чеком и без) - автопополнение работает в фоне
-              },
-              orderBy: { createdAt: 'asc' }, // Берем самую старую заявку (FIFO)
-              select: {
-                id: true,
-                amount: true,
-                photoFileUrl: true, // Проверяем наличие чека для логирования
-                incomingPayments: {
-                  select: { isProcessed: true },
-                },
-              },
-            })
-
-            // Фильтруем по точному совпадению суммы и проверяем, что нет обработанных платежей
-            const exactMatch = matchingRequests.find((req) => {
-              if (!req.amount) return false
-              
-              // Пропускаем заявки, у которых уже есть обработанный платеж
-              const hasProcessedPayment = req.incomingPayments?.some(p => p.isProcessed === true)
-              if (hasProcessedPayment) {
-                return false
+            // МГНОВЕННОЕ АВТОПОПОЛНЕНИЕ: Вызываем matchAndProcessPayment напрямую
+            // Она сама найдет заявку по сумме и обработает ее максимально быстро
+            // Не делаем двойной поиск - это ускоряет обработку
+            try {
+              const { matchAndProcessPayment } = await import('./auto-deposit')
+              const result = await matchAndProcessPayment(incomingPayment.id, amount)
+              if (result?.success) {
+                console.log(`✅ [Instant Auto-Deposit] Successfully processed payment ${incomingPayment.id} → request ${result.requestId}`)
+              } else {
+                console.log(`ℹ️ [Instant Auto-Deposit] No matching request found for payment ${incomingPayment.id} (amount: ${amount}), payment saved for manual processing`)
               }
-              
-              const reqAmount = parseFloat(req.amount.toString())
-              // Точное сравнение: суммы должны совпадать полностью (включая копейки)
-              // Используем очень маленький допуск (0.0001) только для ошибок округления float
-              const diff = Math.abs(reqAmount - amount)
-              return diff < 0.0001 // Только для ошибок округления, не для допуска копеек
-            })
-
-            if (exactMatch) {
-              const hasReceipt = !!exactMatch.photoFileUrl
-              console.log(`✅ [Background Auto-Deposit] Found pending request ${exactMatch.id} with matching amount ${amount} (${hasReceipt ? 'with' : 'without'} receipt), processing in background`)
-              // Вызываем автопополнение СРАЗУ (await) для мгновенной обработки
-              // Работает для заявок с чеком и без - заявки без чека не показываются в дашборде, но обрабатываются
-              try {
-                const { matchAndProcessPayment } = await import('./auto-deposit')
-                await matchAndProcessPayment(incomingPayment.id, amount)
-                console.log(`✅ [Instant Auto-Deposit] Successfully processed payment ${incomingPayment.id} → request ${exactMatch.id} (${hasReceipt ? 'with receipt' : 'without receipt'})`)
-              } catch (autoDepositError: any) {
-                console.error(`❌ [Instant Auto-Deposit] Error processing payment ${incomingPayment.id} → request ${exactMatch.id}:`, autoDepositError.message)
-              }
-            } else {
-              console.log(`ℹ️ No pending request found with amount ${amount}, payment saved: ID ${incomingPayment.id}`)
+            } catch (autoDepositError: any) {
+              console.error(`❌ [Instant Auto-Deposit] Error processing payment ${incomingPayment.id}:`, autoDepositError.message)
+              // Продолжаем работу даже при ошибке - платеж сохранен, можно обработать вручную
             }
 
             // Письмо уже помечено как прочитанное выше, просто завершаем
