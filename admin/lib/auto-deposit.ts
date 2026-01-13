@@ -256,6 +256,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       }
     
     // Дополнительная проверка: заявка должна быть создана не более 10 минут назад
+    // Это предотвращает обработку старых заявок с одинаковыми суммами
     const requestAge = Date.now() - req.createdAt.getTime()
     const maxAge = 10 * 60 * 1000 // 10 минут
     if (requestAge > maxAge) {
@@ -263,18 +264,10 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       return false
     }
     
-    // КРИТИЧЕСКИ ВАЖНО: Проверяем, что платеж находится в окне ±10 минут от времени создания заявки
-    // Это предотвращает обработку старых платежей (например, вчерашних), которые не были привязаны
-    // Увеличено до 10 минут для учета задержек обработки email и создания заявок
-    const paymentTime = paymentInfo.paymentDate.getTime()
-    const requestTime = req.createdAt.getTime()
-    const timeDiff = Math.abs(paymentTime - requestTime)
-    const maxTimeDiff = 10 * 60 * 1000 // 10 минут в миллисекундах
-    
-    if (timeDiff > maxTimeDiff) {
-      console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} is outside ±10min window from request ${req.id} createdAt (diff: ${Math.floor(timeDiff / 1000)}s), skipping`)
-      return false
-    }
+    // УБРАНА проверка времени между paymentDate и createdAt, так как:
+    // 1. Платеж может быть оплачен до создания заявки (paymentDate < createdAt)
+    // 2. Платеж может прийти с задержкой через email (paymentDate > createdAt)
+    // 3. Проверка возраста заявки (10 минут) уже защищает от старых платежей
     
     const reqAmount = parseFloat(req.amount.toString())
     // ТОЧНОЕ сравнение: суммы должны совпадать в точности до копейки (2 знака после запятой)
@@ -285,9 +278,9 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     const diff = Math.abs(reqAmount - amount)
     
     if (matches) {
-      console.log(`✅ [Auto-Deposit] Exact match: Request ${req.id} (${reqAmount}) = Payment ${amount} (diff: ${diff.toFixed(6)}, time diff: ${Math.floor(timeDiff / 1000)}s)`)
+      console.log(`✅ [Auto-Deposit] Exact match: Request ${req.id} (${reqAmount}) = Payment ${amount} (diff: ${diff.toFixed(6)})`)
     } else {
-      console.log(`❌ [Auto-Deposit] Amount mismatch: Request ${req.id} (${reqAmount.toFixed(2)}) ≠ Payment (${amount.toFixed(2)}), diff: ${diff.toFixed(2)}, time diff: ${Math.floor(timeDiff / 1000)}s`)
+      console.log(`❌ [Auto-Deposit] Amount mismatch: Request ${req.id} (${reqAmount.toFixed(2)}) ≠ Payment (${amount.toFixed(2)}), diff: ${diff.toFixed(2)})`)
     }
     
     return matches
