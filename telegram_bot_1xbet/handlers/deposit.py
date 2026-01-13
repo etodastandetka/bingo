@@ -671,29 +671,8 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             
             timer_task.add_done_callback(timer_task_done)
             
-            # Создаем заявку со статусом pending при показе QR-кода (без фото чека)
-            try:
-                pending_request_result = await APIClient.create_request(
-                    telegram_user_id=str(message.from_user.id),
-                    request_type='deposit',
-                    amount=amount_with_cents,
-                    bookmaker=casino_id,
-                    bank='omoney',  # По умолчанию omoney
-                    account_id=account_id,
-                    telegram_username=message.from_user.username,
-                    telegram_first_name=message.from_user.first_name,
-                    telegram_last_name=message.from_user.last_name,
-                    receipt_photo=None,  # Без фото чека - заявка будет pending
-                    bot_type=Config.BOT_TYPE
-                )
-                if pending_request_result.get('success') and pending_request_result.get('data', {}).get('id'):
-                    pending_request_id = pending_request_result.get('data', {}).get('id')
-                    await state.update_data(pending_request_id=str(pending_request_id))
-                    logger.info(f"[Deposit] Created pending request {pending_request_id} when showing QR code")
-            except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(f"Failed to create pending request: {e}")
+            # НЕ создаем заявку без фото - заявка будет создана только при получении фото чека
+            # Это соответствует логике основного бота
                 # Продолжаем работу даже если не удалось создать заявку
             
             # Сразу переходим в состояние ожидания чека (без выбора банка)
