@@ -139,15 +139,16 @@ async function processEmail(
             const parsed = await simpleParser(buffer)
             const text = parsed.text || parsed.html || parsed.textAsHtml || ''
 
-            // Логируем краткую информацию о письме
-            console.log(`📨 [Wallet ${settings.walletId || 'N/A'}] Email: ${parsed.subject || 'N/A'} from ${parsed.from?.text || 'N/A'}`)
-
-            // Письмо уже помечено как прочитанное в checkEmails перед обработкой
-            // Здесь просто обрабатываем его содержимое
-
             // ВАЖНО: Проверяем дату письма - если письмо старше 7 дней, сразу помечаем как прочитанное
             // (увеличено до 7 дней, чтобы обрабатывать письма, которые пришли недавно)
             const emailDate = parsed.date || new Date()
+            
+            // Логируем краткую информацию о письме
+            console.log(`📨 [Wallet ${settings.walletId || 'N/A'}] Email UID ${uid}: ${parsed.subject || 'N/A'} from ${parsed.from?.text || 'N/A'}`)
+            console.log(`   Email date: ${emailDate.toISOString()}, text length: ${text.length}`)
+
+            // Письмо уже помечено как прочитанное в checkEmails перед обработкой
+            // Здесь просто обрабатываем его содержимое
             const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
             
             if (emailDate < sevenDaysAgo) {
@@ -390,6 +391,7 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
           }
 
           console.log(`📬 [Wallet ${settings.walletId || 'N/A'}] Found ${results.length} new email(s)`)
+          console.log(`   Email UIDs: ${results.join(', ')}`)
 
           // КРИТИЧЕСКИ ВАЖНО: Помечаем ВСЕ найденные письма как прочитанные СРАЗУ после поиска
           // Это предотвращает повторную обработку при следующем polling (каждую секунду)
@@ -405,15 +407,19 @@ async function checkEmails(settings: WatcherSettings): Promise<void> {
 
           // Обрабатываем каждое письмо последовательно (не параллельно), чтобы избежать конфликтов
           const processSequentially = async () => {
+            console.log(`🔄 [Wallet ${settings.walletId || 'N/A'}] Starting to process ${results!.length} email(s)...`)
             for (const uid of results!) {
               try {
+                console.log(`📧 [Wallet ${settings.walletId || 'N/A'}] Processing email UID ${uid}...`)
                 await processEmail(imap, uid, settings)
+                console.log(`✅ [Wallet ${settings.walletId || 'N/A'}] Finished processing email UID ${uid}`)
               } catch (error: any) {
                 // processEmail теперь всегда resolve, но на всякий случай ловим ошибки
                 console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Error processing email UID ${uid}:`, error.message || error)
                 // Продолжаем обработку остальных писем даже при ошибке
               }
             }
+            console.log(`✅ [Wallet ${settings.walletId || 'N/A'}] Finished processing all ${results!.length} email(s)`)
           }
 
           processSequentially()
