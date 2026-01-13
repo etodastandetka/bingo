@@ -220,18 +220,13 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
 
     // Оптимизированный поиск заявок - минимум запросов для максимальной скорости
     // Ищем за последние 10 минут чтобы учесть возможные задержки
-    // Обрабатываем ВСЕ заявки без ограничений
-    // ВАЖНО: Ищем только заявки с фото чека (хотя бы одно из полей должно быть заполнено)
+    // Обрабатываем ВСЕ заявки без ограничений (email-watcher обрабатывает платежи независимо от фото чека)
     const matchingRequests = await prisma.request.findMany({
       where: {
         requestType: 'deposit',
         status: 'pending',
         createdAt: { gte: tenMinutesAgo }, // Последние 10 минут
         incomingPayments: { none: { isProcessed: true } },
-        OR: [
-          { photoFileId: { not: null } },
-          { photoFileUrl: { not: null } },
-        ],
       },
       orderBy: { createdAt: 'asc' }, // Берем самые старые заявки (FIFO)
       select: {
@@ -242,8 +237,8 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
         amount: true,
         status: true,
         createdAt: true,
-        photoFileId: true, // Проверяем наличие фото чека
-        photoFileUrl: true, // Проверяем наличие фото чека
+        photoFileId: true,
+        photoFileUrl: true,
         incomingPayments: { select: { id: true, isProcessed: true } },
       },
     })
@@ -251,12 +246,6 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     // Быстрая фильтрация по точному совпадению суммы И времени
     const exactMatches = matchingRequests.filter((req) => {
       if (req.status !== 'pending' || !req.amount) return false
-      
-      // ВАЖНО: Пропускаем заявки без фото чека
-      if (!req.photoFileId && !req.photoFileUrl) {
-        console.log(`⚠️ [Auto-Deposit] Request ${req.id} has no receipt photo, skipping autodeposit`)
-        return false
-      }
       
       // Пропускаем заявки, у которых уже есть обработанный платеж
       const hasProcessedPayment = req.incomingPayments?.some(p => p.isProcessed === true)
