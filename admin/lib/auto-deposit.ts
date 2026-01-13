@@ -58,17 +58,23 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       return null
     }
     
-    // КРИТИЧЕСКИ ВАЖНО: Ищем платежи в окне ±10 минут от времени создания заявки
-    // Это предотвращает обработку старых платежей (например, вчерашних)
-    // которые не были привязаны к заявке
-    // Увеличено до 10 минут для учета задержек обработки email и создания заявок
+    // КРИТИЧЕСКИ ВАЖНО: Ищем платежи в расширенном окне для учета задержек
+    // Платеж может быть оплачен до создания заявки (до 5 минут) или после (до 15 минут)
+    // Это учитывает задержки обработки email и создания заявок
     const requestCreatedAt = requestCheck.createdAt
-    const windowStart = new Date(requestCreatedAt.getTime() - 10 * 60 * 1000) // 10 минут до
-    const windowEnd = new Date(requestCreatedAt.getTime() + 10 * 60 * 1000) // 10 минут после
+    const now = Date.now()
+    const requestTime = requestCreatedAt.getTime()
     
-    // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Платеж не должен быть старше 15 минут от текущего момента
+    // Платеж может быть оплачен до создания заявки (до 5 минут назад)
+    const windowStart = new Date(requestTime - 5 * 60 * 1000) // 5 минут до создания заявки
+    
+    // Платеж может прийти после создания заявки (до 15 минут в будущее от создания)
+    // Но также ограничиваем текущим моментом + небольшой запас
+    const windowEnd = new Date(Math.min(requestTime + 15 * 60 * 1000, now + 2 * 60 * 1000)) // До 15 минут после или до 2 минут в будущее
+    
+    // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Платеж не должен быть старше 20 минут от текущего момента
     // Это предотвращает обработку очень старых платежей (например, вчерашних)
-    const maxPaymentAge = new Date(Date.now() - 15 * 60 * 1000) // 15 минут назад
+    const maxPaymentAge = new Date(now - 20 * 60 * 1000) // 20 минут назад
     
     // ОПТИМИЗАЦИЯ: Фильтруем по сумме прямо в БД (приблизительно)
     // Используем очень маленький диапазон ±0.0001 только для ошибок округления при поиске в БД
@@ -76,13 +82,14 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     const amountMin = amount - 0.0001
     const amountMax = amount + 0.0001
     
-    // Ищем платежи в окне ±10 минут от времени создания заявки
-    // И дополнительно проверяем, что платеж не старше 15 минут от текущего момента
+    // Ищем платежи в расширенном окне (5 минут до, 15 минут после создания заявки)
+    // И дополнительно проверяем, что платеж не старше 20 минут от текущего момента
+    const actualWindowStart = windowStart > maxPaymentAge ? windowStart : maxPaymentAge
     const matchingPayments = await prisma.incomingPayment.findMany({
       where: {
         isProcessed: false,
         paymentDate: { 
-          gte: windowStart > maxPaymentAge ? windowStart : maxPaymentAge, // Берем более позднюю дату
+          gte: actualWindowStart, // Берем более позднюю дату
           lte: windowEnd,
         },
         amount: {
@@ -91,7 +98,7 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
         },
       },
       orderBy: { paymentDate: 'asc' }, // Берем самые ранние платежи (FIFO)
-      take: 10, // В окне ±10 минут не должно быть много платежей
+      take: 20, // Увеличено для расширенного окна
       select: {
         id: true,
         amount: true,
@@ -99,7 +106,8 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       },
     })
     
-    console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in window ±10min from request createdAt (${requestCreatedAt.toISOString()}) for request ${requestId}`)
+    const windowMinutes = Math.floor((windowEnd.getTime() - actualWindowStart.getTime()) / (60 * 1000))
+    console.log(`🔍 [Auto-Deposit] Found ${matchingPayments.length} unprocessed payments in window (${windowMinutes}min: ${actualWindowStart.toISOString()} to ${windowEnd.toISOString()}) for request ${requestId}`)
     
     // Фильтруем по ТОЧНОМУ совпадению суммы (до копейки)
     const exactMatches = matchingPayments.filter((payment) => {
@@ -134,14 +142,15 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     // Берем самый первый платеж (самый ранний в окне)
     const payment = exactMatches[0]
     
-    // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что платеж действительно в окне ±10 минут
+    // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что платеж действительно в расширенном окне
     const paymentTime = payment.paymentDate.getTime()
-    const requestTime = requestCreatedAt.getTime()
-    const timeDiff = Math.abs(paymentTime - requestTime)
-    const maxTimeDiff = 10 * 60 * 1000 // 10 минут в миллисекундах
+    const requestTimeMs = requestCreatedAt.getTime()
+    const timeDiffBefore = requestTimeMs - paymentTime // Сколько времени до создания заявки
+    const timeDiffAfter = paymentTime - requestTimeMs // Сколько времени после создания заявки
     
-    if (timeDiff > maxTimeDiff) {
-      console.log(`⚠️ [Auto-Deposit] Payment ${payment.id} is outside ±10min window (diff: ${Math.floor(timeDiff / 1000)}s), skipping`)
+    // Платеж может быть до 5 минут до создания заявки или до 15 минут после
+    if (timeDiffBefore > 5 * 60 * 1000 || timeDiffAfter > 15 * 60 * 1000) {
+      console.log(`⚠️ [Auto-Deposit] Payment ${payment.id} is outside expanded window (${timeDiffBefore > 0 ? 'before' : 'after'}: ${Math.floor(Math.abs(timeDiffBefore > 0 ? timeDiffBefore : timeDiffAfter) / 1000)}s), skipping`)
       return null
     }
     
