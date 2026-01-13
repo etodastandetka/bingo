@@ -789,6 +789,68 @@ async function checkTimeouts(): Promise<void> {
   }
 }
 
+/**
+ * Периодическая проверка pending заявок с фото чека для поиска новых платежей
+ * Это обрабатывает случаи, когда платеж приходит ПОСЛЕ создания заявки
+ */
+async function checkPendingRequestsWithPhotos(): Promise<void> {
+  try {
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+    
+    // Ищем pending заявки с фото чека, созданные за последние 10 минут
+    const pendingRequests = await prisma.request.findMany({
+      where: {
+        requestType: 'deposit',
+        status: 'pending',
+        createdAt: { gte: tenMinutesAgo },
+        OR: [
+          { photoFileId: { not: null } },
+          { photoFileUrl: { not: null } },
+        ],
+        incomingPayments: { none: { isProcessed: true } },
+      },
+      select: {
+        id: true,
+        amount: true,
+        createdAt: true,
+      },
+      take: 50, // Ограничиваем количество для производительности
+    })
+
+    if (pendingRequests.length === 0) {
+      return // Нет заявок для проверки
+    }
+
+    console.log(`🔍 [Periodic Check] Checking ${pendingRequests.length} pending requests with photos for new payments...`)
+
+    let processedCount = 0
+    for (const request of pendingRequests) {
+      if (!request.amount) continue
+      
+      try {
+        const { checkAndProcessExistingPayment } = await import('./auto-deposit')
+        const amount = parseFloat(request.amount.toString())
+        const result = await checkAndProcessExistingPayment(request.id, amount)
+        
+        if (result) {
+          processedCount++
+          console.log(`✅ [Periodic Check] Found and processed payment for request ${request.id}`)
+        }
+      } catch (error: any) {
+        // Игнорируем ошибки для отдельных заявок, продолжаем проверку остальных
+        console.warn(`⚠️ [Periodic Check] Error checking request ${request.id}:`, error.message)
+      }
+    }
+
+    if (processedCount > 0) {
+      console.log(`✅ [Periodic Check] Processed ${processedCount} request(s) with new payments`)
+    }
+  } catch (error: any) {
+    // Игнорируем ошибки, чтобы не прерывать работу watcher
+    console.warn('⚠️ Periodic check error:', error.message)
+  }
+}
+
 // Хранилище флагов первого запуска для каждого кошелька
 const firstRunFlags = new Map<number, boolean>()
 
@@ -883,6 +945,19 @@ export async function startWatcher(): Promise<void> {
   // Проверяем таймауты сразу при запуске
   checkTimeouts().catch((error) => {
     console.warn('⚠️ Initial timeout check failed:', error.message)
+  })
+
+  // Запускаем периодическую проверку pending заявок с фото чека каждые 30 секунд
+  // Это обрабатывает случаи, когда платеж приходит ПОСЛЕ создания заявки
+  const pendingCheckInterval = setInterval(() => {
+    checkPendingRequestsWithPhotos().catch((error) => {
+      console.warn('⚠️ Pending requests check failed:', error.message)
+    })
+  }, 30000) // Каждые 30 секунд
+
+  // Проверяем pending заявки сразу при запуске
+  checkPendingRequestsWithPhotos().catch((error) => {
+    console.warn('⚠️ Initial pending requests check failed:', error.message)
   })
 
   // Запускаем watcher для каждого кошелька параллельно
