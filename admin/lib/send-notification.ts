@@ -467,11 +467,11 @@ function getBankName(bankId: string | null | undefined): string | null {
   const bankMap: Record<string, string> = {
     'mbank': 'MBank',
     'kompanion': 'Компаньон',
-    'odengi': 'O!Money',
+    'odengi': 'О банк',
     'bakai': 'Bakai',
     'balance': 'Balance.kg',
     'megapay': 'MegaPay',
-    'omoney': 'О деньги',
+    'omoney': 'О банк',
     'demir': 'DemirBank',
     'demirbank': 'DemirBank',
   }

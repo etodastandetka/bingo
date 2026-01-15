@@ -87,7 +87,7 @@ if not os.path.exists(IMAGES_DIR):
 # Банки для пополнения
 BANKS = [
     {'id': 'mbank', 'name': 'Mbank', 'icon': '/static/images/mbank.png'},
-    {'id': 'omoney', 'name': 'О деньги', 'icon': '/static/images/omoney.jpg'},
+    {'id': 'omoney', 'name': 'О банк', 'icon': '/static/images/omoney.jpg'},
     {'id': 'bakai', 'name': 'BAKAI', 'icon': '/static/images/bakai.jpg'},
     {'id': 'megapay', 'name': 'MEGApay', 'icon': '/static/images/megapay.jpg'},
 ]

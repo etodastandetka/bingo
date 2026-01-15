@@ -29,14 +29,14 @@ const DEPOSIT_BANKS = [
   { id: 'mbank', name: 'MBank' },
   { id: 'demir', name: 'DemirBank' },
   { id: 'balance', name: 'Balance.kg' },
-  { id: 'omoney', name: 'O!Money' },
+  { id: 'omoney', name: 'О банк' },
   { id: 'megapay', name: 'MegaPay' },
   { id: 'bakai', name: 'Bakai' },
 ]
 
 const WITHDRAWAL_BANKS = [
   { id: 'kompanion', name: 'Компаньон' },
-  { id: 'odengi', name: 'O!Money' },
+  { id: 'odengi', name: 'О банк' },
   { id: 'bakai', name: 'Bakai' },
   { id: 'balance', name: 'Balance.kg' },
   { id: 'megapay', name: 'MegaPay' },

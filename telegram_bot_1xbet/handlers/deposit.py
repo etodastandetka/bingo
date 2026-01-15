@@ -601,7 +601,7 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             # Маппинг ID банков на названия в all_bank_urls
             bank_name_map = {
                 'mbank': 'MBank',
-                'omoney': 'O!Money',
+                'omoney': 'О банк',
                 'bakai': 'Bakai',
                 'megapay': 'MegaPay',
                 'demir': 'DemirBank',

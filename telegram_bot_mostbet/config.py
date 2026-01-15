@@ -69,7 +69,7 @@ class Config:
         {'id': 'mbank', 'name': 'Mbank'},
         {'id': 'demir', 'name': 'DemirBank'},
         {'id': 'balance', 'name': 'Balance.kg'},
-        {'id': 'omoney', 'name': 'О деньги'},
+        {'id': 'omoney', 'name': 'О банк'},
         {'id': 'megapay', 'name': 'MEGApay'},
         {'id': 'bakai', 'name': 'BAKAI'},
     ]
@@ -77,7 +77,7 @@ class Config:
     # Банки для вывода (ID должны совпадать с настройками в админке)
     WITHDRAW_BANKS = [
         {'id': 'kompanion', 'name': 'Компаньон'},
-        {'id': 'odengi', 'name': 'O!Money'},
+        {'id': 'odengi', 'name': 'О банк'},
         {'id': 'bakai', 'name': 'Bakai'},
         {'id': 'balance', 'name': 'Balance.kg'},
         {'id': 'megapay', 'name': 'MegaPay'},
