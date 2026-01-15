@@ -47,32 +47,6 @@ export async function POST(request: NextRequest) {
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
     const uncreatedModel = (prisma as any).uncreatedRequest
 
-    // Если уже есть резервация для этого пользователя/аккаунта — возвращаем её
-    if (uncreatedModel) {
-      const existingReservation = await uncreatedModel.findFirst({
-        where: {
-          userId: userIdBigInt,
-          accountId: accountId ? String(accountId) : undefined,
-          requestType,
-          createdRequestId: null,
-          createdAt: { gte: tenMinutesAgo },
-          status: { in: ['reserved', 'not_created', 'pending_check'] },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-
-      if (existingReservation?.amount) {
-        const response = NextResponse.json(
-          createApiResponse({
-            amount: existingReservation.amount.toString(),
-            reservationId: existingReservation.id,
-          })
-        )
-        response.headers.set('Access-Control-Allow-Origin', '*')
-        return response
-      }
-    }
-
     const baseFloor = Math.floor(baseAmount)
 
     const isAmountBlocked = async (amountToCheck: Prisma.Decimal): Promise<boolean> => {
