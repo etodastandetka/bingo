@@ -527,6 +527,10 @@ export default function RequestDetailPage() {
   }
 
   const getStatusLabel = (status: string, requestData?: RequestDetail | null) => {
+    if (requestData?.processedBy === 'автопополнение' || requestData?.processedBy === 'autodeposit') {
+      return 'Успешно'
+    }
+    
     switch (status) {
       case 'pending':
         return 'Ожидает'
@@ -1235,11 +1239,13 @@ export default function RequestDetailPage() {
     const isWithdraw = request?.requestType === 'withdraw'
     const displayAmount = formatAmount(request?.amount, isWithdraw)
     const isDeferred = request?.status === 'deferred'
-    // Проверяем, является ли статус успешным
+    // Проверяем, является ли статус успешным (включая автопополнение)
     const isSuccessStatus = request?.status === 'completed' || 
                             request?.status === 'approved' || 
                             request?.status === 'auto_completed' || 
-                            request?.status === 'autodeposit_success'
+                            request?.status === 'autodeposit_success' ||
+                            request?.processedBy === 'автопополнение' ||
+                            request?.processedBy === 'autodeposit'
     
     // Определяем тип транзакции для проверки
     const getTransactionTypeForMinus = () => {
