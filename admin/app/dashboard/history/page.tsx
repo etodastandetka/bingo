@@ -197,13 +197,14 @@ export default function HistoryPage() {
       return { label: 'Отклонено', color: 'bg-red-500 text-white border border-red-400' }
     }
     
-    // Если автопополнение - показываем "Успешно" только для не-отклоненных заявок
-    if (processedBy === 'автопополнение' || processedBy === 'autodeposit') {
+    const isSuccess = status === 'completed' || status === 'auto_completed' || status === 'approved' || status === 'autodeposit_success'
+    // Если автопополнение - показываем "Успешно" только когда статус действительно успешный
+    if (isSuccess && (processedBy === 'автопополнение' || processedBy === 'autodeposit')) {
       return { label: 'Успешно', color: 'bg-green-500 text-white border border-green-400' }
     }
     
     // Маппинг статусов на русские метки (темная тема)
-    if (status === 'completed' || status === 'auto_completed' || status === 'approved' || status === 'autodeposit_success') {
+    if (isSuccess) {
       return { label: 'Успешно', color: 'bg-green-500 text-white border border-green-400' }
     }
     if (status === 'pending' || status === 'processing') {
@@ -232,13 +233,14 @@ export default function HistoryPage() {
     // Для депозитов
     if (tx.type === 'deposit') {
       const isRejected = tx.status === 'rejected' || tx.status === 'declined'
-      // Автопополнение - только если заявка не отклонена
-      if (!isRejected && (tx.processed_by === 'автопополнение' || tx.processed_by === 'autodeposit')) {
+      const isSuccess = tx.status === 'completed' || tx.status === 'auto_completed' || tx.status === 'approved' || tx.status === 'autodeposit_success'
+      // Автопополнение - только если заявка не отклонена и статус успешный
+      if (!isRejected && isSuccess && (tx.processed_by === 'автопополнение' || tx.processed_by === 'autodeposit')) {
         return 'автопополнение'
       }
       
       // Авто пополнение - если статус явно указывает на автопополнение и заявка не отклонена
-      if (!isRejected && (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || tx.status_detail?.includes('autodeposit'))) {
+      if (!isRejected && (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || (isSuccess && tx.status_detail?.includes('autodeposit')))) {
         return 'автопополнение'
       }
       
