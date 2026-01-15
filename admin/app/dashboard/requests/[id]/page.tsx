@@ -1239,9 +1239,7 @@ export default function RequestDetailPage() {
     const isSuccessStatus = request?.status === 'completed' || 
                             request?.status === 'approved' || 
                             request?.status === 'auto_completed' || 
-                            request?.status === 'autodeposit_success' ||
-                            request?.processedBy === 'автопополнение' ||
-                            request?.processedBy === 'autodeposit'
+                            request?.status === 'autodeposit_success'
     
     // Определяем тип транзакции для проверки
     const getTransactionTypeForMinus = () => {
