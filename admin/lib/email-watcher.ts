@@ -141,6 +141,11 @@ async function processEmail(
             // Парсим email
             const parsed = await simpleParser(buffer)
             const text = parsed.text || parsed.html || parsed.textAsHtml || ''
+            const previewText = text
+              .replace(/<[^>]*>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 200)
 
             // ВАЖНО: Проверяем дату письма - если письмо старше 7 дней, сразу помечаем как прочитанное
             // (увеличено до 7 дней, чтобы обрабатывать письма, которые пришли недавно)
@@ -163,14 +168,14 @@ async function processEmail(
 
             // Парсим сумму и дату из письма
             console.log(`🔍 [Wallet ${settings.walletId || 'N/A'}] Parsing email UID ${uid} with bank: ${settings.bank}`)
-            console.log(`   Text preview (first 200 chars): ${text.substring(0, 200)}`)
+            console.log(`   Text preview (first 200 chars): ${previewText}`)
             const paymentData = parseEmailByBank(text, settings.bank)
 
           if (!paymentData) {
             console.error(`❌ [Wallet ${settings.walletId || 'N/A'}] Could not parse email (UID: ${uid})`)
             console.error(`   Bank setting: ${settings.bank}`)
             console.error(`   Text length: ${text.length}`)
-            console.error(`   Text sample: ${text.substring(0, 500)}`)
+            console.error(`   Text sample: ${previewText}`)
             // Письмо уже помечено как прочитанное выше, просто завершаем
             resolve()
             return
@@ -754,8 +759,16 @@ async function startIdleMode(settings: WatcherSettings): Promise<void> {
 async function checkTimeouts(): Promise<void> {
   try {
     // Вызываем API для проверки таймаутов
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-    const response = await fetch(`${baseUrl}/api/auto-deposit/check-timeout`, {
+    const baseUrl = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || ''
+    if (!baseUrl) {
+      return
+    }
+    const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+    const timeoutUrl = normalizedBaseUrl.endsWith('/api')
+      ? `${normalizedBaseUrl}/auto-deposit/check-timeout`
+      : `${normalizedBaseUrl}/api/auto-deposit/check-timeout`
+
+    const response = await fetch(timeoutUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     })
