@@ -9,6 +9,8 @@ ssl_context.check_hostname = False
 ssl_context.verify_mode = ssl.CERT_NONE
 
 class APIClient:
+    DEFAULT_RETRY_MESSAGE = 'Отправьте заявку еще раз с этой же суммой.'
+
     @staticmethod
     async def _read_json_or_default(response: aiohttp.ClientResponse, default: Dict[str, Any]) -> Dict[str, Any]:
         """Безопасно читать JSON, возвращать default при не-JSON ответе"""
@@ -97,7 +99,7 @@ class APIClient:
                         json=data,
                         timeout=aiohttp.ClientTimeout(total=2)
                     ) as response:
-                        return await APIClient._read_json_or_error(response, 'Произошла ошибка. Попробуйте позже.')
+                        return await APIClient._read_json_or_error(response, APIClient.DEFAULT_RETRY_MESSAGE)
                 except:
                     # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
@@ -106,7 +108,7 @@ class APIClient:
                 f'{api_url}/payment',
                 json=data
             ) as response:
-                return await APIClient._read_json_or_error(response, 'Произошла ошибка. Попробуйте позже.')
+                return await APIClient._read_json_or_error(response, APIClient.DEFAULT_RETRY_MESSAGE)
     
     @staticmethod
     async def generate_qr(amount: float, bank: str = 'omoney') -> Dict[str, Any]:
@@ -437,7 +439,7 @@ class APIClient:
                         json={'message_id': message_id},
                         timeout=aiohttp.ClientTimeout(total=3)
                     ) as response:
-                        return await APIClient._read_json_or_error(response, 'Произошла ошибка. Попробуйте позже.')
+                        return await APIClient._read_json_or_error(response, APIClient.DEFAULT_RETRY_MESSAGE)
                 except:
                     # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
@@ -451,7 +453,7 @@ class APIClient:
                 json={'message_id': message_id},
                 timeout=aiohttp.ClientTimeout(total=3)
             ) as response:
-                return await APIClient._read_json_or_error(response, 'Произошла ошибка. Попробуйте позже.')
+                return await APIClient._read_json_or_error(response, APIClient.DEFAULT_RETRY_MESSAGE)
     
     @staticmethod
     async def get_saved_casino_account_id(telegram_user_id: str, casino_id: str) -> Dict[str, Any]:
