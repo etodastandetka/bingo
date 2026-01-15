@@ -21,6 +21,25 @@ class APIClient:
             return default
 
     @staticmethod
+    async def _read_json_or_error(response: aiohttp.ClientResponse, default_message: str) -> Dict[str, Any]:
+        """Читать JSON, иначе вернуть ошибку с сообщением"""
+        content_type = response.headers.get('Content-Type', '')
+        if 'application/json' not in content_type:
+            try:
+                text = await response.text()
+            except Exception:
+                text = ''
+            return {
+                'success': False,
+                'message': default_message,
+                'error': f'Non-JSON response: {text[:200]}'
+            }
+        try:
+            return await response.json()
+        except Exception as e:
+            return {'success': False, 'message': default_message, 'error': str(e)}
+
+    @staticmethod
     async def create_request(
         telegram_user_id: str,
         request_type: str,
@@ -78,7 +97,7 @@ class APIClient:
                         json=data,
                         timeout=aiohttp.ClientTimeout(total=2)
                     ) as response:
-                        return await response.json()
+                        return await APIClient._read_json_or_error(response, 'Произошла ошибка. Попробуйте позже.')
                 except:
                     # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
@@ -87,7 +106,7 @@ class APIClient:
                 f'{api_url}/payment',
                 json=data
             ) as response:
-                return await response.json()
+                return await APIClient._read_json_or_error(response, 'Произошла ошибка. Попробуйте позже.')
     
     @staticmethod
     async def generate_qr(amount: float, bank: str = 'omoney') -> Dict[str, Any]:
@@ -418,7 +437,7 @@ class APIClient:
                         json={'message_id': message_id},
                         timeout=aiohttp.ClientTimeout(total=3)
                     ) as response:
-                        return await response.json()
+                        return await APIClient._read_json_or_error(response, 'Произошла ошибка. Попробуйте позже.')
                 except:
                     # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
@@ -432,7 +451,7 @@ class APIClient:
                 json={'message_id': message_id},
                 timeout=aiohttp.ClientTimeout(total=3)
             ) as response:
-                return await response.json()
+                return await APIClient._read_json_or_error(response, 'Произошла ошибка. Попробуйте позже.')
     
     @staticmethod
     async def get_saved_casino_account_id(telegram_user_id: str, casino_id: str) -> Dict[str, Any]:
