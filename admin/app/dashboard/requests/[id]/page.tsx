@@ -1250,8 +1250,9 @@ export default function RequestDetailPage() {
       
       // Для депозитов
       if (request?.requestType === 'deposit') {
-        // Авто пополнение - если статус явно указывает на автопополнение
-        if (request?.status === 'autodeposit_success' || request?.status === 'auto_completed' || request?.status_detail?.includes('autodeposit')) {
+        const isRejected = request?.status === 'rejected' || request?.status === 'declined'
+        // Авто пополнение - если статус явно указывает на автопополнение и заявка не отклонена
+        if (!isRejected && (request?.status === 'autodeposit_success' || request?.status === 'auto_completed' || request?.status_detail?.includes('autodeposit'))) {
           return 'Автопополнение'
         }
         

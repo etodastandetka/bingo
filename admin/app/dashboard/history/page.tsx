@@ -191,7 +191,13 @@ export default function HistoryPage() {
   }
 
   const getStatusLabel = (status: string, statusDetail: string | null, processedBy?: string | null) => {
-    // Если автопополнение - показываем "Успешно"
+    const isRejected = status === 'rejected' || status === 'declined'
+    // Сначала учитываем отклонение, чтобы не показывать "Успешно" после ручного отказа
+    if (isRejected) {
+      return { label: 'Отклонено', color: 'bg-red-500 text-white border border-red-400' }
+    }
+    
+    // Если автопополнение - показываем "Успешно" только для не-отклоненных заявок
     if (processedBy === 'автопополнение' || processedBy === 'autodeposit') {
       return { label: 'Успешно', color: 'bg-green-500 text-white border border-green-400' }
     }
@@ -199,9 +205,6 @@ export default function HistoryPage() {
     // Маппинг статусов на русские метки (темная тема)
     if (status === 'completed' || status === 'auto_completed' || status === 'approved' || status === 'autodeposit_success') {
       return { label: 'Успешно', color: 'bg-green-500 text-white border border-green-400' }
-    }
-    if (status === 'rejected' || status === 'declined') {
-      return { label: 'Отклонено', color: 'bg-red-500 text-white border border-red-400' }
     }
     if (status === 'pending' || status === 'processing') {
       return { label: 'Ожидает', color: 'bg-yellow-500 text-black border border-yellow-400' }
@@ -228,13 +231,14 @@ export default function HistoryPage() {
     
     // Для депозитов
     if (tx.type === 'deposit') {
-      // Автопополнение - проверяем processedBy
-      if (tx.processed_by === 'автопополнение' || tx.processed_by === 'autodeposit') {
+      const isRejected = tx.status === 'rejected' || tx.status === 'declined'
+      // Автопополнение - только если заявка не отклонена
+      if (!isRejected && (tx.processed_by === 'автопополнение' || tx.processed_by === 'autodeposit')) {
         return 'автопополнение'
       }
       
-      // Авто пополнение - если статус явно указывает на автопополнение
-      if (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || tx.status_detail?.includes('autodeposit')) {
+      // Авто пополнение - если статус явно указывает на автопополнение и заявка не отклонена
+      if (!isRejected && (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || tx.status_detail?.includes('autodeposit'))) {
         return 'автопополнение'
       }
       

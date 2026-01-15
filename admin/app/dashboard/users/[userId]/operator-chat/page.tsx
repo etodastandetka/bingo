@@ -685,7 +685,8 @@ export default function OperatorChatPage() {
     }
     
     if (tx.transType === 'deposit') {
-      if (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || tx.status_detail?.includes('autodeposit')) {
+      const isRejected = tx.status === 'rejected' || tx.status === 'declined'
+      if (!isRejected && (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || tx.status_detail?.includes('autodeposit'))) {
         return 'Авто пополнение'
       }
       if (tx.status_detail?.match(/profile-\d+/)) {

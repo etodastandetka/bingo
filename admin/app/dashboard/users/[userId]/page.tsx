@@ -233,8 +233,9 @@ export default function UserDetailPage() {
     
     // Для депозитов
     if (tx.transType === 'deposit') {
-      // Авто пополнение - если статус явно указывает на автопополнение
-      if (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || tx.status_detail?.includes('autodeposit')) {
+      const isRejected = tx.status === 'rejected' || tx.status === 'declined'
+      // Авто пополнение - если статус явно указывает на автопополнение и заявка не отклонена
+      if (!isRejected && (tx.status === 'autodeposit_success' || tx.status === 'auto_completed' || tx.status_detail?.includes('autodeposit'))) {
         return 'Автопополнение'
       }
       
