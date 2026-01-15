@@ -787,21 +787,30 @@ export async function POST(request: NextRequest) {
       
       // ВАЖНО: Проверяем, что статус действительно 'pending'
       if (verifyRequest.status !== 'pending') {
-        const errorData = {
-          expected: 'pending',
-          actual: verifyRequest.status,
-          id: verifyRequest.id
+        const successStatuses = ['autodeposit_success', 'auto_completed', 'completed', 'approved']
+        if (successStatuses.includes(verifyRequest.status)) {
+          console.log('ℹ️ Payment API - Request already marked as success after creation:', {
+            id: verifyRequest.id,
+            status: verifyRequest.status,
+            processedBy: verifyRequest.processedBy,
+          })
+        } else {
+          const errorData = {
+            expected: 'pending',
+            actual: verifyRequest.status,
+            id: verifyRequest.id
+          }
+          console.error('❌ Payment API - CRITICAL: Request created with wrong status!', errorData)
+          addLog('error', `❌ Заявка создана с неправильным статусом! (ID: ${verifyRequest.id})`, errorData)
+          
+          // Исправляем статус на 'pending'
+          await prisma.request.update({
+            where: { id: verifyRequest.id },
+            data: { status: 'pending' }
+          })
+          console.log('✅ Payment API - Status corrected to pending')
+          addLog('success', `✅ Статус заявки исправлен на 'pending' (ID: ${verifyRequest.id})`)
         }
-        console.error('❌ Payment API - CRITICAL: Request created with wrong status!', errorData)
-        addLog('error', `❌ Заявка создана с неправильным статусом! (ID: ${verifyRequest.id})`, errorData)
-        
-        // Исправляем статус на 'pending'
-        await prisma.request.update({
-          where: { id: verifyRequest.id },
-          data: { status: 'pending' }
-        })
-        console.log('✅ Payment API - Status corrected to pending')
-        addLog('success', `✅ Статус заявки исправлен на 'pending' (ID: ${verifyRequest.id})`)
       }
 
       // ФОНОВОЕ АВТОПОПОЛНЕНИЕ: Проверяем наличие платежа для ВСЕХ заявок (с чеком и без)

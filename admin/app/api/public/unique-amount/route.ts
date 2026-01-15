@@ -18,7 +18,25 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const contentType = request.headers.get('content-type') || ''
+    const rawBody = await request.text()
+    let body: any = {}
+    if (rawBody) {
+      if (contentType.includes('application/json')) {
+        try {
+          body = JSON.parse(rawBody)
+        } catch {
+          body = {}
+        }
+      }
+
+      if (!body || Object.keys(body).length === 0) {
+        const params = new URLSearchParams(rawBody)
+        if (Array.from(params.keys()).length > 0) {
+          body = Object.fromEntries(params.entries())
+        }
+      }
+    }
     const {
       amount,
       userId,
