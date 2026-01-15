@@ -103,6 +103,49 @@ class APIClient:
                 json={'amount': amount, 'bank': bank}
             ) as response:
                 return await response.json()
+
+    @staticmethod
+    async def get_unique_amount(
+        user_id: str,
+        account_id: str,
+        amount: float,
+        bookmaker: str,
+        bank: str = 'omoney',
+        bot_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Получить уникальную сумму с копейками (резервация на 10 минут)"""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            data = {
+                'userId': str(user_id),
+                'accountId': account_id,
+                'amount': amount,
+                'bookmaker': bookmaker,
+                'bank': bank,
+                'requestType': 'deposit',
+            }
+            if bot_type:
+                data['botType'] = bot_type
+            
+            # Пробуем сначала локальный API, если не доступен - используем продакшн
+            api_url = Config.API_BASE_URL
+            if api_url.startswith('http://localhost'):
+                try:
+                    async with session.post(
+                        f'{api_url}/public/unique-amount',
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        return await response.json()
+                except:
+                    # Если локальный недоступен, используем продакшн
+                    api_url = Config.API_FALLBACK_URL
+            
+            async with session.post(
+                f'{api_url}/public/unique-amount',
+                json=data
+            ) as response:
+                return await response.json()
     
     @staticmethod
     async def create_uncreated_request(

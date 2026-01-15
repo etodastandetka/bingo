@@ -557,9 +557,29 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             await cmd_start(message, state, bot)
             return
         
-        # Добавляем копейки к сумме (случайное число от 1 до 99)
-        import random
-        amount_with_cents = amount + (random.randint(1, 99) / 100)
+        # Получаем уникальную сумму с копейками (резервация на 10 минут)
+        amount_with_cents = None
+        try:
+            unique_result = await APIClient.get_unique_amount(
+                user_id=str(message.from_user.id),
+                account_id=account_id,
+                amount=amount,
+                bookmaker=casino_id,
+                bank='omoney',
+                bot_type=Config.BOT_TYPE
+            )
+            if unique_result.get('success') and unique_result.get('data', {}).get('amount'):
+                amount_with_cents = float(unique_result.get('data', {}).get('amount'))
+                reservation_id = unique_result.get('data', {}).get('reservationId')
+                if reservation_id:
+                    await state.update_data(uncreated_request_id=str(reservation_id))
+        except Exception as e:
+            logger.warning(f"[Deposit] Failed to get unique amount, fallback to random: {e}")
+        
+        # Fallback: случайные копейки
+        if amount_with_cents is None:
+            import random
+            amount_with_cents = amount + (random.randint(1, 99) / 100)
         
         # Сохраняем сумму в состояние
         await state.update_data(amount=amount_with_cents)
@@ -941,6 +961,7 @@ async def deposit_receipt_received(message: Message, state: FSMContext, bot: Bot
                 telegram_first_name=message.from_user.first_name,
                 telegram_last_name=message.from_user.last_name,
                 receipt_photo=photo_base64_with_prefix,
+                uncreated_request_id=data.get('uncreated_request_id'),
                 bot_type=Config.BOT_TYPE
             )
             if result.get('success') and result.get('data'):

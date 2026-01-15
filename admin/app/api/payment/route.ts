@@ -694,8 +694,30 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Убрали обработку uncreated_request_id, так как теперь создаем заявку сразу при показе QR кода
-      // Если в будущем понадобится - можно вернуть
+      // Если передан uncreated_request_id — связываем резервацию с созданной заявкой
+      if (uncreated_request_id) {
+        try {
+          const uncreatedId = Number(uncreated_request_id)
+          if (!Number.isNaN(uncreatedId)) {
+            const uncreatedModel = (prisma as any).uncreatedRequest
+            if (uncreatedModel) {
+              await uncreatedModel.update({
+                where: { id: uncreatedId },
+                data: {
+                  createdRequestId: newRequest.id,
+                  status: 'created',
+                },
+              })
+              console.log('✅ Payment API - Linked uncreated reservation to request:', {
+                uncreatedId,
+                requestId: newRequest.id,
+              })
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ Payment API - Failed to link uncreated reservation:', error)
+        }
+      }
 
       const successData = {
         id: newRequest.id,
