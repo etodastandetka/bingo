@@ -468,9 +468,14 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             )
             if unique_result.get('success') and unique_result.get('data', {}).get('amount'):
                 amount_with_cents = float(unique_result.get('data', {}).get('amount'))
-                reservation_id = unique_result.get('data', {}).get('reservationId')
-                if reservation_id:
-                    await state.update_data(uncreated_request_id=str(reservation_id))
+                # Если получили сумму без копеек - считаем это ошибкой
+                if abs(amount_with_cents - int(amount_with_cents)) < 0.001:
+                    logger.warning(f"[Deposit] Unique amount returned without cents ({amount_with_cents}), fallback to random")
+                    amount_with_cents = None
+                else:
+                    reservation_id = unique_result.get('data', {}).get('reservationId')
+                    if reservation_id:
+                        await state.update_data(uncreated_request_id=str(reservation_id))
         except Exception as e:
             logger.warning(f"[Deposit] Failed to get unique amount, fallback to random: {e}")
         
