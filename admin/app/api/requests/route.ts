@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
           requestType: true,
           status: true,
           statusDetail: true,
+          processedBy: true,
           createdAt: true,
           // Исключаем большие поля, которые не нужны для списка
           // photoFileUrl: false, // Не загружаем фото в списке
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest) {
           amount: r.amount ? r.amount.toString() : null,
           createdAt: r.createdAt ? r.createdAt.toISOString() : null,
           status_detail: r.statusDetail ?? null, // для совместимости с UI (snake_case)
+          processedBy: r.processedBy ?? null,
         })),
         pagination: {
           page,

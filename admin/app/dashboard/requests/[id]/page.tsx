@@ -508,7 +508,10 @@ export default function RequestDetailPage() {
     return `${diffSeconds}s`
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, processedBy?: string | null) => {
+    if (processedBy === 'автопополнение' || processedBy === 'autodeposit') {
+      return 'bg-blue-500 text-white'
+    }
     switch (status) {
       case 'pending':
       case 'Ожидает':
@@ -1431,7 +1434,7 @@ export default function RequestDetailPage() {
               </svg>
             </button>
           </div>
-          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
+          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status, request.processedBy)}`}>
             <div className={`w-1.5 h-1.5 rounded-full ${
               getStatusLabel(request.status, request) === 'Успешно' ? 'bg-blue-600' :
               getStatusLabel(request.status, request) === 'Отклонено' ? 'bg-red-600' :
@@ -2102,7 +2105,7 @@ export default function RequestDetailPage() {
           )}
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-400">Статус:</span>
-            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${getStatusColor(request.status)}`}>
+            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${getStatusColor(request.status, request.processedBy)}`}>
               <div className={`w-1.5 h-1.5 rounded-full ${
                 getStatusLabel(request.status, request) === 'Успешно' ? 'bg-blue-600' :
                 getStatusLabel(request.status, request) === 'Отклонено' ? 'bg-red-600' :

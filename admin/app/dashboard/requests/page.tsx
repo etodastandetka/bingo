@@ -13,6 +13,7 @@ interface Request {
   requestType: string
   status: string
   createdAt: string
+  processedBy?: string | null
 }
 
 export default function RequestsPage() {
@@ -100,7 +101,10 @@ export default function RequestsPage() {
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, processedBy?: string | null) => {
+    if (processedBy === 'автопополнение' || processedBy === 'autodeposit') {
+      return 'bg-blue-500 text-white'
+    }
     switch (status) {
       case 'completed':
       case 'approved':
@@ -122,7 +126,10 @@ export default function RequestsPage() {
     }
   }
 
-  const getStatusLabel = (status: string) => {
+  const getStatusLabel = (status: string, processedBy?: string | null) => {
+    if (processedBy === 'автопополнение' || processedBy === 'autodeposit') {
+      return 'Успешно'
+    }
     switch (status) {
       case 'pending':
         return 'Ожидает'
@@ -232,10 +239,11 @@ export default function RequestsPage() {
                     </span>
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                        request.status
+                        request.status,
+                        request.processedBy
                       )}`}
                     >
-                      {getStatusLabel(request.status)}
+                      {getStatusLabel(request.status, request.processedBy)}
                     </span>
                   </div>
                   <p className="text-xs text-gray-400">
