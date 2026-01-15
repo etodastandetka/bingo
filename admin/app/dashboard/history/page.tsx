@@ -190,7 +190,7 @@ export default function HistoryPage() {
     return `${day}.${month}.${year} • ${hours}:${minutes}`
   }
 
-  const getStatusLabel = (status: string, statusDetail: string | null, processedBy?: string | null) => {
+  const getStatusLabel = (status: string, statusDetail: string | null) => {
     const isRejected = status === 'rejected' || status === 'declined'
     // Сначала учитываем отклонение, чтобы не показывать "Успешно" после ручного отказа
     if (isRejected) {
@@ -198,10 +198,6 @@ export default function HistoryPage() {
     }
     
     const isSuccess = status === 'completed' || status === 'auto_completed' || status === 'approved' || status === 'autodeposit_success'
-    // Если автопополнение - показываем "Успешно" только когда статус действительно успешный
-    if (isSuccess && (processedBy === 'автопополнение' || processedBy === 'autodeposit')) {
-      return { label: 'Успешно', color: 'bg-green-500 text-white border border-green-400' }
-    }
     
     // Маппинг статусов на русские метки (темная тема)
     if (isSuccess) {
@@ -419,7 +415,7 @@ export default function HistoryPage() {
         <div className="space-y-3">
           {transactions.map((tx) => {
             const isDeposit = tx.type === 'deposit'
-            const statusInfo = getStatusLabel(tx.status, tx.status_detail, tx.processed_by)
+            const statusInfo = getStatusLabel(tx.status, tx.status_detail)
             const transactionType = getTransactionType(tx)
 
             return (
