@@ -74,7 +74,6 @@ export async function POST(request: NextRequest) {
     }
 
     const baseFloor = Math.floor(baseAmount)
-    const baseDecimal = new Prisma.Decimal(baseFloor.toFixed(2))
 
     const isAmountBlocked = async (amountToCheck: Prisma.Decimal): Promise<boolean> => {
       const blockedRequest = await prisma.request.findFirst({
@@ -103,34 +102,30 @@ export async function POST(request: NextRequest) {
       return false
     }
 
-    let selectedAmount = baseDecimal
-    const isBlocked = await isAmountBlocked(baseDecimal)
+    let attempts = 0
+    const startCents = Math.floor(Math.random() * 99) + 1
+    let currentCents = startCents
+    let foundUnique = false
+    let selectedAmount = new Prisma.Decimal((baseFloor + currentCents / 100).toFixed(2))
 
-    if (isBlocked) {
-      let attempts = 0
-      const startCents = Math.floor(Math.random() * 99) + 1
-      let currentCents = startCents
-      let foundUnique = false
-
-      while (attempts < 99 && !foundUnique) {
-        const candidate = baseFloor + currentCents / 100
-        const candidateDecimal = new Prisma.Decimal(candidate.toFixed(2))
-        const candidateBlocked = await isAmountBlocked(candidateDecimal)
-        if (!candidateBlocked) {
-          selectedAmount = candidateDecimal
-          foundUnique = true
-          break
-        }
-
-        currentCents++
-        if (currentCents > 99) currentCents = 1
-        attempts++
+    while (attempts < 99 && !foundUnique) {
+      const candidate = baseFloor + currentCents / 100
+      const candidateDecimal = new Prisma.Decimal(candidate.toFixed(2))
+      const candidateBlocked = await isAmountBlocked(candidateDecimal)
+      if (!candidateBlocked) {
+        selectedAmount = candidateDecimal
+        foundUnique = true
+        break
       }
 
-      if (!foundUnique) {
-        const fallbackCents = Math.floor(Math.random() * 99) + 1
-        selectedAmount = new Prisma.Decimal((baseFloor + fallbackCents / 100).toFixed(2))
-      }
+      currentCents++
+      if (currentCents > 99) currentCents = 1
+      attempts++
+    }
+
+    if (!foundUnique) {
+      const fallbackCents = Math.floor(Math.random() * 99) + 1
+      selectedAmount = new Prisma.Decimal((baseFloor + fallbackCents / 100).toFixed(2))
     }
 
     let reservationId: number | null = null
