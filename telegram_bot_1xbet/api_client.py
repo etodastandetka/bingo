@@ -10,6 +10,17 @@ ssl_context.verify_mode = ssl.CERT_NONE
 
 class APIClient:
     @staticmethod
+    async def _read_json_or_default(response: aiohttp.ClientResponse, default: Dict[str, Any]) -> Dict[str, Any]:
+        """Безопасно читать JSON, возвращать default при не-JSON ответе"""
+        content_type = response.headers.get('Content-Type', '')
+        if 'application/json' not in content_type:
+            return default
+        try:
+            return await response.json()
+        except Exception:
+            return default
+
+    @staticmethod
     async def create_request(
         telegram_user_id: str,
         request_type: str,
@@ -186,6 +197,7 @@ class APIClient:
     @staticmethod
     async def check_blocked(telegram_user_id: str, account_id: Optional[str] = None) -> Dict[str, Any]:
         """Проверить, заблокирован ли пользователь или accountId"""
+        default_response = {'success': True, 'data': {'blocked': False}}
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
             data = {
@@ -204,7 +216,7 @@ class APIClient:
                         json=data,
                         timeout=aiohttp.ClientTimeout(total=2)
                     ) as response:
-                        return await response.json()
+                        return await APIClient._read_json_or_default(response, default_response)
                 except:
                     # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
@@ -213,7 +225,7 @@ class APIClient:
                 f'{api_url}/public/check-blocked',
                 json=data
             ) as response:
-                return await response.json()
+                return await APIClient._read_json_or_default(response, default_response)
     
     @staticmethod
     async def check_player(bookmaker: str, account_id: str) -> Dict[str, Any]:
@@ -517,6 +529,7 @@ class APIClient:
     @staticmethod
     async def check_active_deposit(telegram_user_id: str) -> Dict[str, Any]:
         """Проверить, есть ли у пользователя активная заявка на пополнение"""
+        default_response = {'success': True, 'data': {'hasActive': False}}
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
             data = {
@@ -533,7 +546,7 @@ class APIClient:
                         json=data,
                         timeout=aiohttp.ClientTimeout(total=1)  # Уменьшен таймаут до 1 секунды
                     ) as response:
-                        return await response.json()
+                        return await APIClient._read_json_or_default(response, default_response)
                 except:
                     # Если локальный недоступен, используем продакшн
                     api_url = Config.API_FALLBACK_URL
@@ -543,5 +556,5 @@ class APIClient:
                 json=data,
                 timeout=aiohttp.ClientTimeout(total=1)  # Уменьшен таймаут до 1 секунды
             ) as response:
-                return await response.json()
+                return await APIClient._read_json_or_default(response, default_response)
 
