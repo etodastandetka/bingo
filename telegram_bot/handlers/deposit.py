@@ -162,6 +162,10 @@ async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: i
                     logger.info(f"[Timer] Message {message_id} not found or can't be edited, stopping timer: {e}")
                     active_timers[timer_key] = False
                     break
+                # Если сообщение не изменено (то же содержимое) - это нормально, просто продолжаем
+                elif 'message is not modified' in error_str or 'not modified' in error_str:
+                    logger.debug(f"[Timer] Message {message_id} not modified (same content), continuing...")
+                    # Продолжаем работу, это нормальная ситуация
                 else:
                     # Для других ошибок логируем предупреждение и продолжаем
                     logger.warning(f"[Timer] Could not update message {message_id}: {e}")
