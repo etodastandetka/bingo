@@ -3,9 +3,19 @@ import json
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Загружаем .env из текущей директории
-env_path = Path(__file__).parent / '.env'
-load_dotenv(dotenv_path=env_path)
+# Загружаем .env из admin/.env (основной файл с токенами)
+# Сначала пробуем admin/.env, потом текущую директорию
+admin_env_path = Path(__file__).parent.parent / 'admin' / '.env'
+local_env_path = Path(__file__).parent / '.env'
+
+# Загружаем admin/.env если существует, иначе локальный
+if admin_env_path.exists():
+    load_dotenv(dotenv_path=admin_env_path, override=True)
+elif local_env_path.exists():
+    load_dotenv(dotenv_path=local_env_path, override=True)
+else:
+    # Если ни один .env не найден, просто загружаем из окружения
+    load_dotenv()
 
 # Загружаем конфигурацию доменов из корня проекта
 def load_domains_config():
@@ -24,9 +34,11 @@ def load_domains_config():
 domains_config = load_domains_config()
 
 class Config:
-    # Токен для бота Mostbet (используйте BOT_TOKEN_MOSTBET или общий BOT_TOKEN)
-    BOT_TOKEN = os.getenv('BOT_TOKEN_MOSTBET', os.getenv('BOT_TOKEN', '8465235038:AAFNmN7GD2UVt7U1NDFIXpnG1Mw8YVr5_A8'))
-    OPERATOR_BOT_TOKEN = os.getenv('OPERATOR_BOT_TOKEN', '7958632748:AAH478HkHt2czFo7dxCoyFSgqH_zVLzDJ98')
+    # Токены читаются ТОЛЬКО из .env файла (admin/.env)
+    # Если токен не найден - будет ошибка при запуске
+    # Для Mostbet используется BOT_TOKEN_MOSTBET или BOT_TOKEN
+    BOT_TOKEN = os.getenv('BOT_TOKEN_MOSTBET') or os.getenv('BOT_TOKEN') or None
+    OPERATOR_BOT_TOKEN = os.getenv('OPERATOR_BOT_TOKEN') or None
     BOT_TYPE = 'mostbet'  # Тип бота для определения правильного токена при отправке уведомлений
     
     # Для API: используем конфиг из domains.json или .env, иначе localhost

@@ -1,3 +1,4 @@
+import asyncio
 from aiogram import Router, F, Bot
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
@@ -20,18 +21,40 @@ async def get_lang_from_state(state: FSMContext) -> str:
     return data.get('language', 'ru')
 
 async def check_channel_subscription(bot: Bot, user_id: int, channel: str) -> bool:
-    """Проверить подписку пользователя на канал"""
+    """Проверить подписку пользователя на канал
+    
+    Поддерживает:
+    - ID канала (например, -1002450771165)
+    - Username канала (например, @bingokg_news)
+    """
     try:
-        # Убираем @ если есть
-        channel_username = channel.lstrip('@')
+        # Определяем формат канала
+        # Если начинается с минуса или это число - это ID канала
+        channel_clean = channel.strip().lstrip('@')
         
-        # Получаем информацию о пользователе в канале
-        chat_member = await bot.get_chat_member(f'@{channel_username}', user_id)
+        # Проверяем, является ли это числовым ID (начинается с минуса или только цифры)
+        if channel_clean.startswith('-') or channel_clean.lstrip('-').isdigit():
+            # Это ID канала
+            channel_id = int(channel_clean)
+            chat_identifier = channel_id
+        else:
+            # Это username канала
+            chat_identifier = f'@{channel_clean}'
+        
+        # Получаем информацию о пользователе в канале с таймаутом
+        chat_member = await asyncio.wait_for(
+            bot.get_chat_member(chat_identifier, user_id),
+            timeout=5.0  # 5 секунд таймаут
+        )
         
         # Проверяем статус подписки
         # member, administrator, creator - подписан
         # left, kicked - не подписан
         return chat_member.status in ['member', 'administrator', 'creator']
+    except asyncio.TimeoutError:
+        # Таймаут - считаем что подписан, чтобы не блокировать бота
+        print(f"Error checking channel subscription: Request timeout")
+        return True
     except Exception as e:
         # Если канал не найден или ошибка, считаем что подписан (чтобы не блокировать бота)
         print(f"Error checking channel subscription: {e}")
@@ -72,10 +95,14 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     
     # Проверяем подписку на канал (только если включена)
     require_subscription = settings.get('require_channel_subscription', True)
+    # Используем channel_id если есть, иначе channel
+    channel_id = settings.get('channel_id')
     channel = settings.get('channel') or Config.CHANNEL
-    # Убеждаемся что channel - строка
-    if require_subscription and channel and isinstance(channel, str) and channel.strip():
-        is_subscribed = await check_channel_subscription(bot, message.from_user.id, channel)
+    # Определяем какой идентификатор использовать для проверки
+    channel_to_check = channel_id if channel_id else channel
+    # Убеждаемся что channel_to_check - строка
+    if require_subscription and channel_to_check and isinstance(channel_to_check, str) and channel_to_check.strip():
+        is_subscribed = await check_channel_subscription(bot, message.from_user.id, channel_to_check)
         
         if not is_subscribed:
             # Показываем сообщение с кнопкой подписки
@@ -142,16 +169,28 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
         await callback.answer(get_text(lang, 'deposit', 'casino_disabled', default='❌ Mostbet временно отключен'), show_alert=True)
         return
     
+    # Используем channel_id если есть, иначе channel
+    channel_id = settings.get('channel_id')
     channel = settings.get('channel') or Config.CHANNEL
-    # Убеждаемся что channel - строка
-    if not channel or not isinstance(channel, str) or not channel.strip():
+    # Определяем какой идентификатор использовать для проверки
+    channel_to_check = channel_id if channel_id else channel
+    # Убеждаемся что channel_to_check - строка
+    if not channel_to_check or not isinstance(channel_to_check, str) or not channel_to_check.strip():
         await callback.answer(get_text(lang, 'start', 'subscription_error', default='Ошибка проверки подписки'), show_alert=True)
         return
     
     # Проверяем подписку
-    is_subscribed = await check_channel_subscription(bot, callback.from_user.id, channel)
+    is_subscribed = await check_channel_subscription(bot, callback.from_user.id, channel_to_check)
     
     if is_subscribed:
+        # ВАЖНО: Отвечаем на callback сразу, чтобы избежать ошибки "query is too old"
+        try:
+            await callback.answer()
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"[CheckSubscription] Failed to answer callback: {e}")
+        
         # Удаляем сообщение с кнопкой подписки
         try:
             await callback.message.delete()
@@ -184,17 +223,30 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
         )
         
         await callback.message.answer(text, reply_markup=keyboard)
-        await callback.answer()
     else:
         # Еще не подписан
-        await callback.answer(
-            get_text(lang, 'start', 'not_subscribed', default='Пожалуйста, сначала подпишитесь на канал'),
-            show_alert=True
-        )
+        try:
+            await callback.answer(
+                get_text(lang, 'start', 'not_subscribed', default='Пожалуйста, сначала подпишитесь на канал'),
+                show_alert=True
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"[CheckSubscription] Failed to answer callback: {e}")
 
 @router.callback_query(F.data == 'main_menu')
 async def main_menu_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Обработка кнопки 'Главное меню'"""
+    # ВАЖНО: Отвечаем на callback как можно раньше, чтобы избежать ошибки "query is too old"
+    try:
+        await callback.answer()
+    except Exception as e:
+        # Игнорируем ошибки устаревших callback queries
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"[MainMenu] Failed to answer callback: {e}")
+    
     lang = await get_lang_from_state(state)
     
     # Очищаем состояние
@@ -242,5 +294,4 @@ async def main_menu_callback(callback: CallbackQuery, state: FSMContext, bot: Bo
     )
     
     await callback.message.answer(text, reply_markup=keyboard)
-    await callback.answer()
 

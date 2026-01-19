@@ -201,6 +201,11 @@ async def withdraw_phone_received(message: Message, state: FSMContext, bot: Bot)
         await cmd_start(message, state, bot)
         return
     
+    # Проверяем, что сообщение содержит текст
+    if not message.text:
+        await message.answer(get_text(lang, 'withdraw', 'invalid_phone') or 'Пожалуйста, отправьте номер телефона текстом')
+        return
+    
     phone = message.text.strip()
     
     # Проверка формата телефона
@@ -312,6 +317,11 @@ async def withdraw_account_id_received(message: Message, state: FSMContext, bot:
         await cmd_start(message, state, bot)
         return
     
+    # Проверяем, что сообщение содержит текст
+    if not message.text:
+        await message.answer('❌ Пожалуйста, отправьте ID счета текстом')
+        return
+    
     account_id = message.text.strip()
     
     if not account_id or not account_id.isdigit():
@@ -369,6 +379,11 @@ async def withdraw_code_received(message: Message, state: FSMContext, bot: Bot):
         # Показываем главное меню
         from handlers.start import cmd_start
         await cmd_start(message, state, bot)
+        return
+    
+    # Проверяем, что сообщение содержит текст
+    if not message.text:
+        await message.answer('❌ Пожалуйста, введите код текстом')
         return
     
     withdrawal_code = message.text.strip()

@@ -145,6 +145,8 @@ export async function PATCH(
           status: 'rejected',
         },
       })
+    }, {
+      timeout: 30000, // 30 секунд таймаут для транзакции
     })
 
     console.log(`✅ Unlinked payment ${id} from request ${requestId}`)

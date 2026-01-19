@@ -325,6 +325,11 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
         await cmd_start(message, state, bot)
         return
     
+    # Проверяем, что сообщение содержит текст
+    if not message.text:
+        await message.answer(get_text(lang, 'deposit', 'invalid_account_id') or 'Пожалуйста, отправьте ID счета текстом')
+        return
+    
     account_id = message.text.strip()
     
     if not account_id or not account_id.isdigit():
@@ -404,7 +409,10 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
     lang = await get_lang_from_state(state)
     
     # Игнорируем невидимые символы (например, неразрывный пробел)
-    if not message.text or not message.text.strip() or message.text.strip() == '\u200B':
+    # Проверяем наличие текста перед использованием методов
+    if not message.text:
+        return
+    if not message.text.strip() or message.text.strip() == '\u200B':
         return
     
     # Проверяем отмену (только если текст сообщения точно совпадает с текстом кнопки отмены)
@@ -973,7 +981,10 @@ async def deposit_invalid_receipt(message: Message, state: FSMContext, bot: Bot)
     lang = await get_lang_from_state(state)
     
     # Игнорируем невидимые символы (например, неразрывный пробел)
-    if not message.text or not message.text.strip() or message.text.strip() == '\u200B':
+    # Проверяем наличие текста перед использованием методов
+    if not message.text:
+        return
+    if not message.text.strip() or message.text.strip() == '\u200B':
         return
     
     # Игнорируем кнопки меню - они обрабатываются другими обработчиками

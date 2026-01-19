@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
       maintenance_message: settingsMap.maintenance_message || 'Технические работы. Попробуйте позже.',
       require_receipt_photo: settingsMap.require_receipt_photo === 'true' || settingsMap.require_receipt_photo === true,
       channel: (typeof settingsMap.channel === 'string' ? settingsMap.channel : settingsMap.channel?.toString()) || '@bingokg_news',
+      channel_id: (typeof settingsMap.channel_id === 'string' ? settingsMap.channel_id : settingsMap.channel_id?.toString()) || '-1002450771165',
       require_channel_subscription: settingsMap.require_channel_subscription === 'true' || settingsMap.require_channel_subscription === true,
     }
 
@@ -96,6 +97,7 @@ export async function GET(request: NextRequest) {
       maintenance_message: 'Технические работы. Попробуйте позже.',
       require_receipt_photo: false,
       channel: '@bingokg_news',
+      channel_id: '-1002450771165',
       require_channel_subscription: true,
     })
     res.headers.set('Access-Control-Allow-Origin', '*')
