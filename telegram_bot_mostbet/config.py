@@ -96,5 +96,6 @@ class Config:
     LANGUAGES = [
         {'code': 'ru', 'name': '🇷🇺 Русский'},
         {'code': 'ky', 'name': '🇰🇬 Кыргызча'},
+        {'code': 'uz', 'name': '🇺🇿 O\'zbekcha'},
     ]
 

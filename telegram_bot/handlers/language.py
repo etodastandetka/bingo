@@ -13,7 +13,7 @@ async def get_lang_from_state(state: FSMContext) -> str:
     data = await state.get_data()
     return data.get('language', 'ru')
 
-@router.message(F.text.in_(['🌐 Язык', '🌐 Тил']))
+@router.message(F.text.in_(['🌐 Язык', '🌐 Тил', '🌐 Til']))
 async def language_menu(message: Message, state: FSMContext):
     """Меню выбора языка"""
     lang = await get_lang_from_state(state)

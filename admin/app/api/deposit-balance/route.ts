@@ -202,10 +202,11 @@ export async function POST(request: NextRequest) {
         )
       }
       
-      // Для других ошибок обрабатываем как обычно
+      // Для других ошибок обрабатываем как обычно - устанавливаем статус pending
       await prisma.request.update({
         where: { id: parseInt(requestId) },
         data: {
+          status: 'pending',
           casinoError: errorMessage,
         },
       })

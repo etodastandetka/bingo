@@ -120,7 +120,7 @@ TRANSLATIONS = {
             'invalid_account_id': '❌ Туура ID эсепти жөнөтүңүз (сандар гана)',
             'invalid_amount': '❌ Сумма {min} ден {max} ге чейин болушу керек',
             'go_to_payment': '💰 Сумма: {amount:.2f} KGS\n🎰 Казино: {casino}\n🆔 ID: {account_id}\n\nТөлөө үчүн төмөнкү баскычты басыңыз:',
-            'qr_payment_info': '💰 Сумма: {amount:.2f} KGS\n🎰 Казино: {casino}\n🆔 ID: {account_id}\n\n📸 QR кодду сканердеп, банкты тандаңыз:',
+            'qr_payment_info': '💰 Сумма: {amount:.2f} KGS\n🎰 Казино: {casino}\n🆔 ID: {account_id}\n⏰ Калды: {timer}\n\n⚠️ Төлөөнү так сумма менен КОПЕЙКАЛАР менен төлөңүз!\n📸 Чектин скриншотун жөнөтүңүз',
             'timer_expired': '⏰ Төлөө убактысы бүттү. Сиз башкы менюга кайтып келдиңиз.',
             'select_bank': 'Төлөө үчүн банкты тандаңыз:',
             'send_receipt': '📸 Төлөө чегинин сүрөтүн жөнөтүңүз:',
@@ -181,6 +181,98 @@ TRANSLATIONS = {
         'chat': {
             'welcome': '👋 Колдоо кызматына кош келиңиз!\n\nСурооңузду жазсаңыз, биз сизге жардам беребиз.',
             'message_saved': '✅ Сиздин билдирүүңүз кабыл алынды',
+        },
+    },
+    'uz': {
+        'start': {
+            'greeting': 'Salom, {name}',
+            'auto_deposit': '⚡️ Avto-to\'ldirish: 0%',
+            'auto_withdraw': '⚡️ Avto-chiqarish: 0%',
+            'working': '🕐 Ishlamoqdamiz: 24/7',
+            'channel': '🗞 Bizning kanal: {channel}',
+            'support': '👨‍💻Yordam xizmati: {support}',
+            'bot_paused': '⏸ Bot vaqtincha to\'xtatildi',
+            'subscribe_required': '📢 Botdan foydalanish uchun bizning kanalimizga obuna bo\'lishingiz kerak: {channel}',
+            'subscribe_button': '📢 Kanalga obuna bo\'lish',
+            'check_subscription': '✅ Men obuna bo\'ldim',
+            'not_subscribed': 'Iltimos, avval kanalga obuna bo\'ling',
+            'subscription_error': 'Obunani tekshirishda xatolik',
+        },
+        'menu': {
+            'deposit': '💰 To\'ldirish',
+            'withdraw': '💸 Chiqarish',
+            'instruction': '📖 Ko\'rsatma',
+            'language': '🌐 Til',
+            'chat': '💬 Chat',
+        },
+        'deposit': {
+            'select_casino': 'Bukmekerni tanlang:',
+            'enter_account_id': '⚠️ ID-ingizni yana bir bor tekshiring\n❌ To\'ldirishni bekor qilish mumkin emas!!\n\n🆔 Mostbet hisobingizning ID-sini yuboring',
+            'enter_amount': 'To\'ldirish summasini kiriting:\nMinimum: {min}\nMaksimum: {max}',
+            'invalid_account_id': '❌ Iltimos, to\'g\'ri hisob ID-sini yuboring (faqat raqamlar)',
+            'invalid_amount': '❌ Summa {min} dan {max} gacha bo\'lishi kerak',
+            'go_to_payment': '💰 Summa: {amount:.2f} KGS\n🎰 Kazino: {casino}\n🆔 ID: {account_id}\n\nTo\'lov uchun quyidagi tugmani bosing:',
+            'qr_payment_info': '💰 Summa: {amount:.2f} KGS\n🎰 Kazino: {casino}\n🆔 ID: {account_id}\n⏰ Qoldi: {timer}\n\n⚠️ To\'lovni aniq summa bilan TYINLAR bilan to\'lang!\n📸 Chek skrinshotini yuboring',
+            'timer_expired': '⏰ To\'lov vaqti tugadi. Siz asosiy menyuga qaytdingiz.',
+            'select_bank': 'To\'lov uchun bankni tanlang:',
+            'send_receipt': '📸 To\'lov chekining suratini yuboring:',
+            'invalid_receipt': '❌ Iltimos, to\'lov chekining suratini yuboring',
+            'generating_qr': '⏳ QR kod yaratilmoqda...',
+            'qr_error': '❌ QR kod yaratishda xatolik. Keyinroq qayta urinib ko\'ring.',
+            'request_created': '📨 So\'rovingiz yuborildi\n\n🎰 Bukmeker: {casino}\n🆔 hisob: {account_id}\n💸 Summa: {amount:.2f}\n⏳ Tekshirish 5 daqiqadan oshmaydi!!!\n\n🧑‍💻Tex. Yordam @helperbingo_bot',
+            'error': '❌ Xatolik yuz berdi. Keyinroq qayta urinib ko\'ring.',
+            'cancel': '❌ Amal bekor qilindi',
+            'no_casinos_available': '❌ Mavjud kazino yo\'q',
+            'deposit_success': '✅ To\'ldirish muvaffaqiyatli!\n\n💰 Summa: {amount:.2f} KGS\n🎰 Kazino: {casino}\n🆔 ID: {account_id}',
+            'deposits_disabled': '❌ To\'ldirishlar vaqtincha o\'chirilgan',
+            'player_not_found': '❌ Bunday foydalanuvchi yo\'q. ID to\'g\'riligini tekshirib, qayta urinib ko\'ring.',
+            'casino_disabled': '❌ Bu kazino vaqtincha o\'chirilgan',
+            'banks_disabled': '❌ To\'ldirish uchun barcha banklar vaqtincha o\'chirilgan. Keyinroq qayta urinib ko\'ring.',
+        },
+        'withdraw': {
+            'select_casino': 'Bukmekerni tanlang:',
+            'select_bank': 'Kazino: {casino}\n\nBankni tanlang:',
+            'enter_phone': 'Kazino: {casino}\nBank: {bank}\n\nTelefon raqamini kiriting (+996):',
+            'invalid_phone': '❌ Raqam +996 bilan boshlanishi kerak',
+            'invalid_phone_format': '❌ Telefon raqamining noto\'g\'ri formati',
+            'send_qr_photo': 'Bankdan QR kodning suratini yuboring:',
+            'invalid_photo': '❌ Iltimos, QR kodning suratini yuboring',
+            'enter_account_id': '⚠️ ID-ingizni yana bir bor tekshiring\n❌ Chiqarishni bekor qilish mumkin emas!!\n\n🆔 Mostbet hisobingizning ID-sini yuboring',
+            'enter_code': 'Mostbet saytidan kodni kiriting:',
+            'request_created': '✅ Chiqarish so\'rovi yaratildi!\n\n🎰 Kazino: {casino}\n🏦 Bank: {bank}\n📱 Telefon: {phone}\n🆔 ID: {account_id}\n\nPul kelishini kutib turing. So\'rovingiz yaqin vaqtda qayta ishlanadi.',
+            'error': '❌ So\'rov yaratishda xatolik yuz berdi. Keyinroq qayta urinib ko\'ring.',
+            'cancel': '❌ Amal bekor qilindi',
+            'no_casinos_available': '❌ Mavjud kazino yo\'q',
+            'withdrawals_disabled': '❌ Chiqarishlar vaqtincha o\'chirilgan',
+            'casino_disabled': '❌ Bu kazino vaqtincha o\'chirilgan',
+            'banks_disabled': '❌ Chiqarish uchun barcha banklar vaqtincha o\'chirilgan. Keyinroq qayta urinib ko\'ring.',
+        },
+        'language': {
+            'select': 'Tilni tanlang:',
+            'changed': '✅ Til o\'zbekchaga o\'zgartirildi',
+        },
+        'instruction': {
+            'text': '''📖 Botdan foydalanish bo\'yicha ko\'rsatma
+
+💰 TO\'LDIRISH:
+1. "To\'ldirish" tugmasini bosing
+2. Mostbet hisobingizning ID-sini kiriting
+3. To\'ldirish summasini kiriting
+4. Havolaga o\'ting va to\'lang
+
+💸 CHIQARISH:
+1. "Chiqarish" tugmasini bosing
+2. Bankni tanlang
+3. Telefon raqamini kiriting (+996)
+4. Bankdan QR kodning suratini yuboring
+5. Mostbet hisobingizning ID-sini kiriting
+6. Mostbet saytidan kodni kiriting
+
+So\'rovingiz yaqin vaqtda qayta ishlanadi!''',
+        },
+        'chat': {
+            'welcome': '👋 Yordam xizmatiga xush kelibsiz!\n\nSavolingizni yozing, biz sizga yordam beramiz.',
+            'message_saved': '✅ Xabaringiz qabul qilindi',
         },
     }
 }

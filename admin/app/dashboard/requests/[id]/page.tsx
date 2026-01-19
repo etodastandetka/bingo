@@ -546,17 +546,11 @@ export default function RequestDetailPage() {
       case 'processing':
         return 'Обработка'
       case 'api_error':
-        // Для api_error показываем ошибку из statusDetail или casinoError
-        return requestData?.statusDetail || requestData?.casinoError || 'Ошибка API'
+        // Для api_error возвращаем "Ожидает" вместо показа ошибки
+        return 'Ожидает'
       default:
-        // Для неизвестного статуса показываем ошибку, если она есть
-        if (requestData?.casinoError) {
-          return requestData.casinoError.length > 50 ? requestData.casinoError.substring(0, 50) + '...' : requestData.casinoError
-        }
-        if (requestData?.statusDetail) {
-          return requestData.statusDetail.length > 50 ? requestData.statusDetail.substring(0, 50) + '...' : requestData.statusDetail
-        }
-        return status || 'Неизвестно'
+        // Для неизвестного статуса возвращаем "Ожидает" вместо "Неизвестно"
+        return 'Ожидает'
     }
   }
 

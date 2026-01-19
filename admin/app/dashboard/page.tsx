@@ -164,7 +164,8 @@ export default function DashboardPage() {
       case 'processing':
         return 'Обработка'
       default:
-        return 'Неизвестно'
+        // Для неизвестного статуса возвращаем "Ожидает" вместо "Неизвестно"
+        return 'Ожидает'
     }
   }
 

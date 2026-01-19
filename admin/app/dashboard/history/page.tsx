@@ -212,7 +212,8 @@ export default function HistoryPage() {
     if (status === 'deferred') {
       return { label: 'Отложено', color: 'bg-orange-500 text-white border border-orange-400' }
     }
-    return { label: 'Неизвестно', color: 'bg-gray-700 text-gray-300 border border-gray-600' }
+    // Для неизвестного статуса возвращаем "Ожидает" вместо "Неизвестно"
+    return { label: 'Ожидает', color: 'bg-yellow-500 text-black border border-yellow-400' }
   }
 
   const getTransactionType = (tx: Transaction) => {

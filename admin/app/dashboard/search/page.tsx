@@ -101,7 +101,8 @@ export default function SearchPage() {
       case 'processing':
         return 'Обработка'
       default:
-        return status
+        // Для неизвестного статуса возвращаем "Ожидает" вместо статуса
+        return 'Ожидает'
     }
   }
 

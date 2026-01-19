@@ -725,7 +725,8 @@ export default function OperatorChatPage() {
       case 'awaiting_manual':
         return 'Ручная'
       default:
-        return 'Неизвестно'
+        // Для неизвестного статуса возвращаем "Ожидает" вместо "Неизвестно"
+        return 'Ожидает'
     }
   }
 

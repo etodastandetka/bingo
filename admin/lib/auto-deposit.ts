@@ -603,12 +603,12 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
         }
       }
       
-      // Для других ошибок помечаем как api_error
+      // Для других ошибок помечаем как pending (ожидает)
       try {
         await prisma.request.update({
           where: { id: request.id },
           data: {
-            status: 'api_error',
+            status: 'pending',
             statusDetail: errorMessage.length > 50 ? errorMessage.substring(0, 50) : errorMessage,
             processedAt: new Date(),
             updatedAt: new Date(),

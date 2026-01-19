@@ -112,11 +112,11 @@ async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
     # Проверяем, что это не команда и не кнопка меню
     text = message.text
     menu_buttons = [
-        '💰 Пополнить', '💰 Толтуруу',
-        '💸 Вывести', '💸 Чыгаруу',
-        '📖 Инструкция', '📖 Көрсөтмө',
-        '🌐 Язык', '🌐 Тил',
-        '❌ Операция отменена', '❌ Аракет жокко чыгарылды'
+        '💰 Пополнить', '💰 Толтуруу', '💰 To\'ldirish',
+        '💸 Вывести', '💸 Чыгаруу', '💸 Chiqarish',
+        '📖 Инструкция', '📖 Көрсөтмө', '📖 Ko\'rsatma',
+        '🌐 Язык', '🌐 Тил', '🌐 Til',
+        '❌ Операция отменена', '❌ Аракет жокко чыгарылды', '❌ Amal bekor qilindi'
     ]
     
     if text in menu_buttons or text.startswith('/'):
