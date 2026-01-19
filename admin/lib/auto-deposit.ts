@@ -542,7 +542,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
         updatedPayment,
       }
     }, {
-      timeout: 30000, // 30 секунд таймаут для транзакции
+      timeout: 90000, // 90 секунд таймаут для транзакции (увеличено для учета времени API вызовов казино с ретраями)
     })
     
     // Если транзакция вернула skipped - заявка уже обработана другим процессом
