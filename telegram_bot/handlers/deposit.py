@@ -580,23 +580,53 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
                 bank='omoney',
                 bot_type=Config.BOT_TYPE
             )
+            # КРИТИЧНО: Проверяем, что админка вернула валидные данные
             if unique_result.get('success') and unique_result.get('data', {}).get('amount'):
-                amount_with_cents = float(unique_result.get('data', {}).get('amount'))
-                # Если получили сумму без копеек - считаем это ошибкой
-                if abs(amount_with_cents - int(amount_with_cents)) < 0.001:
-                    logger.warning(f"[Deposit] Unique amount returned without cents ({amount_with_cents}), fallback to random")
+                amount_str = str(unique_result.get('data', {}).get('amount'))
+                amount_with_cents = float(amount_str)
+                
+                # Проверяем, что копейки не равны 00 (проверяем и числовое, и строковое представление)
+                cents_value = amount_with_cents - int(amount_with_cents)
+                # Проверяем строковое представление для точности (например, "1000.00" -> копейки = 00)
+                amount_parts = amount_str.split('.')
+                has_zero_cents = False
+                if len(amount_parts) == 2:
+                    cents_part = amount_parts[1].strip()
+                    # Если копейки = "00" или "0" или пустая строка
+                    if cents_part == '00' or cents_part == '0' or cents_part == '':
+                        has_zero_cents = True
+                
+                # Если копейки равны 0 или 00 - считаем это ошибкой и используем fallback
+                if abs(cents_value) < 0.001 or has_zero_cents:
+                    logger.error(f"[Deposit] ❌ КРИТИЧНО: Unique amount returned with zero cents ({amount_str}), fallback to random. This should NEVER happen!")
                     amount_with_cents = None
                 else:
                     reservation_id = unique_result.get('data', {}).get('reservationId')
                     if reservation_id:
                         await state.update_data(uncreated_request_id=str(reservation_id))
+            else:
+                # Если админка вернула успешный ответ, но без данных - это ошибка
+                logger.warning(f"[Deposit] Admin returned success but no amount data: {unique_result}")
+                amount_with_cents = None
         except Exception as e:
-            logger.warning(f"[Deposit] Failed to get unique amount, fallback to random: {e}")
+            logger.error(f"[Deposit] ❌ Failed to get unique amount from admin, fallback to random: {e}")
         
-        # Fallback: случайные копейки
+        # Fallback: случайные копейки (ОБЯЗАТЕЛЬНО от 1 до 99, НИКОГДА не 00)
         if amount_with_cents is None:
             import random
-            amount_with_cents = amount + (random.randint(1, 99) / 100)
+            # Генерируем копейки от 1 до 99 (НИКОГДА не 00)
+            random_cents = random.randint(1, 99)
+            amount_with_cents = amount + (random_cents / 100)
+            logger.warning(f"[Deposit] ⚠️ Using fallback random cents: {random_cents} (amount: {amount_with_cents})")
+        
+        # ФИНАЛЬНАЯ ПРОВЕРКА: Если копейки все равно 00 (не должно быть, но на всякий случай)
+        final_cents = amount_with_cents - int(amount_with_cents)
+        if abs(final_cents) < 0.001:
+            import random
+            logger.error(f"[Deposit] ❌ КРИТИЧНО: Final amount still has zero cents ({amount_with_cents}), regenerating!")
+            random_cents = random.randint(1, 99)
+            amount_with_cents = amount + (random_cents / 100)
+            logger.warning(f"[Deposit] Regenerated with cents: {random_cents} (amount: {amount_with_cents})")
         
         # Сохраняем сумму в состояние
         await state.update_data(amount=amount_with_cents)
