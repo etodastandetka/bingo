@@ -62,10 +62,14 @@ class APIClient:
         """Создать заявку на пополнение или вывод"""
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
+            # КРИТИЧНО: Передаем сумму как строку с фиксированным форматом (2 знака после запятой)
+            # Это гарантирует, что копейки не потеряются при сериализации JSON
+            amount_str = f"{amount:.2f}" if isinstance(amount, (int, float)) else str(amount)
+            
             data = {
                 'telegram_user_id': str(telegram_user_id),
                 'type': request_type,
-                'amount': amount,
+                'amount': amount_str,  # Передаем как строку для точности
             }
             
             if bookmaker:

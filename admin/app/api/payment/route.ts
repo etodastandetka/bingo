@@ -144,6 +144,18 @@ export async function POST(request: NextRequest) {
     const amountStr = amount?.toString().trim() || ''
     const amountNum = amountStr ? parseFloat(amountStr) : 0
     
+    // КРИТИЧНО: Логируем входящую сумму для отладки
+    if (validType === 'deposit') {
+      console.log(`💰 Payment API - Received amount:`, {
+        raw: amount,
+        string: amountStr,
+        parsed: amountNum,
+        type: typeof amount,
+        hasCents: amountNum % 1 !== 0,
+        cents: Math.round((amountNum % 1) * 100)
+      })
+    }
+    
     // Для deposit amount должен быть > 0
     // Для withdraw amount может быть 0 или > 0 (если сумма еще не проверена, она может быть 0)
     if (validType === 'deposit') {
@@ -684,6 +696,29 @@ export async function POST(request: NextRequest) {
             }
           )
           return duplicateResponse
+        }
+      }
+
+      // КРИТИЧНО: Логируем финальную сумму перед созданием заявки
+      if (validType === 'deposit') {
+        const finalAmount = parseFloat(amountDecimal.toString())
+        const finalCents = Math.round((finalAmount % 1) * 100)
+        console.log(`✅ Payment API - Creating request with final amount:`, {
+          amount: amountDecimal.toString(),
+          parsed: finalAmount,
+          cents: finalCents,
+          hasZeroCents: finalCents === 0,
+          willAutodepositWork: finalCents !== 0
+        })
+        
+        // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Если сумма все еще заканчивается на .00 - это критическая ошибка
+        if (finalCents === 0) {
+          console.error(`❌ Payment API - CRITICAL ERROR: Request will be created with .00 cents! This should NEVER happen!`)
+          // Генерируем случайные копейки от 1 до 99
+          const randomCents = Math.floor(Math.random() * 99) + 1
+          const correctedAmount = Math.floor(finalAmount) + randomCents / 100
+          amountDecimal = new Prisma.Decimal(correctedAmount.toFixed(2))
+          console.error(`❌ Payment API - CORRECTED to:`, correctedAmount.toFixed(2))
         }
       }
 
