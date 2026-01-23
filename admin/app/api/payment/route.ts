@@ -559,12 +559,24 @@ export async function POST(request: NextRequest) {
           
           if (!foundUnique) {
             // Если не удалось найти уникальную сумму, используем случайную копейку
-            // Генерируем случайное число от 0 до 99 для копеек
-            const randomCents = Math.floor(Math.random() * 100)
+            // КРИТИЧНО: Генерируем копейки от 1 до 99 (НИКОГДА не 00)
+            const randomCents = Math.floor(Math.random() * 99) + 1 // От 1 до 99
             adjustedAmount = Math.floor(originalAmount) + randomCents / 100
             amountDecimal = new Prisma.Decimal(adjustedAmount.toFixed(2))
             console.warn('⚠️ Payment API - Could not find unique amount after 99 attempts, using random cents:', adjustedAmount.toFixed(2))
           }
+        }
+        
+        // КРИТИЧЕСКАЯ ПРОВЕРКА: Убеждаемся, что сумма НЕ заканчивается на .00
+        // Если заканчивается - генерируем случайные копейки от 1 до 99
+        const currentAmount = parseFloat(amountDecimal.toString())
+        const cents = Math.round((currentAmount % 1) * 100) // Получаем копейки (0-99)
+        if (cents === 0) {
+          // Сумма заканчивается на .00 - генерируем случайные копейки от 1 до 99
+          const randomCents = Math.floor(Math.random() * 99) + 1 // От 1 до 99
+          const correctedAmount = Math.floor(currentAmount) + randomCents / 100
+          amountDecimal = new Prisma.Decimal(correctedAmount.toFixed(2))
+          console.warn('⚠️ Payment API - CRITICAL: Amount ended with .00, corrected to:', correctedAmount.toFixed(2))
         }
       }
 
