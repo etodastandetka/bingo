@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { requireAuth, createApiResponse } from '@/lib/api-helpers'
 import { addLog } from '@/lib/logs'
 
@@ -178,6 +179,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // КРИТИЧНО: Проверяем и исправляем сумму для deposit - не должна заканчиваться на .00
+    let amountDecimal = new Prisma.Decimal(parseFloat(amount))
+    if (validRequestType === 'deposit') {
+      const amountNum = parseFloat(amount)
+      const cents = Math.round((amountNum % 1) * 100)
+      if (cents === 0) {
+        // Сумма заканчивается на .00 - генерируем случайные копейки от 1 до 99
+        const randomCents = Math.floor(Math.random() * 99) + 1
+        const correctedAmount = Math.floor(amountNum) + randomCents / 100
+        amountDecimal = new Prisma.Decimal(correctedAmount.toFixed(2))
+        console.error(`❌ Requests API - CRITICAL: Amount ended with .00, corrected to:`, correctedAmount.toFixed(2))
+      }
+    }
+
     const newRequest = await prisma.request.create({
       data: {
         userId: userIdBigInt,
@@ -186,7 +201,7 @@ export async function POST(request: NextRequest) {
         lastName: lastName || null,
         bookmaker: bookmaker || null,
         accountId: accountId || null,
-        amount: parseFloat(amount),
+        amount: amountDecimal,
         requestType: validRequestType, // Используем валидированный тип
         bank: bank || null,
         phone: phone || null,

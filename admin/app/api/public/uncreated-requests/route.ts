@@ -56,6 +56,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // КРИТИЧНО: Проверяем и исправляем сумму для deposit - не должна заканчиваться на .00
+    let amountDecimal: Prisma.Decimal | null = null
+    if (amount) {
+      const amountNum = parseFloat(amount.toString())
+      amountDecimal = new Prisma.Decimal(amountNum)
+      
+      if (requestType === 'deposit') {
+        const cents = Math.round((amountNum % 1) * 100)
+        if (cents === 0) {
+          // Сумма заканчивается на .00 - генерируем случайные копейки от 1 до 99
+          const randomCents = Math.floor(Math.random() * 99) + 1
+          const correctedAmount = Math.floor(amountNum) + randomCents / 100
+          amountDecimal = new Prisma.Decimal(correctedAmount.toFixed(2))
+          console.error(`❌ Uncreated Requests API - CRITICAL: Amount ended with .00, corrected to:`, correctedAmount.toFixed(2))
+        }
+      }
+    }
+
     // @ts-ignore prisma client needs regenerate after schema change
     const record = await prisma.uncreatedRequest.create({
       data: {
@@ -66,7 +84,7 @@ export async function POST(request: NextRequest) {
         bookmaker,
         accountId,
         bank,
-        amount: amount ? new Prisma.Decimal(amount) : null,
+        amount: amountDecimal,
         requestType,
         status: 'not_created',
       },

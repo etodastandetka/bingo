@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { requireAuth, createApiResponse } from '@/lib/api-helpers'
 import { sendNotificationToUser, formatDepositMessage, formatWithdrawMessage, formatRejectMessage, getAdminUsername, sendMainMenuToUser } from '@/lib/send-notification'
 import { formatDateTimeBishkek } from '@/lib/date-utils'
@@ -154,7 +155,30 @@ export async function PATCH(
     const updateData: any = {}
     if (body.status) updateData.status = body.status
     if (body.statusDetail) updateData.statusDetail = body.statusDetail
-    if (body.amount) updateData.amount = parseFloat(body.amount)
+    if (body.amount) {
+      // КРИТИЧНО: Проверяем сумму для deposit - не должна заканчиваться на .00
+      const amountNum = parseFloat(body.amount)
+      let amountDecimal = new Prisma.Decimal(amountNum)
+      
+      // Получаем тип заявки для проверки
+      const requestForType = await prisma.request.findUnique({
+        where: { id },
+        select: { requestType: true },
+      })
+      
+      if (requestForType?.requestType === 'deposit') {
+        const cents = Math.round((amountNum % 1) * 100)
+        if (cents === 0) {
+          // Сумма заканчивается на .00 - генерируем случайные копейки от 1 до 99
+          const randomCents = Math.floor(Math.random() * 99) + 1
+          const correctedAmount = Math.floor(amountNum) + randomCents / 100
+          amountDecimal = new Prisma.Decimal(correctedAmount.toFixed(2))
+          console.error(`❌ Update Request API - CRITICAL: Amount ended with .00, corrected to:`, correctedAmount.toFixed(2))
+        }
+      }
+      
+      updateData.amount = amountDecimal
+    }
     if (body.bookmaker !== undefined) updateData.bookmaker = body.bookmaker
     if (body.processedAt !== undefined) {
       updateData.processedAt = body.processedAt ? new Date(body.processedAt) : null
