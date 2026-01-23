@@ -128,16 +128,22 @@ class APIClient:
                         json={'amount': amount, 'bank': bank},
                         timeout=aiohttp.ClientTimeout(total=5)
                     ) as response:
-                        return await response.json()
-                except:
+                        # Используем безопасное чтение JSON с обработкой ошибок
+                        return await APIClient._read_json_or_error(response, 'Failed to generate QR code')
+                except Exception as e:
                     # Если локальный недоступен, используем продакшн
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"[Generate QR] Local API failed: {e}, trying fallback")
                     api_url = Config.API_FALLBACK_URL
             
             async with session.post(
                 f'{api_url}/public/generate-qr',
-                json={'amount': amount, 'bank': bank}
+                json={'amount': amount, 'bank': bank},
+                timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
-                return await response.json()
+                # Используем безопасное чтение JSON с обработкой ошибок
+                return await APIClient._read_json_or_error(response, 'Failed to generate QR code')
 
     @staticmethod
     async def get_unique_amount(
