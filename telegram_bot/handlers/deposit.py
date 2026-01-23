@@ -319,7 +319,7 @@ async def deposit_start(message: Message, state: FSMContext):
     await state.set_state(DepositStates.waiting_for_casino)
 
 @router.callback_query(F.data.startswith('casino_'), DepositStates.waiting_for_casino)
-async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
+async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Казино выбрано, запрашиваем ID счета"""
     lang = await get_lang_from_state(state)
     casino_id = callback.data.replace('casino_', '')
@@ -334,6 +334,9 @@ async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
     casino_name = next((c['name'] for c in Config.CASINOS if c['id'] == casino_id), casino_id)
     
     await state.update_data(casino_id=casino_id, casino_name=casino_name)
+    
+    # Получаем chat_id ДО удаления сообщения (на случай если сообщение станет недоступным)
+    chat_id = callback.message.chat.id if hasattr(callback.message, 'chat') else callback.from_user.id
     
     # Удаляем сообщение с кнопками выбора букмекера
     try:
@@ -363,18 +366,33 @@ async def deposit_casino_selected(callback: CallbackQuery, state: FSMContext):
     
     # Отправляем фото казино с текстом
     # Фото находятся в папке telegram_bot/images
+    # ВАЖНО: Используем bot.send_photo() вместо callback.message.answer_photo()
+    # чтобы избежать ошибки InaccessibleMessage
     photo_path = Path(__file__).parent.parent / "images" / f"{casino_id}.jpg"
     if photo_path.exists():
         photo = FSInputFile(str(photo_path))
-        await callback.message.answer_photo(
-            photo=photo,
-            caption=get_text(lang, 'deposit', 'enter_account_id', casino=casino_name),
-            reply_markup=keyboard
-        )
+        try:
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=photo,
+                caption=get_text(lang, 'deposit', 'enter_account_id', casino=casino_name),
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            # Если не удалось отправить фото, отправляем только текст
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"[Deposit] Failed to send photo for casino {casino_id}: {e}")
+            await bot.send_message(
+                chat_id=chat_id,
+                text=get_text(lang, 'deposit', 'enter_account_id', casino=casino_name),
+                reply_markup=keyboard
+            )
     else:
         # Если фото нет, отправляем только текст
-        await callback.message.answer(
-            get_text(lang, 'deposit', 'enter_account_id', casino=casino_name),
+        await bot.send_message(
+            chat_id=chat_id,
+            text=get_text(lang, 'deposit', 'enter_account_id', casino=casino_name),
             reply_markup=keyboard
         )
     
