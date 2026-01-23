@@ -8,6 +8,14 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
   const startTime = Date.now()
   console.log(`🔍 [Auto-Deposit] checkAndProcessExistingPayment called: requestId=${requestId}, amount=${amount}`)
   
+  // КРИТИЧЕСКАЯ ПРОВЕРКА: Автопополнение НЕ работает, если сумма заканчивается на .00 (копейки = 00)
+  // Автопополнение работает ТОЛЬКО если копейки от 01 до 99
+  const cents = Math.round((amount % 1) * 100) // Получаем копейки (0-99)
+  if (cents === 0) {
+    console.log(`❌ [Auto-Deposit] Amount ${amount} ends with .00 (cents = 00), autodeposit is DISABLED. Autodeposit only works with cents 01-99.`)
+    return null
+  }
+  
   try {
     // КРИТИЧЕСКАЯ ЗАЩИТА: Проверяем статус заявки ПЕРЕД поиском платежей
     // Если заявка уже обработана - сразу выходим, не тратим время на поиск платежей
@@ -267,6 +275,14 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
 export async function matchAndProcessPayment(paymentId: number, amount: number) {
   const startTime = Date.now()
   console.log(`🔍 [Auto-Deposit] matchAndProcessPayment called: paymentId=${paymentId}, amount=${amount}`)
+  
+  // КРИТИЧЕСКАЯ ПРОВЕРКА: Автопополнение НЕ работает, если сумма заканчивается на .00 (копейки = 00)
+  // Автопополнение работает ТОЛЬКО если копейки от 01 до 99
+  const cents = Math.round((amount % 1) * 100) // Получаем копейки (0-99)
+  if (cents === 0) {
+    console.log(`❌ [Auto-Deposit] Amount ${amount} ends with .00 (cents = 00), autodeposit is DISABLED. Autodeposit only works with cents 01-99.`)
+    return null
+  }
   
   // КРИТИЧЕСКИ ВАЖНО: Получаем информацию о платеже, чтобы проверить его время
   // Это предотвращает обработку старых платежей (например, вчерашних)
