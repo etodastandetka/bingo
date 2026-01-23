@@ -597,8 +597,14 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
                              errorMessage.toLowerCase().includes('user not found') ||
                              errorMessage.toLowerCase().includes('greenback')
       
-      if (isUserNotFound) {
-        console.warn(`⚠️ [Auto-Deposit] User not found in casino for request ${request.id}, leaving in pending for manual review`)
+      // ВАЖНО: Если валюта пользователя не совпадает с валютой сайта - оставляем заявку в pending
+      const isCurrencyMismatch = errorMessage.toLowerCase().includes('currency not equals') ||
+                                  errorMessage.toLowerCase().includes('currency on site') ||
+                                  errorMessage.toLowerCase().includes('валюта не совпадает')
+      
+      if (isUserNotFound || isCurrencyMismatch) {
+        const errorType = isCurrencyMismatch ? 'Currency mismatch' : 'User not found'
+        console.warn(`⚠️ [Auto-Deposit] ${errorType} for request ${request.id}, leaving in pending for manual review`)
         try {
           await prisma.request.update({
             where: { id: request.id },
