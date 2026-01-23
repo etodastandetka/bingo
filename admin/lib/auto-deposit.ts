@@ -126,23 +126,8 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       },
     })
     
-    const windowMinutes = Math.floor((windowEnd.getTime() - actualWindowStart.getTime()) / (60 * 1000))
-    console.log(`🔍 [Auto-Deposit] Searching payments for request ${requestId}:`)
-    console.log(`   Request createdAt: ${requestCreatedAt.toISOString()}`)
-    console.log(`   Window: ${actualWindowStart.toISOString()} to ${windowEnd.toISOString()} (${windowMinutes}min)`)
-    console.log(`   Amount: ${amount}`)
-    console.log(`   Found ${matchingPayments.length} unprocessed payments`)
-    
-    // Логируем найденные платежи для отладки
-    if (matchingPayments.length > 0) {
-      matchingPayments.forEach((p) => {
-        const paymentAmount = parseFloat(p.amount.toString())
-        const diff = Math.abs(paymentAmount - amount)
-        console.log(`   Payment ${p.id}: amount=${paymentAmount}, paymentDate=${p.paymentDate.toISOString()}, createdAt=${p.createdAt.toISOString()}, diff=${diff.toFixed(4)}`)
-      })
-    }
-    
     // Фильтруем по ТОЧНОМУ совпадению суммы (до копейки)
+    // НЕ логируем несовпадения - это нормально, просто платеж не подходит к этой заявке
     const exactMatches = matchingPayments.filter((payment) => {
       const paymentAmount = parseFloat(payment.amount.toString())
       // ТОЧНОЕ сравнение: суммы должны совпадать в точности до копейки (2 знака после запятой)
@@ -150,15 +135,20 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       const paymentRounded = Math.round(paymentAmount * 100) / 100 // Округление до 2 знаков
       const amountRounded = Math.round(amount * 100) / 100 // Округление до 2 знаков
       const matches = paymentRounded === amountRounded // Точное равенство без допуска
-      const diff = Math.abs(paymentAmount - amount)
       
+      // Логируем ТОЛЬКО успешные совпадения
       if (matches) {
-        console.log(`✅ [Auto-Deposit] Exact match found: Payment ${payment.id} (${paymentAmount}) = Request ${requestId} (${amount}), diff: ${diff.toFixed(6)}`)
-      } else {
-        console.log(`❌ [Auto-Deposit] Amount mismatch: Payment ${payment.id} (${paymentAmount.toFixed(2)}) ≠ Request ${requestId} (${amount.toFixed(2)}), diff: ${diff.toFixed(2)}`)
+        console.log(`✅ [Auto-Deposit] Exact match found: Payment ${payment.id} (${paymentAmount}) = Request ${requestId} (${amount})`)
       }
+      // НЕ логируем несовпадения - это нормальное поведение
+      
       return matches
     })
+    
+    // Логируем только если нашли платежи, но не нашли совпадений
+    if (matchingPayments.length > 0 && exactMatches.length === 0) {
+      console.log(`ℹ️ [Auto-Deposit] Found ${matchingPayments.length} payments in window, but no exact matches for request ${requestId} (amount: ${amount})`)
+    }
     
     if (exactMatches.length === 0) {
       console.log(`ℹ️ [Auto-Deposit] No exact matches in window, trying alternative search (all recent unprocessed payments with amount ${amount})...`)
@@ -187,18 +177,17 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
         },
       })
       
-      console.log(`🔍 [Auto-Deposit] Alternative search found ${alternativePayments.length} payments`)
-      
       // Фильтруем по точному совпадению суммы
+      // НЕ логируем несовпадения - это нормально
       const alternativeExactMatches = alternativePayments.filter((payment) => {
         const paymentAmount = parseFloat(payment.amount.toString())
         const paymentRounded = Math.round(paymentAmount * 100) / 100
         const amountRounded = Math.round(amount * 100) / 100
         const matches = paymentRounded === amountRounded
-        const diff = Math.abs(paymentAmount - amount)
         
+        // Логируем ТОЛЬКО успешные совпадения
         if (matches) {
-          console.log(`✅ [Auto-Deposit] Alternative exact match: Payment ${payment.id} (${paymentAmount}) = Request ${requestId} (${amount}), diff: ${diff.toFixed(6)}`)
+          console.log(`✅ [Auto-Deposit] Alternative exact match: Payment ${payment.id} (${paymentAmount}) = Request ${requestId} (${amount})`)
           console.log(`   Payment createdAt: ${payment.createdAt.toISOString()}, paymentDate: ${payment.paymentDate.toISOString()}`)
         }
         return matches
@@ -355,14 +344,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       },
     })
     
-    console.log(`🔍 [Auto-Deposit] Found ${matchingRequests.length} pending requests in last 10 minutes`)
-    if (matchingRequests.length > 0) {
-      matchingRequests.forEach((req) => {
-        const reqAmount = req.amount ? parseFloat(req.amount.toString()) : 0
-        const diff = Math.abs(reqAmount - amount)
-        console.log(`   Request ${req.id}: amount=${reqAmount}, createdAt=${req.createdAt.toISOString()}, diff=${diff.toFixed(4)}`)
-      })
-    }
+    console.log(`🔍 [Auto-Deposit] Found ${matchingRequests.length} pending requests in last 10 minutes for payment ${paymentId} (amount: ${amount})`)
 
     // Быстрая фильтрация по точному совпадению суммы И времени
     const exactMatches = matchingRequests.filter((req) => {
@@ -371,8 +353,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       // Пропускаем заявки, у которых уже есть обработанный платеж
       const hasProcessedPayment = req.incomingPayments?.some(p => p.isProcessed === true)
       if (hasProcessedPayment) {
-        console.log(`⚠️ [Auto-Deposit] Request ${req.id} already has processed payment, skipping`)
-        return false
+        return false // Не логируем - это нормально
       }
     
     // Дополнительная проверка: заявка должна быть создана не более 10 минут назад
@@ -380,8 +361,7 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     const requestAge = Date.now() - req.createdAt.getTime()
     const maxAge = 10 * 60 * 1000 // 10 минут
     if (requestAge > maxAge) {
-      console.log(`⚠️ [Auto-Deposit] Request ${req.id} is too old (${Math.floor(requestAge / 1000)}s), skipping`)
-      return false
+      return false // Не логируем - это нормально
     }
     
     // УБРАНА проверка времени между paymentDate и createdAt, так как:
@@ -395,13 +375,11 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
     const reqAmountRounded = Math.round(reqAmount * 100) / 100 // Округление до 2 знаков
     const amountRounded = Math.round(amount * 100) / 100 // Округление до 2 знаков
     const matches = reqAmountRounded === amountRounded // Точное равенство без допуска
-    const diff = Math.abs(reqAmount - amount)
     
     if (matches) {
-      console.log(`✅ [Auto-Deposit] Exact match: Request ${req.id} (${reqAmount}) = Payment ${amount} (diff: ${diff.toFixed(6)})`)
-    } else {
-      console.log(`❌ [Auto-Deposit] Amount mismatch: Request ${req.id} (${reqAmount.toFixed(2)}) ≠ Payment (${amount.toFixed(2)}), diff: ${diff.toFixed(2)})`)
+      console.log(`✅ [Auto-Deposit] Exact match: Request ${req.id} (${reqAmount}) = Payment ${paymentId} (${amount}), diff: 0.000000`)
     }
+    // НЕ логируем несовпадения - это нормально, просто платеж не подходит к этой заявке
     
     return matches
   })
