@@ -217,7 +217,7 @@ async def deposit_start(message: Message, state: FSMContext):
         import asyncio
         active_check = await asyncio.wait_for(
             APIClient.check_active_deposit(str(message.from_user.id)),
-            timeout=1.0  # Максимум 1 секунда на проверку
+            timeout=2.0  # Увеличено до 2 секунд для более надежной проверки
         )
         if active_check.get('success') and active_check.get('data', {}).get('hasActive'):
             active_data = active_check.get('data', {})
@@ -234,9 +234,10 @@ async def deposit_start(message: Message, state: FSMContext):
             return
     except asyncio.TimeoutError:
         # Если проверка заняла слишком много времени, продолжаем процесс
+        # Это нормальная ситуация, логируем на уровне DEBUG
         import logging
         logger = logging.getLogger(__name__)
-        logger.warning(f"Active deposit check timeout, continuing with deposit process")
+        logger.debug(f"[Deposit] Active deposit check timeout for user {message.from_user.id}, continuing with deposit process")
     except Exception as e:
         # Если проверка не удалась, продолжаем процесс (не блокируем пользователя)
         import logging
