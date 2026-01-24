@@ -41,6 +41,7 @@ export default function CasinoLimitsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [selectedCasino, setSelectedCasino] = useState<string>('')
   const [showMismatchesOnly, setShowMismatchesOnly] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; logId: number } | null>(null)
 
   useEffect(() => {
     fetchStats()
@@ -109,6 +110,52 @@ export default function CasinoLimitsPage() {
       minute: '2-digit',
     }).format(date)
   }
+
+  const handleContextMenu = (e: React.MouseEvent, logId: number) => {
+    // Только на ПК (не на мобильных устройствах)
+    if (window.innerWidth > 768) {
+      e.preventDefault()
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        logId,
+      })
+    }
+  }
+
+  const handleDeleteLog = async (logId: number) => {
+    if (!confirm('Удалить эту запись о нестыковке?')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/casino-limits/logs/${logId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) throw new Error('Failed to delete log')
+
+      // Обновляем список логов
+      fetchLogs()
+      fetchStats()
+      setContextMenu(null)
+    } catch (error) {
+      console.error('Failed to delete log:', error)
+      alert('Ошибка при удалении записи')
+    }
+  }
+
+  // Закрываем контекстное меню при клике вне его
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setContextMenu(null)
+    }
+
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside)
+      return () => document.removeEventListener('click', handleClickOutside)
+    }
+  }, [contextMenu])
 
   if (loading && !stats) {
     return (
@@ -215,7 +262,8 @@ export default function CasinoLimitsPage() {
             {logs.map((log) => (
               <div
                 key={log.id}
-                className={`p-3 rounded-lg ${
+                onContextMenu={(e) => handleContextMenu(e, log.id)}
+                className={`p-3 rounded-lg cursor-context-menu ${
                   log.isMismatch
                     ? 'bg-red-900 bg-opacity-30 border border-red-500'
                     : 'bg-gray-700 bg-opacity-30'
@@ -311,6 +359,25 @@ export default function CasinoLimitsPage() {
           </div>
         )}
       </div>
+
+      {/* Контекстное меню для удаления (только на ПК) */}
+      {contextMenu && (
+        <div
+          className="fixed bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-50"
+          style={{
+            left: `${contextMenu.x}px`,
+            top: `${contextMenu.y}px`,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => handleDeleteLog(contextMenu.logId)}
+            className="w-full px-4 py-2 text-left text-white hover:bg-red-600 rounded-lg transition-colors"
+          >
+            🗑️ Удалить запись
+          </button>
+        </div>
+      )}
     </div>
   )
 }
