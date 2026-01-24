@@ -131,12 +131,17 @@ export default function CasinoLimitsPage() {
 
       if (!response.ok) throw new Error('Failed to delete log')
 
-      // Обновляем список логов
-      fetchLogs()
-      fetchStats()
+      // Удаляем запись из локального состояния сразу (оптимистичное обновление)
+      setLogs(prevLogs => prevLogs.filter(log => log.id !== logId))
+      
+      // Обновляем статистику и список логов
+      await Promise.all([fetchStats(), fetchLogs()])
       setContextMenu(null)
     } catch (error) {
       console.error('Failed to delete log:', error)
+      // В случае ошибки обновляем данные с сервера
+      fetchLogs()
+      fetchStats()
       alert('Ошибка при удалении записи')
     }
   }

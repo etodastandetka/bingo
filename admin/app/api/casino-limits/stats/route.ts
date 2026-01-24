@@ -35,12 +35,11 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Статистика нестыковок
-    const mismatchesCount = await prisma.casinoLimitLog.count({
-      where: { isMismatch: true },
-    })
+    // Статистика нестыковок (только активные, не удаленные)
+    // Считаем нестыковки на основе текущих лимитов, а не из логов
+    const activeMismatchesCount = limits.filter(l => l.isMismatch).length
 
-    // Последние нестыковки
+    // Последние нестыковки из логов (только существующие записи)
     const recentMismatches = await prisma.casinoLimitLog.findMany({
       where: { isMismatch: true },
       orderBy: { createdAt: 'desc' },
@@ -61,7 +60,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       createApiResponse({
         limits,
-        mismatchesCount,
+        mismatchesCount: activeMismatchesCount, // Используем количество активных нестыковок
         recentMismatches: recentMismatches.map(m => ({
           ...m,
           amount: m.amount.toString(),
