@@ -56,11 +56,11 @@ export async function updateCasinoLimit(
       realLimitFromAPI = platformLimit?.limit || 0
 
       // Вычисляем, каким ДОЛЖЕН быть лимит в БД перед этой операцией
-      // Если это пополнение - лимит в API должен быть меньше на сумму пополнения
-      // Если это вывод - лимит в API должен быть больше на сумму вывода
+      // Пополнение УМЕНЬШАЕТ лимит: если API показывает 90,000, а мы пополняем 5,000, то ДО было 95,000
+      // Вывод УВЕЛИЧИВАЕТ лимит: если API показывает 100,000, а мы выводим 5,000, то ДО было 95,000
       const expectedLimitBefore = requestType === 'deposit'
-        ? realLimitFromAPI + amount  // При пополнении: API лимит + сумма = наш лимит ДО пополнения
-        : realLimitFromAPI - amount   // При выводе: API лимит - сумма = наш лимит ДО вывода
+        ? realLimitFromAPI + amount  // При пополнении: API лимит ПОСЛЕ пополнения + сумма = лимит ДО пополнения
+        : realLimitFromAPI - amount   // При выводе: API лимит ПОСЛЕ вывода - сумма = лимит ДО вывода
 
       // Проверяем нестыковку: наш лимит в БД должен совпадать с ожидаемым
       const difference = Math.abs(limitBefore - expectedLimitBefore)
