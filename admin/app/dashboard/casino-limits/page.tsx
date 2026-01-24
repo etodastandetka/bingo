@@ -124,10 +124,6 @@ export default function CasinoLimitsPage() {
   }
 
   const handleDeleteLog = async (logId: number) => {
-    if (!confirm('Удалить эту запись о нестыковке?')) {
-      return
-    }
-
     try {
       const response = await fetch(`/api/casino-limits/logs/${logId}`, {
         method: 'DELETE',
