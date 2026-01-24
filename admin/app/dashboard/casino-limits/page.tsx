@@ -111,6 +111,22 @@ export default function CasinoLimitsPage() {
     }).format(date)
   }
 
+  const handleSyncLimits = async () => {
+    try {
+      const response = await fetch('/api/casino-limits/sync', {
+        method: 'POST',
+      })
+
+      if (!response.ok) throw new Error('Failed to sync limits')
+
+      // Обновляем статистику после синхронизации
+      await fetchStats()
+    } catch (error) {
+      console.error('Failed to sync limits:', error)
+      alert('Ошибка при синхронизации лимитов')
+    }
+  }
+
   const handleContextMenu = (e: React.MouseEvent, logId: number) => {
     // Только на ПК (не на мобильных устройствах)
     if (window.innerWidth > 768) {
@@ -182,7 +198,15 @@ export default function CasinoLimitsPage() {
       {/* Статистика лимитов */}
       {stats && (
         <div className="bg-gray-800 bg-opacity-50 rounded-xl p-4 border border-gray-700 backdrop-blur-sm mb-4">
-          <div className="text-base font-bold text-white mb-3">Текущие лимиты</div>
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-base font-bold text-white">Текущие лимиты</div>
+            <button
+              onClick={handleSyncLimits}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+            >
+              🔄 Синхронизировать с API
+            </button>
+          </div>
           <div className="space-y-2">
             {stats.limits.map((limit) => (
               <div
