@@ -223,6 +223,32 @@ export async function PATCH(
       data: updateData,
     })
 
+    // Обновляем лимит казино при подтверждении заявки
+    if (body.status && ['completed', 'approved', 'auto_completed', 'autodeposit_success'].includes(body.status) && 
+        updatedRequest.bookmaker && updatedRequest.amount) {
+      try {
+        const { updateCasinoLimit } = await import('@/lib/casino-limits')
+        const amount = parseFloat(updatedRequest.amount.toString())
+        const result = await updateCasinoLimit(
+          updatedRequest.bookmaker,
+          amount,
+          updatedRequest.requestType as 'deposit' | 'withdraw',
+          updatedRequest.id,
+          updatedRequest.userId,
+          updatedRequest.accountId || undefined,
+          updatedRequest.processedBy || updatedRequest.processedByUsername || undefined
+        )
+
+        // Если обнаружена нестыковка - логируем предупреждение
+        if (result.isMismatch) {
+          console.warn(`⚠️ [Casino Limits] Mismatch detected for ${updatedRequest.bookmaker}: ${result.mismatchReason}`)
+        }
+      } catch (error: any) {
+        console.error(`[Casino Limits] Error updating limit for request ${id}:`, error)
+        // Не прерываем выполнение, если обновление лимита не удалось
+      }
+    }
+
     // Если подтверждаем депозит и нет привязанного платежа - создаем поступление
     if (body.status && ['completed', 'approved'].includes(body.status) && 
         currentRequest.requestType === 'deposit' && 

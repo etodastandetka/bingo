@@ -364,3 +364,37 @@ model Shift {
   @@index([isClosed])
   @@map("shifts")
 }
+
+model CasinoLimit {
+  id              Int      @id @default(autoincrement())
+  casino          String   @unique @db.VarChar(100)
+  currentLimit    Decimal  @default(0) @map("current_limit") @db.Decimal(12, 2)
+  baseLimit       Decimal? @map("base_limit") @db.Decimal(12, 2)
+  lastUpdated     DateTime @updatedAt @map("last_updated")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([casino])
+  @@map("casino_limits")
+}
+
+model CasinoLimitLog {
+  id              Int      @id @default(autoincrement())
+  casino          String   @db.VarChar(100)
+  requestId       Int?     @map("request_id")
+  requestType     String   @map("request_type") @db.VarChar(20)
+  amount          Decimal  @db.Decimal(12, 2)
+  limitBefore     Decimal  @map("limit_before") @db.Decimal(12, 2)
+  limitAfter      Decimal  @map("limit_after") @db.Decimal(12, 2)
+  userId          BigInt?  @map("user_id")
+  accountId       String?  @map("account_id") @db.VarChar(255)
+  processedBy     String?  @map("processed_by") @db.VarChar(255)
+  isMismatch      Boolean  @default(false) @map("is_mismatch")
+  mismatchReason  String?  @map("mismatch_reason")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([casino, createdAt])
+  @@index([requestId])
+  @@index([userId])
+  @@index([isMismatch])
+  @@map("casino_limit_logs")
+}

@@ -14,6 +14,7 @@ export default function MenuPage() {
     { href: '/dashboard/history', label: 'История транзакций', icon: '🕐' },
     { href: '/dashboard/login-history', label: 'История входов', icon: '🔐' },
     { href: '/dashboard/limits', label: 'Лимиты', icon: '⚙️' },
+    { href: '/dashboard/casino-limits', label: 'Логи лимитов', icon: '📋' },
     { href: '/dashboard/statistics', label: 'Статистика', icon: '📊' },
     { href: '/dashboard/broadcast', label: 'Рассылка', icon: '📢' },
     { href: '/dashboard/search', label: 'Поиск', icon: '🔍' },
