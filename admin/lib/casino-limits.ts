@@ -100,22 +100,25 @@ export async function updateCasinoLimit(
       data: { currentLimit: limitAfter },
     })
 
-    // Логируем операцию
-    await prisma.casinoLimitLog.create({
-      data: {
-        casino,
-        requestId,
-        requestType,
-        amount,
-        limitBefore,
-        limitAfter,
-        userId,
-        accountId,
-        processedBy,
-        isMismatch,
-        mismatchReason,
-      },
-    })
+    // Логируем операцию ТОЛЬКО если есть нестыковка
+    // Если все работает нормально - не засоряем логи
+    if (isMismatch) {
+      await prisma.casinoLimitLog.create({
+        data: {
+          casino,
+          requestId,
+          requestType,
+          amount,
+          limitBefore,
+          limitAfter,
+          userId,
+          accountId,
+          processedBy,
+          isMismatch,
+          mismatchReason,
+        },
+      })
+    }
 
     return {
       success: true,
