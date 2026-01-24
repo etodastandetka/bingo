@@ -69,9 +69,9 @@ export async function updateCasinoLimit(
         ? realLimitFromAPI - amount  // При пополнении: API лимит - сумма
         : realLimitFromAPI + amount  // При выводе: API лимит + сумма
 
-      // Если разница больше 1000 сом - считаем это нестыковкой
+      // Если разница больше 100 сом - считаем это нестыковкой
       const difference = Math.abs(limitAfter - expectedLimitAfter)
-      if (difference > 1000) {
+      if (difference > 100) {
         isMismatch = true
         mismatchReason = `Расхождение с API: наш лимит ${limitAfter.toFixed(2)}, ожидаемый лимит ${expectedLimitAfter.toFixed(2)} (API: ${realLimitFromAPI.toFixed(2)} ${requestType === 'deposit' ? '-' : '+'} ${amount.toFixed(2)}), разница ${difference.toFixed(2)}`
         

@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       const currentLimit = dbLimit ? parseFloat(dbLimit.currentLimit.toString()) : platform.limit
       const realLimit = platform.limit
       const difference = currentLimit - realLimit
-      const isMismatch = Math.abs(difference) > 1000
+      const isMismatch = Math.abs(difference) > 100
 
       return {
         casino: platform.key,
