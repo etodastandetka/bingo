@@ -30,31 +30,44 @@ async def main():
     # Создаем кастомную сессию, которая возвращает числовой таймаут
     # Проблема: aiogram пытается сложить bot.session.timeout (ClientTimeout) с int
     # Решение: создаем сессию с переопределенным свойством timeout (getter + setter)
+    # Увеличиваем таймаут для отправки больших файлов (фото QR кодов)
     class CustomAiohttpSession(AiohttpSession):
         def __init__(self, *args, **kwargs):
             # Сохраняем числовое значение таймаута перед вызовом super()
-            self._numeric_timeout = kwargs.pop('timeout', 30.0)
-            # Если передан ClientTimeout, извлекаем числовое значение
-            if isinstance(self._numeric_timeout, aiohttp.ClientTimeout):
-                self._numeric_timeout = self._numeric_timeout.total or 30.0
+            # Увеличиваем таймаут до 60 секунд для отправки больших файлов
+            timeout_value = kwargs.pop('timeout', None)
+            if timeout_value is None:
+                timeout_value = aiohttp.ClientTimeout(total=60.0, connect=10.0)
+            elif isinstance(timeout_value, (int, float)):
+                timeout_value = aiohttp.ClientTimeout(total=float(timeout_value), connect=10.0)
+            elif isinstance(timeout_value, aiohttp.ClientTimeout):
+                # Если уже ClientTimeout, увеличиваем total если он меньше 60
+                if timeout_value.total is None or timeout_value.total < 60.0:
+                    timeout_value = aiohttp.ClientTimeout(total=60.0, connect=timeout_value.connect or 10.0)
+            
+            kwargs['timeout'] = timeout_value
             super().__init__(*args, **kwargs)
+            
+            # Сохраняем числовое значение для совместимости
+            self._numeric_timeout = timeout_value.total if isinstance(timeout_value, aiohttp.ClientTimeout) else 60.0
         
         @property
         def timeout(self):
-            # Возвращаем числовое значение вместо ClientTimeout
+            # Возвращаем числовое значение вместо ClientTimeout для совместимости
             return self._numeric_timeout
         
         @timeout.setter
         def timeout(self, value):
             # Сохраняем числовое значение, даже если передан ClientTimeout
             if isinstance(value, aiohttp.ClientTimeout):
-                self._numeric_timeout = value.total or 30.0
+                self._numeric_timeout = value.total or 60.0
             else:
-                self._numeric_timeout = float(value) if value is not None else 30.0
+                self._numeric_timeout = float(value) if value is not None else 60.0
     
-    # Создаем кастомную сессию
+    # Создаем кастомную сессию с увеличенным таймаутом (60 секунд для больших файлов)
     session = CustomAiohttpSession(
-        api=TelegramAPIServer.from_base('https://api.telegram.org')
+        api=TelegramAPIServer.from_base('https://api.telegram.org'),
+        timeout=aiohttp.ClientTimeout(total=60.0, connect=10.0)  # 60 секунд для отправки фото
     )
     
     # Создаем бота
@@ -95,10 +108,11 @@ async def main():
     for attempt in range(max_retries):
         try:
             # Используем request_timeout как число, а не ClientTimeout объект
+            # Увеличиваем до 60 секунд для отправки больших файлов (QR коды)
             await dp.start_polling(
                 bot, 
                 allowed_updates=["message", "callback_query", "chat_member"],
-                request_timeout=30.0  # 30 секунд в числовом формате
+                request_timeout=60.0  # 60 секунд для отправки больших файлов
             )
             break  # Успешный запуск
         except TelegramNetworkError as e:
