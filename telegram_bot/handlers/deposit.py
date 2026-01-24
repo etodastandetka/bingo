@@ -2,6 +2,7 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, FSInputFile, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
 from states import DepositStates
 from config import Config
 from api_client import APIClient
@@ -17,6 +18,58 @@ router = Router()
 
 # Словарь для отслеживания активных таймеров (чтобы можно было их остановить)
 active_timers = {}
+
+async def retry_telegram_api_call(call_func, max_retries=3, initial_delay=1.0, max_delay=10.0, backoff_factor=2.0):
+    """
+    Повторяет вызов Telegram API с экспоненциальной задержкой при ошибках сети.
+    
+    Args:
+        call_func: Асинхронная функция для вызова
+        max_retries: Максимальное количество попыток
+        initial_delay: Начальная задержка в секундах
+        max_delay: Максимальная задержка в секундах
+        backoff_factor: Множитель для экспоненциальной задержки
+    
+    Returns:
+        Результат вызова функции
+    
+    Raises:
+        Последнее исключение, если все попытки не удались
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    last_exception = None
+    delay = initial_delay
+    
+    for attempt in range(max_retries):
+        try:
+            return await call_func()
+        except TelegramRetryAfter as e:
+            # Telegram просит подождать определенное время
+            wait_time = e.retry_after
+            logger.warning(f"[Retry] Telegram rate limit, waiting {wait_time} seconds...")
+            await asyncio.sleep(wait_time)
+            # Повторяем попытку после ожидания
+            continue
+        except TelegramNetworkError as e:
+            last_exception = e
+            if attempt < max_retries - 1:
+                logger.warning(f"[Retry] Telegram network error (attempt {attempt + 1}/{max_retries}): {e}")
+                logger.info(f"[Retry] Retrying in {delay:.1f} seconds...")
+                await asyncio.sleep(delay)
+                delay = min(delay * backoff_factor, max_delay)
+            else:
+                logger.error(f"[Retry] All {max_retries} attempts failed: {e}")
+        except Exception as e:
+            # Для других ошибок не повторяем
+            logger.error(f"[Retry] Non-retryable error: {e}")
+            raise
+    
+    # Если все попытки не удались, выбрасываем последнее исключение
+    if last_exception:
+        raise last_exception
+    raise Exception("All retry attempts failed")
 
 async def update_qr_timer(bot: Bot, chat_id: int, message_id: int, created_at: int, duration: int, lang: str, amount: float, casino: str, account_id: str, keyboard, state: FSMContext = None, request_id: str = None):
     """Фоновая задача для обновления таймера в сообщении с QR кодом"""
@@ -795,11 +848,54 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             # Отправляем фото QR кода с inline кнопками банков и кнопкой "Отмена"
             # Используем BufferedInputFile для работы с bytes напрямую
             photo = BufferedInputFile(qr_image_bytes, filename='qr_code.png')
-            qr_message = await message.answer_photo(
-                photo=photo,
-                caption=payment_text,
-                reply_markup=keyboard if keyboard else None  # Inline клавиатура с банками и отменой
-            )
+            
+            # Используем retry логику для надежной отправки фото
+            async def send_qr_photo():
+                return await message.answer_photo(
+                    photo=photo,
+                    caption=payment_text,
+                    reply_markup=keyboard if keyboard else None  # Inline клавиатура с банками и отменой
+                )
+            
+            try:
+                qr_message = await retry_telegram_api_call(
+                    send_qr_photo,
+                    max_retries=3,
+                    initial_delay=2.0,
+                    max_delay=15.0,
+                    backoff_factor=2.0
+                )
+            except TelegramNetworkError as e:
+                logger.error(f"[Deposit] Failed to send QR photo after retries: {e}")
+                # Fallback: пытаемся отправить как документ
+                try:
+                    logger.info("[Deposit] Trying to send QR code as document as fallback...")
+                    async def send_qr_document():
+                        return await message.answer_document(
+                            document=photo,
+                            caption=payment_text,
+                            reply_markup=keyboard if keyboard else None
+                        )
+                    qr_message = await retry_telegram_api_call(
+                        send_qr_document,
+                        max_retries=2,
+                        initial_delay=2.0,
+                        max_delay=10.0
+                    )
+                    logger.info("[Deposit] Successfully sent QR code as document")
+                except Exception as fallback_error:
+                    logger.error(f"[Deposit] Failed to send QR code as document: {fallback_error}")
+                    # Последний fallback: отправляем только текст с информацией
+                    await generating_msg.delete()
+                    await message.answer(
+                        f"{payment_text}\n\n⚠️ Не удалось отправить QR код. Пожалуйста, используйте кнопки банков выше для оплаты.",
+                        reply_markup=keyboard if keyboard else None
+                    )
+                    # Не можем продолжить без QR сообщения, возвращаемся в главное меню
+                    await state.clear()
+                    from handlers.start import cmd_start
+                    await cmd_start(message, state, bot)
+                    return
             
             # Сохраняем ID сообщения с QR-кодом для возможности удаления и обновления
             await state.update_data(qr_message_id=qr_message.message_id)
@@ -830,6 +926,23 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
             # Текст про отправку чека уже есть в caption сообщения с QR
             await state.set_state(DepositStates.waiting_for_receipt)
             
+        except TelegramNetworkError as network_error:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Telegram network error generating QR code: {network_error}", exc_info=True)
+            try:
+                await generating_msg.delete()
+            except:
+                pass
+            # Более детальное сообщение для сетевых ошибок
+            if 'timeout' in str(network_error).lower():
+                await message.answer("❌ Ошибка: превышено время ожидания ответа от Telegram. Пожалуйста, попробуйте позже.")
+            else:
+                await message.answer(get_text(lang, 'deposit', 'qr_error'))
+            await state.clear()
+            from handlers.start import cmd_start
+            await cmd_start(message, state, bot)
+            return
         except Exception as qr_error:
             import logging
             logger = logging.getLogger(__name__)
