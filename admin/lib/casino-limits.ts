@@ -53,36 +53,54 @@ export async function updateCasinoLimit(
       limitAfter = limitBefore + amount
     }
 
-    // Обновляем лимит
-    const updatedLimit = await prisma.casinoLimit.update({
-      where: { casino },
-      data: { currentLimit: limitAfter },
-    })
-
-    // Проверяем нестыковку с реальным лимитом из API
+    // Проверяем нестыковку с реальным лимитом из API ДО обновления
+    // Это нужно, чтобы понять, был ли лимит уже неправильным до операции
     let isMismatch = false
     let mismatchReason: string | undefined
+    let realLimitFromAPI = 0
 
     try {
       const platformLimits = await getPlatformLimits()
       const platformLimit = platformLimits.find(p => p.key === casino)
-      const realLimit = platformLimit?.limit || 0
+      realLimitFromAPI = platformLimit?.limit || 0
+
+      // Проверяем нестыковку ПОСЛЕ операции (каким должен быть лимит после операции)
+      const expectedLimitAfter = requestType === 'deposit' 
+        ? realLimitFromAPI - amount  // При пополнении: API лимит - сумма
+        : realLimitFromAPI + amount  // При выводе: API лимит + сумма
 
       // Если разница больше 1000 сом - считаем это нестыковкой
-      const difference = Math.abs(limitAfter - realLimit)
+      const difference = Math.abs(limitAfter - expectedLimitAfter)
       if (difference > 1000) {
         isMismatch = true
-        mismatchReason = `Расхождение с API: наш лимит ${limitAfter.toFixed(2)}, API лимит ${realLimit.toFixed(2)}, разница ${difference.toFixed(2)}`
+        mismatchReason = `Расхождение с API: наш лимит ${limitAfter.toFixed(2)}, ожидаемый лимит ${expectedLimitAfter.toFixed(2)} (API: ${realLimitFromAPI.toFixed(2)} ${requestType === 'deposit' ? '-' : '+'} ${amount.toFixed(2)}), разница ${difference.toFixed(2)}`
         
-        // Обновляем лимит на реальный из API
-        await prisma.casinoLimit.update({
-          where: { casino },
-          data: { currentLimit: realLimit },
-        })
-        limitAfter = realLimit
+        // При пополнении - синхронизируем с API (лимит уменьшился)
+        // При выводе - НЕ синхронизируем автоматически, так как вывод мог быть через левое API
+        if (requestType === 'deposit') {
+          // Обновляем лимит на реальный из API (минус сумма пополнения)
+          const correctedLimit = realLimitFromAPI - amount
+          await prisma.casinoLimit.update({
+            where: { casino },
+            data: { currentLimit: correctedLimit },
+          })
+          limitAfter = correctedLimit
+        } else {
+          // При выводе просто логируем нестыковку, но НЕ перезаписываем лимит
+          // Потому что вывод мог быть через левое API, и наш лимит правильный
+          console.warn(`[Casino Limits] Mismatch on withdraw for ${casino}: our limit ${limitAfter.toFixed(2)}, expected ${expectedLimitAfter.toFixed(2)}`)
+        }
       }
     } catch (error) {
       console.error(`[Casino Limits] Error checking mismatch for ${casino}:`, error)
+    }
+
+    // Обновляем лимит (если не был обновлен при нестыковке)
+    if (!isMismatch || requestType === 'withdraw') {
+      await prisma.casinoLimit.update({
+        where: { casino },
+        data: { currentLimit: limitAfter },
+      })
     }
 
     // Логируем операцию
