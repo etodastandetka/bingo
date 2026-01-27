@@ -7,8 +7,7 @@ module.exports = {
       args: 'start',
       env: {
         NODE_ENV: 'production',
-        PORT: 3001,
-        BOT_TOKEN: '8237611656:AAG3A0PqOqBtIYDzl-MiXRbSgClRE0Rs5Ko'
+        PORT: 3001
       },
       error_file: './logs/admin-error.log',
       out_file: './logs/admin-out.log',
@@ -26,11 +25,46 @@ module.exports = {
       interpreter: 'python3',
       interpreter_args: '-u',
       env: {
-        PYTHONUNBUFFERED: '1',
-        BOT_TOKEN: '8237611656:AAG3A0PqOqBtIYDzl-MiXRbSgClRE0Rs5Ko'
+        PYTHONUNBUFFERED: '1'
       },
       error_file: './logs/bot-error.log',
       out_file: './logs/bot-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_memory_restart: '300M',
+      instances: 1,
+      exec_mode: 'fork'
+    },
+    {
+      name: 'bingo-bot-1xbet',
+      cwd: './telegram_bot_1xbet',
+      script: 'bot.py',
+      interpreter: 'python3',
+      interpreter_args: '-u',
+      env: {
+        PYTHONUNBUFFERED: '1'
+      },
+      error_file: './logs/bot-1xbet-error.log',
+      out_file: './logs/bot-1xbet-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_memory_restart: '300M',
+      instances: 1,
+      exec_mode: 'fork'
+    },
+    {
+      name: 'bingo-bot-mostbet',
+      cwd: './telegram_bot_mostbet',
+      script: 'bot.py',
+      interpreter: 'python3',
+      interpreter_args: '-u',
+      env: {
+        PYTHONUNBUFFERED: '1'
+      },
+      error_file: './logs/bot-mostbet-error.log',
+      out_file: './logs/bot-mostbet-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       autorestart: true,

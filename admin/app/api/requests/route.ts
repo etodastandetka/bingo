@@ -22,8 +22,16 @@ export async function GET(request: NextRequest) {
     const where: any = {}
     if (type) where.requestType = type
     if (status && status !== 'left') {
-      // Статус 'left' не существует в БД, это специальный фильтр для UI
-      where.status = status
+      if (status === 'pending') {
+        // Для "Ожидающие" показываем все незавершенные заявки
+        // Исключаем завершенные статусы: completed, approved, auto_completed, autodeposit_success, rejected, declined
+        where.status = {
+          notIn: ['completed', 'approved', 'auto_completed', 'autodeposit_success', 'rejected', 'declined']
+        }
+      } else {
+        // Для других статусов (например, 'deferred') используем точное совпадение
+        where.status = status
+      }
     } else if (status === 'left') {
       // Для "Оставленные" фильтруем все кроме pending - включая autodeposit_success
       where.status = { not: 'pending' }
