@@ -147,6 +147,8 @@ export default function DashboardPage() {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'pending':
+      case 'processing':
+      case 'pending_check':
         return 'Ожидает'
       case 'completed':
       case 'approved':
@@ -161,8 +163,6 @@ export default function DashboardPage() {
       case 'manual':
       case 'awaiting_manual':
         return 'Ручная'
-      case 'processing':
-        return 'Обработка'
       default:
         // Для неизвестного статуса возвращаем "Ожидает" вместо "Неизвестно"
         return 'Ожидает'
@@ -177,6 +177,8 @@ export default function DashboardPage() {
       case 'autodeposit_success':
         return 'bg-blue-500 text-white border border-blue-400'
       case 'pending':
+      case 'processing':
+      case 'pending_check':
         return 'bg-yellow-500 text-black border border-yellow-400'
       case 'rejected':
       case 'declined':
@@ -187,7 +189,8 @@ export default function DashboardPage() {
       case 'awaiting_manual':
         return 'bg-red-500 text-white border border-red-400'
       default:
-        return 'bg-gray-700 text-gray-300 border border-gray-600'
+        // Для неизвестных статусов тоже показываем желтый (ожидающие)
+        return 'bg-yellow-500 text-black border border-yellow-400'
     }
   }
 
