@@ -15,8 +15,12 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') // deposit or withdraw
     const status = searchParams.get('status')
     const page = parseInt(searchParams.get('page') || '1')
-    // Уменьшаем лимит для быстрой загрузки
-    const limit = parseInt(searchParams.get('limit') || '20')
+    
+    // Для главной страницы (pending/deferred) показываем все заявки без лимита
+    const isMainPage = status === 'pending' || status === 'deferred'
+    const limit = isMainPage 
+      ? 10000 // Очень большой лимит для главной страницы (показываем все)
+      : parseInt(searchParams.get('limit') || '20')
     const skip = (page - 1) * limit
 
     const where: any = {}
