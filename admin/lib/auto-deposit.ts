@@ -76,7 +76,6 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       // Retry логика для запросов к БД при ошибках пула соединений
       const maxRetries = 3
       
-      try {
       // КРИТИЧЕСКАЯ ЗАЩИТА: Проверяем статус заявки ПЕРЕД поиском платежей
       // Если заявка уже обработана - сразу выходим, не тратим время на поиск платежей
       // ВАЖНО: Получаем также createdAt для определения временного окна
@@ -103,55 +102,55 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     
       // Если заявка уже обработана - не ищем платежи (защита от дубликатов)
       if (requestCheck?.status !== 'pending') {
-      console.log(`⚠️ [Auto-Deposit] Request ${requestId} already processed (status: ${requestCheck?.status}), skipping payment search`)
-      return null
-    }
-    
-    // Если заявка уже обработана автопополнением - не ищем платежи
-    if (requestCheck?.processedBy === 'автопополнение') {
-      console.log(`⚠️ [Auto-Deposit] Request ${requestId} already processed by autodeposit, skipping payment search`)
-      return null
-    }
-    
-    // Если уже есть обработанный платеж - не ищем новые
-    if (requestCheck?.incomingPayments?.length > 0) {
-      console.log(`⚠️ [Auto-Deposit] Request ${requestId} already has processed payment, skipping payment search`)
-      return null
-    }
-    
-    if (!requestCheck?.createdAt) {
-      console.log(`⚠️ [Auto-Deposit] Request ${requestId} has no createdAt, skipping payment search`)
-      return null
-    }
-    
-    // ВАЖНО: Проверяем наличие фото чека - автопополнение не работает без фото
-    if (!requestCheck.photoFileId && !requestCheck.photoFileUrl) {
-      console.log(`⚠️ [Auto-Deposit] Request ${requestId} has no receipt photo (photoFileId and photoFileUrl are empty), skipping autodeposit`)
-      return null
-    }
-    
-    // КРИТИЧЕСКИ ВАЖНО: Ищем платежи в окне ±5 минут от времени создания заявки
-    // Это предотвращает обработку старых платежей и фейковых чеков
-    const requestCreatedAt = requestCheck.createdAt
-    const now = Date.now()
-    const requestTime = requestCreatedAt.getTime()
-    
-    // Платеж может быть оплачен до создания заявки (до 5 минут назад)
-    const windowStart = new Date(requestTime - 5 * 60 * 1000) // 5 минут до создания заявки
-    
-    // Платеж может прийти после создания заявки (до 5 минут после)
-    const windowEnd = new Date(Math.min(requestTime + 5 * 60 * 1000, now + 1 * 60 * 1000)) // До 5 минут после или до 1 минуты в будущее
-    
-    // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Платеж не должен быть старше 10 минут от текущего момента
-    // Это предотвращает обработку очень старых платежей (например, вчерашних)
-    const maxPaymentAge = new Date(now - 10 * 60 * 1000) // 10 минут назад
-    
-    // ОПТИМИЗАЦИЯ: Фильтруем по сумме прямо в БД (приблизительно)
-    // Используем очень маленький диапазон ±0.0001 только для ошибок округления при поиске в БД
-    // В финальной проверке будет точное сравнение
-    const amountMin = amount - 0.0001
-    const amountMax = amount + 0.0001
-    
+        console.log(`⚠️ [Auto-Deposit] Request ${requestId} already processed (status: ${requestCheck?.status}), skipping payment search`)
+        return null
+      }
+      
+      // Если заявка уже обработана автопополнением - не ищем платежи
+      if (requestCheck?.processedBy === 'автопополнение') {
+        console.log(`⚠️ [Auto-Deposit] Request ${requestId} already processed by autodeposit, skipping payment search`)
+        return null
+      }
+      
+      // Если уже есть обработанный платеж - не ищем новые
+      if (requestCheck?.incomingPayments?.length > 0) {
+        console.log(`⚠️ [Auto-Deposit] Request ${requestId} already has processed payment, skipping payment search`)
+        return null
+      }
+      
+      if (!requestCheck?.createdAt) {
+        console.log(`⚠️ [Auto-Deposit] Request ${requestId} has no createdAt, skipping payment search`)
+        return null
+      }
+      
+      // ВАЖНО: Проверяем наличие фото чека - автопополнение не работает без фото
+      if (!requestCheck.photoFileId && !requestCheck.photoFileUrl) {
+        console.log(`⚠️ [Auto-Deposit] Request ${requestId} has no receipt photo (photoFileId and photoFileUrl are empty), skipping autodeposit`)
+        return null
+      }
+      
+      // КРИТИЧЕСКИ ВАЖНО: Ищем платежи в окне ±5 минут от времени создания заявки
+      // Это предотвращает обработку старых платежей и фейковых чеков
+      const requestCreatedAt = requestCheck.createdAt
+      const now = Date.now()
+      const requestTime = requestCreatedAt.getTime()
+      
+      // Платеж может быть оплачен до создания заявки (до 5 минут назад)
+      const windowStart = new Date(requestTime - 5 * 60 * 1000) // 5 минут до создания заявки
+      
+      // Платеж может прийти после создания заявки (до 5 минут после)
+      const windowEnd = new Date(Math.min(requestTime + 5 * 60 * 1000, now + 1 * 60 * 1000)) // До 5 минут после или до 1 минуты в будущее
+      
+      // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Платеж не должен быть старше 10 минут от текущего момента
+      // Это предотвращает обработку очень старых платежей (например, вчерашних)
+      const maxPaymentAge = new Date(now - 10 * 60 * 1000) // 10 минут назад
+      
+      // ОПТИМИЗАЦИЯ: Фильтруем по сумме прямо в БД (приблизительно)
+      // Используем очень маленький диапазон ±0.0001 только для ошибок округления при поиске в БД
+      // В финальной проверке будет точное сравнение
+      const amountMin = amount - 0.0001
+      const amountMax = amount + 0.0001
+      
       // Ищем платежи в расширенном окне (5 минут до, 15 минут после создания заявки)
       // ВАЖНО: Проверяем и paymentDate (из письма) И createdAt (когда платеж был создан в БД)
       // Это учитывает случаи, когда paymentDate из письма может быть в прошлом
@@ -195,8 +194,8 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       )
       
       // Фильтруем по ТОЧНОМУ совпадению суммы (до копейки)
-    // НЕ логируем несовпадения - это нормально, просто платеж не подходит к этой заявке
-    const exactMatches = matchingPayments.filter((payment) => {
+      // НЕ логируем несовпадения - это нормально, просто платеж не подходит к этой заявке
+      const exactMatches = matchingPayments.filter((payment) => {
       const paymentAmount = parseFloat(payment.amount.toString())
       // ТОЧНОЕ сравнение: суммы должны совпадать в точности до копейки (2 знака после запятой)
       // Округляем до 2 знаков после запятой для корректного сравнения денежных сумм
@@ -210,18 +209,18 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       }
       // НЕ логируем несовпадения - это нормальное поведение
       
-      return matches
-    })
-    
-    // Логируем только если нашли платежи, но не нашли совпадений
-    if (matchingPayments.length > 0 && exactMatches.length === 0) {
-      console.log(`ℹ️ [Auto-Deposit] Found ${matchingPayments.length} payments in window, but no exact matches for request ${requestId} (amount: ${amount})`)
-    }
-    
-    if (exactMatches.length === 0) {
-      console.log(`ℹ️ [Auto-Deposit] No exact matches in window, trying alternative search (all recent unprocessed payments with amount ${amount})...`)
+        return matches
+      })
       
-      // АЛЬТЕРНАТИВНЫЙ ПОИСК: Если не нашли в окне, ищем все необработанные платежи с нужной суммой,
+      // Логируем только если нашли платежи, но не нашли совпадений
+      if (matchingPayments.length > 0 && exactMatches.length === 0) {
+        console.log(`ℹ️ [Auto-Deposit] Found ${matchingPayments.length} payments in window, but no exact matches for request ${requestId} (amount: ${amount})`)
+      }
+      
+      if (exactMatches.length === 0) {
+        console.log(`ℹ️ [Auto-Deposit] No exact matches in window, trying alternative search (all recent unprocessed payments with amount ${amount})...`)
+        
+        // АЛЬТЕРНАТИВНЫЙ ПОИСК: Если не нашли в окне, ищем все необработанные платежи с нужной суммой,
       // созданные в последние 10 минут (независимо от paymentDate)
       // Это обрабатывает случаи, когда paymentDate из письма может быть неправильным
       const alternativePayments = await retryDbQuery(
@@ -273,32 +272,32 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
         return result
       }
       
-      console.log(`ℹ️ [Auto-Deposit] No matching payments found for request ${requestId} (amount: ${amount}, checked ${matchingPayments.length} payments in window + ${alternativePayments.length} in alternative search)`)
-      return null
-    }
-    
-    console.log(`🎯 [Auto-Deposit] Found ${exactMatches.length} matching payment(s) for request ${requestId}`)
-    
-    if (exactMatches.length === 0) {
-      console.log(`ℹ️ [Auto-Deposit] No exact matches found for request ${requestId} (amount: ${amount}, checked ${matchingPayments.length} payments)`)
-      return null
-    }
-    
-    // Берем самый первый платеж (самый ранний в окне)
-    const payment = exactMatches[0]
-    
-    // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что платеж действительно в окне ±5 минут
-    const paymentTime = payment.paymentDate.getTime()
-    const requestTimeMs = requestCreatedAt.getTime()
-    const timeDiffBefore = requestTimeMs - paymentTime // Сколько времени до создания заявки
-    const timeDiffAfter = paymentTime - requestTimeMs // Сколько времени после создания заявки
-    
-    // Платеж может быть до 5 минут до создания заявки или до 5 минут после
-    if (timeDiffBefore > 5 * 60 * 1000 || timeDiffAfter > 5 * 60 * 1000) {
-      console.log(`⚠️ [Auto-Deposit] Payment ${payment.id} is outside ±5min window (${timeDiffBefore > 0 ? 'before' : 'after'}: ${Math.floor(Math.abs(timeDiffBefore > 0 ? timeDiffBefore : timeDiffAfter) / 1000)}s), skipping`)
-      return null
-    }
-    
+        console.log(`ℹ️ [Auto-Deposit] No matching payments found for request ${requestId} (amount: ${amount}, checked ${matchingPayments.length} payments in window + ${alternativePayments.length} in alternative search)`)
+        return null
+      }
+      
+      console.log(`🎯 [Auto-Deposit] Found ${exactMatches.length} matching payment(s) for request ${requestId}`)
+      
+      if (exactMatches.length === 0) {
+        console.log(`ℹ️ [Auto-Deposit] No exact matches found for request ${requestId} (amount: ${amount}, checked ${matchingPayments.length} payments)`)
+        return null
+      }
+      
+      // Берем самый первый платеж (самый ранний в окне)
+      const payment = exactMatches[0]
+      
+      // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что платеж действительно в окне ±5 минут
+      const paymentTime = payment.paymentDate.getTime()
+      const requestTimeMs = requestCreatedAt.getTime()
+      const timeDiffBefore = requestTimeMs - paymentTime // Сколько времени до создания заявки
+      const timeDiffAfter = paymentTime - requestTimeMs // Сколько времени после создания заявки
+      
+      // Платеж может быть до 5 минут до создания заявки или до 5 минут после
+      if (timeDiffBefore > 5 * 60 * 1000 || timeDiffAfter > 5 * 60 * 1000) {
+        console.log(`⚠️ [Auto-Deposit] Payment ${payment.id} is outside ±5min window (${timeDiffBefore > 0 ? 'before' : 'after'}: ${Math.floor(Math.abs(timeDiffBefore > 0 ? timeDiffBefore : timeDiffAfter) / 1000)}s), skipping`)
+        return null
+      }
+      
       // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Проверяем статус заявки еще раз перед вызовом matchAndProcessPayment
       // Это защищает от race condition, когда два вызова checkAndProcessExistingPayment идут параллельно
       const finalCheck = await retryDbQuery(
@@ -314,9 +313,9 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
         console.log(`⚠️ [Auto-Deposit] Request ${requestId} was processed by another call, skipping payment ${payment.id}`)
         return null
       }
-    
-    console.log(`💸 [Auto-Deposit] Processing existing payment ${payment.id} for request ${requestId}`)
-    
+      
+      console.log(`💸 [Auto-Deposit] Processing existing payment ${payment.id} for request ${requestId}`)
+      
       // Вызываем стандартную функцию автопополнения
       const result = await matchAndProcessPayment(payment.id, amount)
       const elapsedMs = Date.now() - startTime
