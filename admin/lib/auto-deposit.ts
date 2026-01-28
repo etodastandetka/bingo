@@ -83,19 +83,20 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       // И проверяем наличие фото чека
       const requestCheck = await retryDbQuery(
         () => prisma.request.findUnique({
-      where: { id: requestId },
-      select: { 
-        status: true, 
-        processedBy: true,
-        createdAt: true, // Получаем время создания заявки
-        photoFileId: true, // Проверяем наличие фото чека
-        photoFileUrl: true, // Проверяем наличие фото чека
-        incomingPayments: {
-          where: { isProcessed: true },
-          select: { id: true },
-          take: 1,
-        },
-      }),
+          where: { id: requestId },
+          select: { 
+            status: true, 
+            processedBy: true,
+            createdAt: true, // Получаем время создания заявки
+            photoFileId: true, // Проверяем наличие фото чека
+            photoFileUrl: true, // Проверяем наличие фото чека
+            incomingPayments: {
+              where: { isProcessed: true },
+              select: { id: true },
+              take: 1,
+            },
+          },
+        }),
         maxRetries,
         `findUnique request ${requestId}`
       )
@@ -157,36 +158,37 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       const actualWindowStart = windowStart > maxPaymentAge ? windowStart : maxPaymentAge
       const matchingPayments = await retryDbQuery(
         () => prisma.incomingPayment.findMany({
-      where: {
-        isProcessed: false,
-        AND: [
-          {
-            // Проверяем paymentDate (дата платежа из письма)
-            paymentDate: { 
-              gte: actualWindowStart,
-              lte: windowEnd,
+          where: {
+            isProcessed: false,
+            AND: [
+              {
+                // Проверяем paymentDate (дата платежа из письма)
+                paymentDate: { 
+                  gte: actualWindowStart,
+                  lte: windowEnd,
+                },
+              },
+              {
+                // ВАЖНО: Также проверяем createdAt (когда платеж был создан в БД)
+                // Платеж должен быть создан недавно (в последние 20 минут)
+                createdAt: {
+                  gte: maxPaymentAge, // Не старше 20 минут
+                },
+              },
+            ],
+            amount: {
+              gte: amountMin,
+              lte: amountMax,
             },
           },
-          {
-            // ВАЖНО: Также проверяем createdAt (когда платеж был создан в БД)
-            // Платеж должен быть создан недавно (в последние 20 минут)
-            createdAt: {
-              gte: maxPaymentAge, // Не старше 20 минут
-            },
+          orderBy: { createdAt: 'desc' }, // Берем самые свежие платежи (сначала последние созданные)
+          take: 20,
+          select: {
+            id: true,
+            amount: true,
+            paymentDate: true,
+            createdAt: true, // Добавляем createdAt для логирования
           },
-        ],
-        amount: {
-          gte: amountMin,
-          lte: amountMax,
-        },
-      },
-      orderBy: { createdAt: 'desc' }, // Берем самые свежие платежи (сначала последние созданные)
-      take: 20,
-      select: {
-        id: true,
-        amount: true,
-        paymentDate: true,
-          createdAt: true, // Добавляем createdAt для логирования
         }),
         maxRetries,
         `findMany incomingPayments for request ${requestId}`
@@ -224,25 +226,25 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       // Это обрабатывает случаи, когда paymentDate из письма может быть неправильным
       const alternativePayments = await retryDbQuery(
         () => prisma.incomingPayment.findMany({
-        where: {
-          isProcessed: false,
-          createdAt: {
-            gte: maxPaymentAge, // Созданы в последние 10 минут
+          where: {
+            isProcessed: false,
+            createdAt: {
+              gte: maxPaymentAge, // Созданы в последние 10 минут
+            },
+            amount: {
+              gte: amountMin,
+              lte: amountMax,
+            },
           },
-          amount: {
-            gte: amountMin,
-            lte: amountMax,
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          select: {
+            id: true,
+            amount: true,
+            paymentDate: true,
+            createdAt: true,
           },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-        select: {
-          id: true,
-          amount: true,
-          paymentDate: true,
-          createdAt: true,
-        },
-      }),
+        }),
         maxRetries,
         `findMany alternativePayments for request ${requestId}`
       )
@@ -301,7 +303,7 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       // Это защищает от race condition, когда два вызова checkAndProcessExistingPayment идут параллельно
       const finalCheck = await retryDbQuery(
         () => prisma.request.findUnique({
-      where: { id: requestId },
+          where: { id: requestId },
           select: { status: true, processedBy: true },
         }),
         maxRetries,
@@ -309,9 +311,9 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       )
       
       if (finalCheck?.status !== 'pending' || finalCheck?.processedBy === 'автопополнение') {
-      console.log(`⚠️ [Auto-Deposit] Request ${requestId} was processed by another call, skipping payment ${payment.id}`)
-      return null
-    }
+        console.log(`⚠️ [Auto-Deposit] Request ${requestId} was processed by another call, skipping payment ${payment.id}`)
+        return null
+      }
     
     console.log(`💸 [Auto-Deposit] Processing existing payment ${payment.id} for request ${requestId}`)
     
