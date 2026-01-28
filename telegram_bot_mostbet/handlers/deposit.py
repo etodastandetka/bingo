@@ -375,11 +375,11 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
 
     await state.update_data(account_id=account_id, player_info=player_info)
     
-    # Клавиатура с быстрыми кнопками сумм
+    # Клавиатура с быстрыми кнопками сумм (для mostbet минимальная сумма 400)
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [
-                KeyboardButton(text='100'),
+                KeyboardButton(text='400'),
                 KeyboardButton(text='500'),
                 KeyboardButton(text='1000')
             ],

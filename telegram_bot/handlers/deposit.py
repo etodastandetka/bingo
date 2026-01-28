@@ -548,11 +548,15 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
 
     await state.update_data(account_id=account_id, player_info=player_info)
     
-    # Клавиатура с быстрыми кнопками сумм
+    # Для mostbet минимальный депозит 400, для остальных - 100
+    deposit_min = 400 if casino_id and casino_id.lower() == 'mostbet' else Config.DEPOSIT_MIN
+    
+    # Клавиатура с быстрыми кнопками сумм (для mostbet первая кнопка 400, для остальных - 100)
+    first_amount = '400' if casino_id and casino_id.lower() == 'mostbet' else '100'
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [
-                KeyboardButton(text='100'),
+                KeyboardButton(text=first_amount),
                 KeyboardButton(text='500'),
                 KeyboardButton(text='1000')
             ],
@@ -566,9 +570,6 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
         ],
         resize_keyboard=True
     )
-    
-    # Для mostbet минимальный депозит 400, для остальных - 100
-    deposit_min = 400 if casino_id and casino_id.lower() == 'mostbet' else Config.DEPOSIT_MIN
     deposit_max = Config.DEPOSIT_MAX
     
     # Форматируем числа с пробелами для тысяч
