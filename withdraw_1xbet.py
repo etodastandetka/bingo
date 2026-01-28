@@ -23,10 +23,11 @@ except ImportError:
 
 
 # Конфигурация API 1xBet (можно задать через переменные окружения)
-DEFAULT_HASH = os.getenv('XBET_HASH', '97f471a9db92debbda38201af67e15f64d086e94ae4b919d8a6a4f64958912cf')
-DEFAULT_CASHIERPASS = os.getenv('XBET_CASHIERPASS', 'wiaWAfE9')
-DEFAULT_LOGIN = os.getenv('XBET_LOGIN', 'zhenishbAd')
-DEFAULT_CASHDESKID = os.getenv('XBET_CASHDESKID', '1388580')
+# Значения по умолчанию взяты из БД (таблица bot_configurations, ключ 1xbet_api_config)
+DEFAULT_HASH = os.getenv('XBET_HASH', 'f7ff9a23821a0dd19276392f80d43fd2e481986bebb7418fef11e03bba038101')
+DEFAULT_CASHIERPASS = os.getenv('XBET_CASHIERPASS', 'u2Z6WRZkNB')
+DEFAULT_LOGIN = os.getenv('XBET_LOGIN', 'kurbanaevb')
+DEFAULT_CASHDESKID = os.getenv('XBET_CASHDESKID', '1343871')
 
 BASE_URL = 'https://partners.servcul.com/CashdeskBotAPI/'
 

@@ -820,6 +820,7 @@ async function checkPendingRequestsWithPhotos(): Promise<void> {
     console.log(`🔍 [Periodic Check] Checking ${pendingRequests.length} pending requests with photos for new payments...`)
 
     let processedCount = 0
+    // Обрабатываем заявки последовательно (не параллельно) для снижения нагрузки на пул соединений
     for (const request of pendingRequests) {
       if (!request.amount) continue
       
@@ -832,9 +833,15 @@ async function checkPendingRequestsWithPhotos(): Promise<void> {
           processedCount++
           console.log(`✅ [Periodic Check] Found and processed payment for request ${request.id}`)
         }
+        
+        // Увеличена задержка между проверками для снижения нагрузки на БД
+        await new Promise(resolve => setTimeout(resolve, 500))
       } catch (error: any) {
         // Игнорируем ошибки для отдельных заявок, продолжаем проверку остальных
-        console.warn(`⚠️ [Periodic Check] Error checking request ${request.id}:`, error.message)
+        // Не логируем ошибки пула соединений - они обрабатываются внутри checkAndProcessExistingPayment
+        if (!error.message?.includes('connection pool') && !error.message?.includes('P2024')) {
+          console.warn(`⚠️ [Periodic Check] Error checking request ${request.id}:`, error.message)
+        }
       }
     }
 
@@ -943,14 +950,26 @@ export async function startWatcher(): Promise<void> {
     console.warn('⚠️ Initial timeout check failed:', error.message)
   })
 
-  // Запускаем периодическую проверку pending заявок с фото чека каждую секунду
+  // Запускаем периодическую проверку pending заявок с фото чека каждые 10 секунд
   // Это обрабатывает случаи, когда платеж приходит ПОСЛЕ создания заявки
-  // Проверка каждую секунду для мгновенной реакции на новые платежи
+  // Увеличено до 10 секунд для снижения нагрузки на пул соединений БД
+  let isCheckingPending = false // Защита от параллельных проверок
   const pendingCheckInterval = setInterval(() => {
-    checkPendingRequestsWithPhotos().catch((error) => {
-      console.warn('⚠️ Pending requests check failed:', error.message)
-    })
-  }, 1000) // Каждую секунду для мгновенной реакции
+    if (isCheckingPending) {
+      return // Пропускаем, если проверка уже выполняется
+    }
+    isCheckingPending = true
+    checkPendingRequestsWithPhotos()
+      .catch((error) => {
+        // Не логируем ошибки пула соединений - они обрабатываются внутри
+        if (!error.message?.includes('connection pool') && !error.message?.includes('P2024')) {
+          console.warn('⚠️ Pending requests check failed:', error.message)
+        }
+      })
+      .finally(() => {
+        isCheckingPending = false
+      })
+  }, 10000) // Каждые 10 секунд для снижения нагрузки на БД
 
   // Проверяем pending заявки сразу при запуске
   checkPendingRequestsWithPhotos().catch((error) => {

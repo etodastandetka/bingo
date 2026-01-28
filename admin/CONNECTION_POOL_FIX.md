@@ -30,14 +30,14 @@ DATABASE_URL="postgresql://user:password@host:5432/database"
 
 **Новый формат (с параметрами пула):**
 ```
-DATABASE_URL="postgresql://user:password@host:5432/database?connection_limit=50&pool_timeout=30"
+DATABASE_URL="postgresql://user:password@host:5432/database?connection_limit=100&pool_timeout=60"
 ```
 
 ### 3. Параметры:
-- `connection_limit=50` - максимальное количество соединений в пуле (было 17 по умолчанию)
-  - **Критично:** При высокой нагрузке увеличьте до 100
-- `pool_timeout=30` - время ожидания свободного соединения в секундах (было 10)
-  - **Критично:** При медленных запросах увеличьте до 60
+- `connection_limit=100` - максимальное количество соединений в пуле (было 17 по умолчанию)
+  - **Критично:** Рекомендуется 100 для высокой нагрузки
+- `pool_timeout=60` - время ожидания свободного соединения в секундах (было 10)
+  - **Критично:** Рекомендуется 60 для долгих транзакций
 
 ### 4. После изменения:
 ```bash
@@ -77,7 +77,10 @@ nano .env
 
 # 2. Найдите DATABASE_URL и добавьте параметры:
 # Было: DATABASE_URL="postgresql://..."
-# Стало: DATABASE_URL="postgresql://...?connection_limit=50&pool_timeout=30"
+# Стало: DATABASE_URL="postgresql://...?connection_limit=100&pool_timeout=60"
+# 
+# ИЛИ запустите автоматический скрипт:
+# npx tsx scripts/fix-connection-pool.ts
 
 # 3. Перезапустите сервисы
 pm2 restart all

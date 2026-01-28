@@ -25,7 +25,7 @@ DATABASE_URL="postgresql://gen_user:dastan10dz@92.51.38.85:5432/default_db"
 
 **Должно быть:**
 ```
-DATABASE_URL="postgresql://gen_user:dastan10dz@92.51.38.85:5432/default_db?connection_limit=50&pool_timeout=30"
+DATABASE_URL="postgresql://gen_user:dastan10dz@92.51.38.85:5432/default_db?connection_limit=100&pool_timeout=60"
 ```
 
 ### 3. Сохраните файл (Ctrl+O, Enter, Ctrl+X)

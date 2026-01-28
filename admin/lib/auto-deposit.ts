@@ -1,27 +1,88 @@
 import { prisma } from './prisma'
 
+// Дебаунсинг для предотвращения параллельных проверок одной заявки
+const checkingRequests = new Map<number, Promise<any>>()
+
+/**
+ * Вспомогательная функция для retry запросов к БД
+ */
+async function retryDbQuery<T>(
+  queryFn: () => Promise<T>,
+  maxRetries: number = 3,
+  operationName: string = 'DB query'
+): Promise<T> {
+  let lastError: any = null
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await queryFn()
+      // Успешно выполнили запрос - выходим из retry цикла
+    } catch (error: any) {
+      lastError = error
+      
+      // Проверяем, является ли это ошибкой пула соединений
+      const isConnectionPoolError = error.code === 'P2024' || 
+                                    error.message?.includes('Unable to start a transaction') ||
+                                    error.message?.includes('connection pool') ||
+                                    error.message?.includes('timeout')
+      
+      if (isConnectionPoolError && attempt < maxRetries) {
+        // Экспоненциальная задержка: 0.5s, 1s, 2s
+        const delay = Math.min(500 * Math.pow(2, attempt - 1), 2000)
+        console.warn(`⚠️ [Auto-Deposit] Connection pool error in ${operationName} (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue // Пробуем снова
+      }
+      
+      // Если это не ошибка пула или это последняя попытка - пробрасываем ошибку
+      if (isConnectionPoolError && attempt === maxRetries) {
+        console.error(`❌ [Auto-Deposit] Connection pool error in ${operationName} after ${maxRetries} attempts`)
+      }
+      
+      throw error
+    }
+  }
+  
+  // Если все попытки не удались
+  throw lastError || new Error(`Failed ${operationName} after ${maxRetries} attempts`)
+}
+
 /**
  * Проверяет существующие необработанные платежи для заявки и вызывает автопополнение
  * Используется когда заявка создается ПОСЛЕ того, как платеж уже был обработан email-watcher'ом
  */
 export async function checkAndProcessExistingPayment(requestId: number, amount: number) {
+  // Дебаунсинг: если заявка уже проверяется - ждем завершения предыдущей проверки
+  const existingCheck = checkingRequests.get(requestId)
+  if (existingCheck) {
+    console.log(`⏳ [Auto-Deposit] Request ${requestId} is already being checked, waiting for previous check to complete...`)
+    return existingCheck
+  }
+  
   const startTime = Date.now()
   console.log(`🔍 [Auto-Deposit] checkAndProcessExistingPayment called: requestId=${requestId}, amount=${amount}`)
   
-  // КРИТИЧЕСКАЯ ПРОВЕРКА: Автопополнение НЕ работает, если сумма заканчивается на .00 (копейки = 00)
-  // Автопополнение работает ТОЛЬКО если копейки от 01 до 99
-  const cents = Math.round((amount % 1) * 100) // Получаем копейки (0-99)
-  if (cents === 0) {
-    console.log(`❌ [Auto-Deposit] Amount ${amount} ends with .00 (cents = 00), autodeposit is DISABLED. Autodeposit only works with cents 01-99.`)
-    return null
-  }
-  
-  try {
-    // КРИТИЧЕСКАЯ ЗАЩИТА: Проверяем статус заявки ПЕРЕД поиском платежей
-    // Если заявка уже обработана - сразу выходим, не тратим время на поиск платежей
-    // ВАЖНО: Получаем также createdAt для определения временного окна
-    // И проверяем наличие фото чека
-    const requestCheck = await prisma.request.findUnique({
+  // Создаем Promise для этой проверки и сохраняем его
+  const checkPromise = (async () => {
+    try {
+      // КРИТИЧЕСКАЯ ПРОВЕРКА: Автопополнение НЕ работает, если сумма заканчивается на .00 (копейки = 00)
+      // Автопополнение работает ТОЛЬКО если копейки от 01 до 99
+      const cents = Math.round((amount % 1) * 100) // Получаем копейки (0-99)
+      if (cents === 0) {
+        console.log(`❌ [Auto-Deposit] Amount ${amount} ends with .00 (cents = 00), autodeposit is DISABLED. Autodeposit only works with cents 01-99.`)
+        return null
+      }
+      
+      // Retry логика для запросов к БД при ошибках пула соединений
+      const maxRetries = 3
+      
+      try {
+      // КРИТИЧЕСКАЯ ЗАЩИТА: Проверяем статус заявки ПЕРЕД поиском платежей
+      // Если заявка уже обработана - сразу выходим, не тратим время на поиск платежей
+      // ВАЖНО: Получаем также createdAt для определения временного окна
+      // И проверяем наличие фото чека
+      const requestCheck = await retryDbQuery(
+        () => prisma.request.findUnique({
       where: { id: requestId },
       select: { 
         status: true, 
@@ -34,11 +95,13 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
           select: { id: true },
           take: 1,
         },
-      },
-    })
+      }),
+        maxRetries,
+        `findUnique request ${requestId}`
+      )
     
-    // Если заявка уже обработана - не ищем платежи (защита от дубликатов)
-    if (requestCheck?.status !== 'pending') {
+      // Если заявка уже обработана - не ищем платежи (защита от дубликатов)
+      if (requestCheck?.status !== 'pending') {
       console.log(`⚠️ [Auto-Deposit] Request ${requestId} already processed (status: ${requestCheck?.status}), skipping payment search`)
       return null
     }
@@ -88,11 +151,12 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
     const amountMin = amount - 0.0001
     const amountMax = amount + 0.0001
     
-    // Ищем платежи в расширенном окне (5 минут до, 15 минут после создания заявки)
-    // ВАЖНО: Проверяем и paymentDate (из письма) И createdAt (когда платеж был создан в БД)
-    // Это учитывает случаи, когда paymentDate из письма может быть в прошлом
-    const actualWindowStart = windowStart > maxPaymentAge ? windowStart : maxPaymentAge
-    const matchingPayments = await prisma.incomingPayment.findMany({
+      // Ищем платежи в расширенном окне (5 минут до, 15 минут после создания заявки)
+      // ВАЖНО: Проверяем и paymentDate (из письма) И createdAt (когда платеж был создан в БД)
+      // Это учитывает случаи, когда paymentDate из письма может быть в прошлом
+      const actualWindowStart = windowStart > maxPaymentAge ? windowStart : maxPaymentAge
+      const matchingPayments = await retryDbQuery(
+        () => prisma.incomingPayment.findMany({
       where: {
         isProcessed: false,
         AND: [
@@ -122,11 +186,13 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
         id: true,
         amount: true,
         paymentDate: true,
-        createdAt: true, // Добавляем createdAt для логирования
-      },
-    })
-    
-    // Фильтруем по ТОЧНОМУ совпадению суммы (до копейки)
+          createdAt: true, // Добавляем createdAt для логирования
+        }),
+        maxRetries,
+        `findMany incomingPayments for request ${requestId}`
+      )
+      
+      // Фильтруем по ТОЧНОМУ совпадению суммы (до копейки)
     // НЕ логируем несовпадения - это нормально, просто платеж не подходит к этой заявке
     const exactMatches = matchingPayments.filter((payment) => {
       const paymentAmount = parseFloat(payment.amount.toString())
@@ -156,7 +222,8 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       // АЛЬТЕРНАТИВНЫЙ ПОИСК: Если не нашли в окне, ищем все необработанные платежи с нужной суммой,
       // созданные в последние 10 минут (независимо от paymentDate)
       // Это обрабатывает случаи, когда paymentDate из письма может быть неправильным
-      const alternativePayments = await prisma.incomingPayment.findMany({
+      const alternativePayments = await retryDbQuery(
+        () => prisma.incomingPayment.findMany({
         where: {
           isProcessed: false,
           createdAt: {
@@ -175,7 +242,10 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
           paymentDate: true,
           createdAt: true,
         },
-      })
+      }),
+        maxRetries,
+        `findMany alternativePayments for request ${requestId}`
+      )
       
       // Фильтруем по точному совпадению суммы
       // НЕ логируем несовпадения - это нормально
@@ -227,32 +297,56 @@ export async function checkAndProcessExistingPayment(requestId: number, amount: 
       return null
     }
     
-    // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Проверяем статус заявки еще раз перед вызовом matchAndProcessPayment
-    // Это защищает от race condition, когда два вызова checkAndProcessExistingPayment идут параллельно
-    const finalCheck = await prisma.request.findUnique({
+      // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Проверяем статус заявки еще раз перед вызовом matchAndProcessPayment
+      // Это защищает от race condition, когда два вызова checkAndProcessExistingPayment идут параллельно
+      const finalCheck = await retryDbQuery(
+        () => prisma.request.findUnique({
       where: { id: requestId },
-      select: { status: true, processedBy: true },
-    })
-    
-    if (finalCheck?.status !== 'pending' || finalCheck?.processedBy === 'автопополнение') {
+          select: { status: true, processedBy: true },
+        }),
+        maxRetries,
+        `finalCheck request ${requestId}`
+      )
+      
+      if (finalCheck?.status !== 'pending' || finalCheck?.processedBy === 'автопополнение') {
       console.log(`⚠️ [Auto-Deposit] Request ${requestId} was processed by another call, skipping payment ${payment.id}`)
       return null
     }
     
     console.log(`💸 [Auto-Deposit] Processing existing payment ${payment.id} for request ${requestId}`)
     
-    // Вызываем стандартную функцию автопополнения
-    const result = await matchAndProcessPayment(payment.id, amount)
-    const elapsedMs = Date.now() - startTime
-    const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
-    console.log(`⏱️ [Auto-Deposit] checkAndProcessExistingPayment completed in ${elapsedSeconds}s for request ${requestId}`)
-    return result
-  } catch (error: any) {
-    const elapsedMs = Date.now() - startTime
-    const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
-    console.error(`❌ [Auto-Deposit] Error checking existing payments for request ${requestId} (${elapsedSeconds}s):`, error.message)
-    return null
-  }
+      // Вызываем стандартную функцию автопополнения
+      const result = await matchAndProcessPayment(payment.id, amount)
+      const elapsedMs = Date.now() - startTime
+      const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
+      console.log(`⏱️ [Auto-Deposit] checkAndProcessExistingPayment completed in ${elapsedSeconds}s for request ${requestId}`)
+      return result
+    } catch (error: any) {
+      // Обрабатываем ошибки
+      const elapsedMs = Date.now() - startTime
+      const elapsedSeconds = (elapsedMs / 1000).toFixed(2)
+      
+      // Не логируем ошибки пула соединений - они обрабатываются внутри retryDbQuery
+      const isConnectionPoolError = error.code === 'P2024' || 
+                                    error.message?.includes('Unable to start a transaction') ||
+                                    error.message?.includes('connection pool') ||
+                                    error.message?.includes('timeout')
+      
+      if (!isConnectionPoolError) {
+        console.error(`❌ [Auto-Deposit] Error checking existing payments for request ${requestId} (${elapsedSeconds}s):`, error.message)
+      }
+      
+      return null
+    } finally {
+      // Удаляем из checkingRequests после завершения проверки
+      checkingRequests.delete(requestId)
+    }
+  })()
+  
+  // Сохраняем Promise в checkingRequests
+  checkingRequests.set(requestId, checkPromise)
+  
+  return checkPromise
 }
 
 /**
@@ -410,8 +504,14 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
   // КРИТИЧЕСКАЯ ЗАЩИТА: Блокируем заявку через SELECT FOR UPDATE в транзакции
   // Это гарантирует, что только ОДИН процесс сможет обработать заявку
   // Другие процессы будут ждать завершения транзакции и увидят, что заявка уже обработана
-  try {
-    const depositResult = await prisma.$transaction(async (tx) => {
+  
+  // Retry логика для транзакций при ошибках пула соединений
+  const maxRetries = 3
+  let lastError: any = null
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const depositResult = await prisma.$transaction(async (tx) => {
       // Блокируем заявку через SELECT FOR UPDATE - только один процесс может получить блокировку
       const lockedRequest = await tx.$queryRaw<Array<{ id: number; status: string; processed_by: string | null }>>`
         SELECT id, status, processed_by 
@@ -535,22 +635,22 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
         updatedRequest,
         updatedPayment,
       }
-    }, {
-      timeout: 180000, // 180 секунд (3 минуты) таймаут для транзакции
-      // Увеличено для учета медленных API вызовов казино с ретраями и задержками сети
-      // Некоторые API казино могут отвечать до 100+ секунд при проблемах с сетью
-    })
+      }, {
+        timeout: 180000, // 180 секунд (3 минуты) таймаут для транзакции
+        // Увеличено для учета медленных API вызовов казино с ретраями и задержками сети
+        // Некоторые API казино могут отвечать до 100+ секунд при проблемах с сетью
+      })
+      
+      // Если транзакция вернула skipped - заявка уже обработана другим процессом
+      if (depositResult.skipped) {
+        console.log(`⚠️ [Auto-Deposit] Request ${request.id} was processed by another process, skipping`)
+        return null
+      }
     
-    // Если транзакция вернула skipped - заявка уже обработана другим процессом
-    if (depositResult.skipped) {
-      console.log(`⚠️ [Auto-Deposit] Request ${request.id} was processed by another process, skipping`)
-      return null
-    }
-    
-    // Если API вызов неуспешен - обрабатываем ошибку
-    // ВАЖНО: Обработка "already processed" теперь происходит ВНУТРИ транзакции (выше),
-    // поэтому здесь мы обрабатываем только реальные ошибки
-    if (!depositResult.success) {
+      // Если API вызов неуспешен - обрабатываем ошибку
+      // ВАЖНО: Обработка "already processed" теперь происходит ВНУТРИ транзакции (выше),
+      // поэтому здесь мы обрабатываем только реальные ошибки
+      if (!depositResult.success) {
       const errorMessage = depositResult.message || 'Deposit failed'
       
       // Если это "already processed" - это уже обработано внутри транзакции, просто логируем
@@ -682,22 +782,56 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       }
     }
     
-    // Если что-то пошло не так
-    console.error(`❌ [Auto-Deposit] Unexpected result from transaction for request ${request.id}`)
-    return null
-  } catch (error: any) {
-    // Обработка ошибок, которые не были обработаны внутри транзакции
-    if (error.message && !error.message.includes('Request already processed')) {
-      console.error(`❌ [Auto-Deposit] Error processing payment ${paymentId} for request ${request.id}:`, error.message)
-    }
-    
-    // Если это ошибка "Request already processed" - это нормально, просто возвращаем null
-    if (error.message?.includes('Request already processed') || error.message?.includes('already processed')) {
+      // Если что-то пошло не так
+      console.error(`❌ [Auto-Deposit] Unexpected result from transaction for request ${request.id}`)
       return null
+      
+      // Успешно выполнили транзакцию - выходим из retry цикла
+    } catch (error: any) {
+      lastError = error
+      
+      // Проверяем, является ли это ошибкой пула соединений
+      const isConnectionPoolError = error.code === 'P2024' || 
+                                    error.message?.includes('Unable to start a transaction') ||
+                                    error.message?.includes('connection pool') ||
+                                    error.message?.includes('timeout')
+      
+      if (isConnectionPoolError && attempt < maxRetries) {
+        // Экспоненциальная задержка: 0.5s, 1s, 2s
+        const delay = Math.min(500 * Math.pow(2, attempt - 1), 2000)
+        console.warn(`⚠️ [Auto-Deposit] Connection pool error (attempt ${attempt}/${maxRetries}) for request ${request.id}, retrying in ${delay}ms...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue // Пробуем снова
+      }
+      
+      // Если это не ошибка пула или это последняя попытка - обрабатываем ошибку
+      // Обработка ошибок, которые не были обработаны внутри транзакции
+      if (error.message && !error.message.includes('Request already processed')) {
+        console.error(`❌ [Auto-Deposit] Error processing payment ${paymentId} for request ${request.id}:`, error.message)
+      }
+      
+      // Если это ошибка "Request already processed" - это нормально, просто возвращаем null
+      if (error.message?.includes('Request already processed') || error.message?.includes('already processed')) {
+        return null
+      }
+      
+      // Если это последняя попытка и ошибка пула - логируем и возвращаем null
+      if (isConnectionPoolError && attempt === maxRetries) {
+        console.error(`❌ [Auto-Deposit] Connection pool error after ${maxRetries} attempts for request ${request.id}, giving up`)
+        return null
+      }
+      
+      throw error
     }
-    
-    throw error
   }
+  
+  // Если все попытки не удались
+  if (lastError) {
+    console.error(`❌ [Auto-Deposit] Failed to process payment ${paymentId} for request ${request.id} after ${maxRetries} attempts`)
+    return null
+  }
+  
+  return null
 }
 
 // Старый код удален - теперь все делается в одной транзакции с SELECT FOR UPDATE
