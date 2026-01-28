@@ -97,7 +97,7 @@ class Config:
     ]
     
     # Лимиты
-    DEPOSIT_MIN = 100
+    DEPOSIT_MIN = 400
     DEPOSIT_MAX = 100000
     
     # Канал и поддержка
