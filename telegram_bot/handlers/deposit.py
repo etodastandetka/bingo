@@ -567,9 +567,13 @@ async def deposit_account_id_received(message: Message, state: FSMContext, bot: 
         resize_keyboard=True
     )
     
+    # Для mostbet минимальный депозит 400, для остальных - 100
+    deposit_min = 400 if casino_id and casino_id.lower() == 'mostbet' else Config.DEPOSIT_MIN
+    deposit_max = Config.DEPOSIT_MAX
+    
     # Форматируем числа с пробелами для тысяч
-    min_formatted = f"{Config.DEPOSIT_MIN:,}".replace(',', ' ')
-    max_formatted = f"{Config.DEPOSIT_MAX:,}".replace(',', ' ')
+    min_formatted = f"{deposit_min:,}".replace(',', ' ')
+    max_formatted = f"{deposit_max:,}".replace(',', ' ')
     amount_prompt = get_text(lang, 'deposit', 'enter_amount', min=min_formatted, max=max_formatted)
 
     await message.answer(
@@ -620,17 +624,21 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         amount_text = message.text.strip().replace(' ', '').replace(',', '.')
         amount = float(amount_text)
         
-        if amount < Config.DEPOSIT_MIN or amount > Config.DEPOSIT_MAX:
+        data = await state.get_data()
+        casino_id = data.get('casino_id')
+        
+        # Для mostbet минимальный депозит 400, для остальных - 100
+        deposit_min = 400 if casino_id and casino_id.lower() == 'mostbet' else Config.DEPOSIT_MIN
+        deposit_max = Config.DEPOSIT_MAX
+        
+        if amount < deposit_min or amount > deposit_max:
             # Форматируем числа с пробелами для тысяч
-            min_formatted = f"{Config.DEPOSIT_MIN:,}".replace(',', ' ')
-            max_formatted = f"{Config.DEPOSIT_MAX:,}".replace(',', ' ')
+            min_formatted = f"{deposit_min:,}".replace(',', ' ')
+            max_formatted = f"{deposit_max:,}".replace(',', ' ')
             await message.answer(
                 get_text(lang, 'deposit', 'invalid_amount', min=min_formatted, max=max_formatted)
             )
             return
-        
-        data = await state.get_data()
-        casino_id = data.get('casino_id')
         account_id = data.get('account_id')
         
         # Проверяем наличие необходимых данных
@@ -960,9 +968,16 @@ async def deposit_amount_received(message: Message, state: FSMContext, bot: Bot)
         
     except ValueError:
         lang = await get_lang_from_state(state)
+        data = await state.get_data()
+        casino_id = data.get('casino_id')
+        
+        # Для mostbet минимальный депозит 400, для остальных - 100
+        deposit_min = 400 if casino_id and casino_id.lower() == 'mostbet' else Config.DEPOSIT_MIN
+        deposit_max = Config.DEPOSIT_MAX
+        
         # Форматируем числа с пробелами для тысяч
-        min_formatted = f"{Config.DEPOSIT_MIN:,}".replace(',', ' ')
-        max_formatted = f"{Config.DEPOSIT_MAX:,}".replace(',', ' ')
+        min_formatted = f"{deposit_min:,}".replace(',', ' ')
+        max_formatted = f"{deposit_max:,}".replace(',', ' ')
         await message.answer(get_text(lang, 'deposit', 'invalid_amount', min=min_formatted, max=max_formatted))
     except Exception as e:
         import logging
