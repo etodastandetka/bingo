@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
           }
         })
         
-        return userIdsStr.map((userIdStr) => ({
+        return userIdsStr.map((userIdStr: string) => ({
           userId: userIdStr,
           lastMessage: lastMessageMap.get(userIdStr) || null,
         }))
@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
           }
         })
         
-        return userIdsStr.map((userIdStr) => ({
+        return userIdsStr.map((userIdStr: string) => ({
           userId: userIdStr,
           lastOpMsg: lastOpMessageMap.get(userIdStr) || null,
         }))
@@ -220,12 +220,13 @@ export async function GET(request: NextRequest) {
       
       // Определяем время, с которого считать непрочитанные
       let readSince: Date | null = null
-      if (lastReadAt && lastOpMsg) {
-        readSince = lastReadAt > lastOpMsg.createdAt ? lastReadAt : lastOpMsg.createdAt
+      if (lastReadAt && lastOpMsg && lastOpMsg !== null && typeof lastOpMsg === 'object' && 'createdAt' in lastOpMsg) {
+        const opMsg = lastOpMsg as { createdAt: Date }
+        readSince = lastReadAt > opMsg.createdAt ? lastReadAt : opMsg.createdAt
       } else if (lastReadAt) {
         readSince = lastReadAt
-      } else if (lastOpMsg) {
-        readSince = lastOpMsg.createdAt
+      } else if (lastOpMsg && lastOpMsg !== null && typeof lastOpMsg === 'object' && 'createdAt' in lastOpMsg) {
+        readSince = (lastOpMsg as { createdAt: Date }).createdAt
       }
       
       // Считаем непрочитанные из уже загруженных сообщений
