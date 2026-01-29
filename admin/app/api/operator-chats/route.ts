@@ -23,16 +23,25 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'open' // 'open' или 'closed'
     const search = searchParams.get('search') || ''
 
-    // Оптимизация: получаем все данные батчами
+    // ОПТИМИЗАЦИЯ: Ограничиваем количество пользователей для производительности
+    // Получаем только пользователей с недавними сообщениями (за последние 30 дней)
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    
     const usersWithMessages = await (prisma.chatMessage.groupBy as any)({
       by: ['userId'],
       where: {
         botType: 'operator',
         direction: 'in',
+        createdAt: {
+          gte: thirtyDaysAgo, // Только недавние сообщения
+        },
       },
       _count: {
         id: true,
       },
+      // Ограничиваем количество пользователей
+      take: 500, // Максимум 500 пользователей
     })
 
     if (usersWithMessages.length === 0) {
@@ -77,82 +86,92 @@ export async function GET(request: NextRequest) {
           lastName: true,
         },
       }),
-      // ОПТИМИЗАЦИЯ: Получаем последние сообщения батчами (по 100 пользователей)
-      // Используем более простой подход без raw SQL для надежности
+      // ОПТИМИЗАЦИЯ: Используем более эффективный подход - получаем только последние сообщения
+      // Вместо загрузки всех сообщений используем подзапросы для каждого пользователя параллельно
       (async () => {
         if (userIdsBigInt.length === 0) return []
         
-        // Получаем все сообщения для этих пользователей одним запросом
-        const allMessages = await prisma.chatMessage.findMany({
-          where: {
-            userId: { in: userIdsBigInt },
-            botType: 'operator',
-          },
-          select: {
-            userId: true,
-            messageText: true,
-            direction: true,
-            createdAt: true,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        })
+        // ОПТИМИЗАЦИЯ: Используем батчинг - обрабатываем по 50 пользователей за раз
+        const batchSize = 50
+        const results: Array<{ userId: string; lastMessage: any }> = []
         
-        // Группируем по userId и берем первое (самое новое) для каждого
-        const lastMessageMap = new Map()
-        allMessages.forEach((msg: any) => {
-          const userIdStr = msg.userId.toString()
-          if (!lastMessageMap.has(userIdStr)) {
-            lastMessageMap.set(userIdStr, {
-              messageText: msg.messageText,
-              direction: msg.direction,
-              createdAt: msg.createdAt,
+        for (let i = 0; i < userIdsBigInt.length; i += batchSize) {
+          const batch = userIdsBigInt.slice(i, i + batchSize)
+          
+          // Для каждого батча получаем последние сообщения параллельно
+          const batchResults = await Promise.all(
+            batch.map(async (userIdBigInt: bigint) => {
+              const lastMessage = await prisma.chatMessage.findFirst({
+                where: {
+                  userId: userIdBigInt,
+                  botType: 'operator',
+                },
+                select: {
+                  messageText: true,
+                  direction: true,
+                  createdAt: true,
+                },
+                orderBy: {
+                  createdAt: 'desc',
+                },
+              })
+              
+              return {
+                userId: userIdBigInt.toString(),
+                lastMessage: lastMessage ? {
+                  messageText: lastMessage.messageText,
+                  direction: lastMessage.direction,
+                  createdAt: lastMessage.createdAt,
+                } : null,
+              }
             })
-          }
-        })
+          )
+          
+          results.push(...batchResults)
+        }
         
-        return userIdsStr.map((userIdStr: string) => ({
-          userId: userIdStr,
-          lastMessage: lastMessageMap.get(userIdStr) || null,
-        }))
+        return results
       })(),
       // ОПТИМИЗАЦИЯ: Получаем последние сообщения оператора батчами
       (async () => {
         if (userIdsBigInt.length === 0) return []
         
-        // Получаем все сообщения оператора одним запросом
-        const allOpMessages = await prisma.chatMessage.findMany({
-          where: {
-            userId: { in: userIdsBigInt },
-            botType: 'operator',
-            direction: 'out',
-          },
-          select: {
-            userId: true,
-            createdAt: true,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        })
+        // ОПТИМИЗАЦИЯ: Используем батчинг - обрабатываем по 50 пользователей за раз
+        const batchSize = 50
+        const results: Array<{ userId: string; lastOpMsg: any }> = []
         
-        // Группируем по userId и берем первое (самое новое) для каждого
-        const lastOpMessageMap = new Map()
-        allOpMessages.forEach((msg: any) => {
-          const userIdStr = msg.userId.toString()
-          if (!lastOpMessageMap.has(userIdStr)) {
-            lastOpMessageMap.set(userIdStr, {
-              userId: msg.userId,
-              createdAt: msg.createdAt,
+        for (let i = 0; i < userIdsBigInt.length; i += batchSize) {
+          const batch = userIdsBigInt.slice(i, i + batchSize)
+          
+          // Для каждого батча получаем последние сообщения оператора параллельно
+          const batchResults = await Promise.all(
+            batch.map(async (userIdBigInt: bigint) => {
+              const lastOpMsg = await prisma.chatMessage.findFirst({
+                where: {
+                  userId: userIdBigInt,
+                  botType: 'operator',
+                  direction: 'out',
+                },
+                select: {
+                  userId: true,
+                  createdAt: true,
+                },
+                orderBy: {
+                  createdAt: 'desc',
+                },
+              })
+              
+              return {
+                userId: userIdBigInt.toString(),
+                lastOpMsg: lastOpMsg || null,
+              }
             })
-          }
-        })
+          )
+          
+          results.push(...batchResults)
+        }
         
-        return userIdsStr.map((userIdStr: string) => ({
-          userId: userIdStr,
-          lastOpMsg: lastOpMessageMap.get(userIdStr) || null,
-        }))
+        return results
       })(),
     ])
 
@@ -192,51 +211,55 @@ export async function GET(request: NextRequest) {
       lastReadTimes.map(lr => [lr.userId.toString(), lr.dataValue ? new Date(lr.dataValue) : null])
     )
 
-    // ОПТИМИЗАЦИЯ: Подсчитываем непрочитанные сообщения батчами, но более эффективно
-    // Используем один запрос для получения всех необходимых данных, затем обрабатываем в памяти
+    // ОПТИМИЗАЦИЯ: Подсчитываем непрочитанные сообщения батчами с использованием count запросов
+    // Это быстрее чем загрузка всех сообщений в память
     const unreadCountMap = new Map<string, number>()
+    const batchSize = 50
     
-    // Получаем все входящие сообщения для этих пользователей одним запросом
-    const allIncomingMessages = await prisma.chatMessage.findMany({
-      where: {
-        userId: { in: userIdsBigInt },
-        botType: 'operator',
-        direction: 'in',
-      },
-      select: {
-        userId: true,
-        createdAt: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    })
-    
-    // Группируем по пользователям и считаем непрочитанные
-    for (const userIdStr of userIdsStr) {
-      const userIdBigInt = BigInt(userIdStr)
-      const lastReadAt = lastReadTimeMap.get(userIdStr)
-      const lastOpMsg = lastOperatorMessagesMap.get(userIdStr)
+    // Обрабатываем пользователей батчами
+    for (let i = 0; i < userIdsStr.length; i += batchSize) {
+      const batch = userIdsStr.slice(i, i + batchSize)
       
-      // Определяем время, с которого считать непрочитанные
-      let readSince: Date | null = null
-      if (lastReadAt && lastOpMsg && lastOpMsg !== null && typeof lastOpMsg === 'object' && 'createdAt' in lastOpMsg) {
-        const opMsg = lastOpMsg as { createdAt: Date }
-        readSince = lastReadAt > opMsg.createdAt ? lastReadAt : opMsg.createdAt
-      } else if (lastReadAt) {
-        readSince = lastReadAt
-      } else if (lastOpMsg && lastOpMsg !== null && typeof lastOpMsg === 'object' && 'createdAt' in lastOpMsg) {
-        readSince = (lastOpMsg as { createdAt: Date }).createdAt
-      }
+      // Для каждого пользователя в батче считаем непрочитанные параллельно
+      const batchCounts = await Promise.all(
+        batch.map(async (userIdStr: string) => {
+          const userIdBigInt = BigInt(userIdStr)
+          const lastReadAt = lastReadTimeMap.get(userIdStr)
+          const lastOpMsg = lastOperatorMessagesMap.get(userIdStr)
+          
+          // Определяем время, с которого считать непрочитанные
+          let readSince: Date | null = null
+          if (lastReadAt && lastOpMsg && lastOpMsg !== null && typeof lastOpMsg === 'object' && 'createdAt' in lastOpMsg) {
+            const opMsg = lastOpMsg as { createdAt: Date }
+            readSince = lastReadAt > opMsg.createdAt ? lastReadAt : opMsg.createdAt
+          } else if (lastReadAt) {
+            readSince = lastReadAt
+          } else if (lastOpMsg && lastOpMsg !== null && typeof lastOpMsg === 'object' && 'createdAt' in lastOpMsg) {
+            readSince = (lastOpMsg as { createdAt: Date }).createdAt
+          }
+          
+          // Используем count вместо загрузки всех сообщений
+          const whereClause: any = {
+            userId: userIdBigInt,
+            botType: 'operator',
+            direction: 'in',
+          }
+          
+          if (readSince) {
+            whereClause.createdAt = { gt: readSince }
+          }
+          
+          const count = await prisma.chatMessage.count({
+            where: whereClause,
+          })
+          
+          return { userId: userIdStr, count }
+        })
+      )
       
-      // Считаем непрочитанные из уже загруженных сообщений
-      const unreadCount = allIncomingMessages.filter(msg => {
-        if (msg.userId.toString() !== userIdStr) return false
-        if (!readSince) return true // Если нет точки отсчета - все непрочитанные
-        return msg.createdAt > readSince
-      }).length
-      
-      unreadCountMap.set(userIdStr, unreadCount)
+      batchCounts.forEach(({ userId, count }) => {
+        unreadCountMap.set(userId, count)
+      })
     }
 
     // Формируем результат
