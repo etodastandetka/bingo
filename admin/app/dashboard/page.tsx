@@ -27,13 +27,16 @@ export default function DashboardPage() {
   const [isFetching, setIsFetching] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [lastRequestCount, setLastRequestCount] = useState(0)
+  const [deferredCount, setDeferredCount] = useState(0)
 
   useEffect(() => {
     fetchRequests(true) // Первая загрузка с показом loading
+    fetchDeferredCount() // Загружаем количество отложенных заявок
     
     // Автоматическое обновление каждую секунду для мгновенного отображения новых заявок
     const interval = setInterval(() => {
       fetchRequests(false) // Не показываем loading при автообновлении
+      fetchDeferredCount() // Обновляем счетчик отложенных
     }, 1000)
     
     // Обновление при фокусе страницы
@@ -137,6 +140,29 @@ export default function DashboardPage() {
         setLoading(false)
         setIsInitialLoad(false) // После первой загрузки больше не показываем loading
       }
+    }
+  }
+
+  const fetchDeferredCount = async () => {
+    try {
+      const params = new URLSearchParams()
+      params.append('status', 'deferred')
+      params.append('limit', '1') // Нам нужен только count, не сами заявки
+      params.append('_t', Date.now().toString())
+
+      const response = await fetch(`/api/requests?${params.toString()}`, {
+        cache: 'no-store',
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data) {
+          setDeferredCount(data.data.pagination?.total || 0)
+        }
+      }
+    } catch (error) {
+      // Игнорируем ошибки при получении счетчика
+      console.error('Failed to fetch deferred count:', error)
     }
   }
 
@@ -331,13 +357,22 @@ export default function DashboardPage() {
         </button>
         <button
           onClick={() => setActiveTab('deferred')}
-          className={`flex-1 px-4 py-3 rounded-xl font-medium text-sm transition-all ${
+          className={`flex-1 px-4 py-3 rounded-xl font-medium text-sm transition-all relative ${
             activeTab === 'deferred'
               ? 'bg-blue-500 text-white shadow-lg'
               : 'bg-gray-900 text-gray-300'
           }`}
         >
           Отложенные
+          {deferredCount > 0 && (
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${
+              activeTab === 'deferred'
+                ? 'bg-white text-blue-500'
+                : 'bg-blue-500 text-white'
+            }`}>
+              {deferredCount}
+            </span>
+          )}
         </button>
       </div>
 
