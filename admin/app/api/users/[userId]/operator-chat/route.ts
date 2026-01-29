@@ -23,6 +23,7 @@ export async function GET(
 
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '50')
+    const isFullLoad = searchParams.get('_full') === '1' // Полная загрузка (первая) или обновление
 
     const [messages, chatStatus] = await Promise.all([
       prisma.chatMessage.findMany({
@@ -49,9 +50,10 @@ export async function GET(
     const isClosed = chatStatus?.dataValue === 'closed'
 
     // ВАЖНО: Отмечаем все сообщения как прочитанные при открытии чата оператором
-    // Сохраняем время последнего прочтения в BotUserData
-    try {
-      await prisma.botUserData.upsert({
+    // Делаем это асинхронно (не блокируем ответ) и только при полной загрузке
+    if (isFullLoad) {
+      // Запускаем асинхронно, не ждем завершения
+      prisma.botUserData.upsert({
         where: {
           userId_dataType: {
             userId,
@@ -66,11 +68,11 @@ export async function GET(
           dataType: 'operator_last_read_at',
           dataValue: new Date().toISOString(),
         },
+      }).then(() => {
+        console.log(`✅ Marked messages as read for user ${userId.toString()}`)
+      }).catch((error) => {
+        console.error('Error marking messages as read:', error)
       })
-      console.log(`✅ Marked messages as read for user ${userId.toString()}`)
-    } catch (error) {
-      console.error('Error marking messages as read:', error)
-      // Не прерываем выполнение, если не удалось отметить как прочитанное
     }
 
     return NextResponse.json(

@@ -43,6 +43,9 @@ export default function OperatorChatPage() {
   const [replyingToMessageId, setReplyingToMessageId] = useState<number | null>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
+  const [isFetchingChat, setIsFetchingChat] = useState(false)
+  const lastMessageIdRef = useRef<number | null>(null)
+  const userDataFetchedRef = useRef(false)
   const [allRequests, setAllRequests] = useState<Array<{
     id: number
     userId: string
@@ -112,19 +115,25 @@ export default function OperatorChatPage() {
 
   useEffect(() => {
     if (params.userId) {
-      fetchChatData()
+      // Сбрасываем состояние при смене пользователя
+      lastMessageIdRef.current = null
+      userDataFetchedRef.current = false
+      isFirstLoadRef.current = true
+      setLoading(true)
+      
+      fetchChatData(true) // Первая загрузка с полными данными
       fetchQuickReplies()
-      // Обновляем чат каждые 2 секунды для получения новых сообщений от пользователя
+      // Обновляем чат каждые 4 секунды для получения новых сообщений от пользователя (увеличено с 2 до 4)
       const interval = setInterval(() => {
-        // Обновляем только если не отправляем сообщение
-        if (!sending) {
-          fetchChatData()
+        // Обновляем только если не отправляем сообщение и не идет другая загрузка
+        if (!sending && !isFetchingChat) {
+          fetchChatData(false) // Последующие обновления - только новые сообщения
         }
-      }, 2000)
+      }, 4000) // Увеличено с 2000 до 4000
       return () => clearInterval(interval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.userId, sending])
+  }, [params.userId])
 
   const fetchQuickReplies = async () => {
     try {
@@ -231,76 +240,155 @@ export default function OperatorChatPage() {
     }
   }
 
-  const fetchChatData = async () => {
-    try {
-      // При загрузке чата автоматически отмечаем сообщения как прочитанные
-      // Это происходит в API endpoint GET /api/users/[userId]/operator-chat
-      const [chatRes, userRes, photoRes] = await Promise.all([
-        fetch(`/api/users/${params.userId}/operator-chat`),
-        fetch(`/api/users/${params.userId}`),
-        fetch(`/api/users/${params.userId}/profile-photo`)
-      ])
+  const fetchChatData = async (isInitialLoad = false) => {
+    // Защита от множественных одновременных запросов
+    if (isFetchingChat) {
+      return
+    }
 
-      if (!chatRes.ok || !userRes.ok) {
-        throw new Error(`HTTP error! status: ${chatRes.status || userRes.status}`)
+    setIsFetchingChat(true)
+    
+    try {
+      // При первой загрузке загружаем все данные, включая пользователя
+      // При последующих обновлениях загружаем только сообщения
+      const promises: Promise<Response>[] = [
+        fetch(`/api/users/${params.userId}/operator-chat?${isInitialLoad ? '_full=1' : ''}`)
+      ]
+      
+      if (isInitialLoad || !userDataFetchedRef.current) {
+        promises.push(
+          fetch(`/api/users/${params.userId}`),
+          fetch(`/api/users/${params.userId}/profile-photo`)
+        )
+      }
+
+      const responses = await Promise.all(promises)
+      const chatRes = responses[0]
+
+      if (!chatRes.ok) {
+        throw new Error(`HTTP error! status: ${chatRes.status}`)
       }
 
       const chatData = await chatRes.json()
-      const userData = await userRes.json()
-      const photoData = await photoRes.json()
 
-      if (chatData.success && chatData.data?.messages) {
-        // Разворачиваем, чтобы старые были сверху (для правильного отображения)
-        const reversedMessages = [...chatData.data.messages].reverse()
-        // Объединяем с временными сообщениями (если есть) и убираем дубликаты
-        setMessages(prev => {
-          const tempMessages = prev.filter(msg => msg.id < 0) // Временные сообщения
-          const realMessages = reversedMessages
+      // Загружаем данные пользователя только при первой загрузке
+      let userData: any = null
+      let photoData: any = null
+      
+      if (isInitialLoad || !userDataFetchedRef.current) {
+        if (responses.length > 1) {
+          const userRes = responses[1]
+          const photoRes = responses[2]
           
-          // Убираем дубликаты: если временное сообщение совпадает с реальным по тексту и времени (в пределах 5 секунд), удаляем временное
-          const filteredTempMessages = tempMessages.filter(tempMsg => {
-            const isDuplicate = realMessages.some(realMsg => {
-              const timeDiff = Math.abs(new Date(realMsg.createdAt).getTime() - new Date(tempMsg.createdAt).getTime())
-              const textMatch = realMsg.messageText === tempMsg.messageText
-              const directionMatch = realMsg.direction === tempMsg.direction
-              // Если сообщения совпадают по тексту, направлению и времени (в пределах 5 секунд) - это дубликат
-              return textMatch && directionMatch && timeDiff < 5000
-            })
-            return !isDuplicate // Оставляем только те временные, которые не являются дубликатами
-          })
-          
-          // Объединяем и убираем дубликаты по ID, сортируем по времени
-          const allMessages = [...realMessages, ...filteredTempMessages]
-          const uniqueMessages = allMessages.filter((msg, index, self) => 
-            index === self.findIndex(m => m.id === msg.id)
-          )
-          const sorted = uniqueMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-          return sorted
-        })
-        
-        // Прокручиваем вниз только при первой загрузке
-        if (isFirstLoadRef.current) {
-          setTimeout(() => {
-            scrollToBottom()
-            isFirstLoadRef.current = false
-          }, 100)
+          if (userRes.ok && photoRes.ok) {
+            userData = await userRes.json()
+            photoData = await photoRes.json()
+            userDataFetchedRef.current = true
+          }
         }
       }
 
-      if (userData.success && userData.data) {
+      if (chatData.success && chatData.data?.messages) {
+        const newMessages = chatData.data.messages
+        
+        // Оптимизация: инкрементальное обновление - добавляем только новые сообщения
+        if (!isInitialLoad && lastMessageIdRef.current !== null) {
+          // Фильтруем только новые сообщения (с ID больше последнего)
+          const newMessagesOnly = newMessages.filter((msg: ChatMessage) => msg.id > lastMessageIdRef.current!)
+          
+          if (newMessagesOnly.length > 0) {
+            // Разворачиваем новые сообщения
+            const reversedNewMessages = [...newMessagesOnly].reverse()
+            
+            setMessages(prev => {
+              const tempMessages = prev.filter(msg => msg.id < 0) // Временные сообщения
+              
+              // Убираем дубликаты временных сообщений
+              const filteredTempMessages = tempMessages.filter(tempMsg => {
+                const isDuplicate = reversedNewMessages.some(realMsg => {
+                  const timeDiff = Math.abs(new Date(realMsg.createdAt).getTime() - new Date(tempMsg.createdAt).getTime())
+                  const textMatch = realMsg.messageText === tempMsg.messageText
+                  const directionMatch = realMsg.direction === tempMsg.direction
+                  return textMatch && directionMatch && timeDiff < 5000
+                })
+                return !isDuplicate
+              })
+              
+              // Объединяем существующие сообщения с новыми, убираем дубликаты по ID
+              const allMessages = [...prev.filter(msg => msg.id > 0), ...reversedNewMessages, ...filteredTempMessages]
+              const uniqueMessages = allMessages.filter((msg, index, self) => 
+                index === self.findIndex(m => m.id === msg.id)
+              )
+              const sorted = uniqueMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+              
+              // Обновляем последний ID
+              if (sorted.length > 0) {
+                lastMessageIdRef.current = Math.max(...sorted.map(m => m.id))
+              }
+              
+              return sorted
+            })
+          }
+        } else {
+          // Первая загрузка - загружаем все сообщения
+          const reversedMessages = [...newMessages].reverse()
+          
+          setMessages(prev => {
+            const tempMessages = prev.filter(msg => msg.id < 0)
+            const realMessages = reversedMessages
+            
+            const filteredTempMessages = tempMessages.filter(tempMsg => {
+              const isDuplicate = realMessages.some(realMsg => {
+                const timeDiff = Math.abs(new Date(realMsg.createdAt).getTime() - new Date(tempMsg.createdAt).getTime())
+                const textMatch = realMsg.messageText === tempMsg.messageText
+                const directionMatch = realMsg.direction === tempMsg.direction
+                return textMatch && directionMatch && timeDiff < 5000
+              })
+              return !isDuplicate
+            })
+            
+            const allMessages = [...realMessages, ...filteredTempMessages]
+            const uniqueMessages = allMessages.filter((msg, index, self) => 
+              index === self.findIndex(m => m.id === msg.id)
+            )
+            const sorted = uniqueMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+            
+            // Сохраняем последний ID
+            if (sorted.length > 0) {
+              lastMessageIdRef.current = Math.max(...sorted.map(m => m.id))
+            }
+            
+            return sorted
+          })
+          
+          // Прокручиваем вниз только при первой загрузке
+          if (isFirstLoadRef.current) {
+            setTimeout(() => {
+              scrollToBottom()
+              isFirstLoadRef.current = false
+            }, 100)
+          }
+        }
+      }
+
+      // Обновляем данные пользователя только при первой загрузке
+      if ((isInitialLoad || !userDataFetchedRef.current) && userData?.success && userData.data) {
         const userInfo = userData.data
         setUser({
           userId: userInfo.userId || params.userId?.toString() || '',
           username: userInfo.username,
           firstName: userInfo.firstName,
           lastName: userInfo.lastName,
-          photoUrl: photoData.success && photoData.data?.photoUrl ? photoData.data.photoUrl : null,
+          photoUrl: photoData?.success && photoData.data?.photoUrl ? photoData.data.photoUrl : null,
         })
       }
     } catch (error) {
       console.error('Failed to fetch chat data:', error)
     } finally {
-      setLoading(false)
+      setIsFetchingChat(false)
+      if (isInitialLoad) {
+        setLoading(false)
+      }
     }
   }
 
@@ -380,7 +468,7 @@ export default function OperatorChatPage() {
         // Обновляем чат, чтобы получить реальное сообщение из БД
         // Небольшая задержка, чтобы БД успела сохранить
         setTimeout(async () => {
-          await fetchChatData()
+          await fetchChatData(false)
         }, 300)
       } else {
         // Удаляем временное сообщение при ошибке
