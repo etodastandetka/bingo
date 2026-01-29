@@ -77,29 +77,83 @@ export async function GET(request: NextRequest) {
           lastName: true,
         },
       }),
-      // ОПТИМИЗАЦИЯ: Получаем последние сообщения одним запросом с DISTINCT ON (PostgreSQL)
-      userIdsBigInt.length > 0 ? prisma.$queryRaw<any[]>`
-        SELECT DISTINCT ON ("userId") 
-          "userId",
-          "messageText",
-          "direction",
-          "createdAt"
-        FROM "ChatMessage"
-        WHERE "userId" = ANY(ARRAY[${Prisma.join(userIdsBigInt)}]::bigint[])
-          AND "botType" = 'operator'
-        ORDER BY "userId", "createdAt" DESC
-      ` : Promise.resolve([]),
-      // ОПТИМИЗАЦИЯ: Получаем последние сообщения оператора одним запросом
-      userIdsBigInt.length > 0 ? prisma.$queryRaw<any[]>`
-        SELECT DISTINCT ON ("userId") 
-          "userId",
-          "createdAt"
-        FROM "ChatMessage"
-        WHERE "userId" = ANY(ARRAY[${Prisma.join(userIdsBigInt)}]::bigint[])
-          AND "botType" = 'operator'
-          AND "direction" = 'out'
-        ORDER BY "userId", "createdAt" DESC
-      ` : Promise.resolve([]),
+      // ОПТИМИЗАЦИЯ: Получаем последние сообщения батчами (по 100 пользователей)
+      // Используем более простой подход без raw SQL для надежности
+      (async () => {
+        if (userIdsBigInt.length === 0) return []
+        
+        // Получаем все сообщения для этих пользователей одним запросом
+        const allMessages = await prisma.chatMessage.findMany({
+          where: {
+            userId: { in: userIdsBigInt },
+            botType: 'operator',
+          },
+          select: {
+            userId: true,
+            messageText: true,
+            direction: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        })
+        
+        // Группируем по userId и берем первое (самое новое) для каждого
+        const lastMessageMap = new Map()
+        allMessages.forEach((msg: any) => {
+          const userIdStr = msg.userId.toString()
+          if (!lastMessageMap.has(userIdStr)) {
+            lastMessageMap.set(userIdStr, {
+              messageText: msg.messageText,
+              direction: msg.direction,
+              createdAt: msg.createdAt,
+            })
+          }
+        })
+        
+        return userIdsStr.map((userIdStr) => ({
+          userId: userIdStr,
+          lastMessage: lastMessageMap.get(userIdStr) || null,
+        }))
+      })(),
+      // ОПТИМИЗАЦИЯ: Получаем последние сообщения оператора батчами
+      (async () => {
+        if (userIdsBigInt.length === 0) return []
+        
+        // Получаем все сообщения оператора одним запросом
+        const allOpMessages = await prisma.chatMessage.findMany({
+          where: {
+            userId: { in: userIdsBigInt },
+            botType: 'operator',
+            direction: 'out',
+          },
+          select: {
+            userId: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        })
+        
+        // Группируем по userId и берем первое (самое новое) для каждого
+        const lastOpMessageMap = new Map()
+        allOpMessages.forEach((msg: any) => {
+          const userIdStr = msg.userId.toString()
+          if (!lastOpMessageMap.has(userIdStr)) {
+            lastOpMessageMap.set(userIdStr, {
+              userId: msg.userId,
+              createdAt: msg.createdAt,
+            })
+          }
+        })
+        
+        return userIdsStr.map((userIdStr) => ({
+          userId: userIdStr,
+          lastOpMsg: lastOpMessageMap.get(userIdStr) || null,
+        }))
+      })(),
     ])
 
     const statusMap = new Map(
@@ -107,25 +161,18 @@ export async function GET(request: NextRequest) {
     )
     const userMap = new Map(users.map(u => [u.userId.toString(), u]))
     
-    // Преобразуем результаты SQL-запросов в Map
+    // Преобразуем результаты в Map
     const lastMessageMap = new Map(
       allLastMessages.map((m: any) => [
-        m.userId.toString(),
-        {
-          messageText: m.messageText,
-          direction: m.direction,
-          createdAt: m.createdAt,
-        }
+        m.userId,
+        m.lastMessage
       ])
     )
     
     const lastOperatorMessagesMap = new Map(
       lastOperatorMessages.map((m: any) => [
-        m.userId.toString(),
-        {
-          userId: m.userId,
-          createdAt: m.createdAt,
-        }
+        m.userId,
+        m.lastOpMsg
       ])
     )
 
