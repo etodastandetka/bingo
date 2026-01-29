@@ -40,11 +40,12 @@ export async function GET(request: NextRequest) {
       _count: {
         id: true,
       },
-      // Ограничиваем количество пользователей
-      take: 500, // Максимум 500 пользователей
     })
+    
+    // Ограничиваем количество пользователей после получения (groupBy не поддерживает take)
+    const limitedUsers = usersWithMessages.slice(0, 500)
 
-    if (usersWithMessages.length === 0) {
+    if (limitedUsers.length === 0) {
       return NextResponse.json(
         createApiResponse({
           chats: [],
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const userIds = usersWithMessages.map((u: any) => u.userId)
+    const userIds = limitedUsers.map((u: any) => u.userId)
 
     // ОПТИМИЗАЦИЯ: Используем один SQL-запрос с оконными функциями для получения последних сообщений
     // Это намного быстрее чем отдельные запросы для каждого пользователя
@@ -263,7 +264,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Формируем результат
-    const chats = usersWithMessages
+    const chats = limitedUsers
       .map((userGroup: any) => {
         const userId = userGroup.userId
         const userIdStr = userId.toString()
