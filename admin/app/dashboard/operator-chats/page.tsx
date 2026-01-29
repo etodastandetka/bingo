@@ -90,10 +90,10 @@ export default function OperatorChatsPage() {
     const isFirstLoad = isInitialLoad
     fetchChats(isFirstLoad)
     
-    // Обновляем список каждые 10 секунд
+    // Обновляем список каждые 15 секунд (увеличено с 10 для снижения нагрузки)
     const interval = setInterval(() => {
       fetchChats(false) // Не показываем loading при автообновлении
-    }, 10000)
+    }, 15000)
     
     // Обновление при фокусе страницы
     const handleVisibilityChange = () => {
@@ -313,10 +313,14 @@ export default function OperatorChatsPage() {
                     {chat.photoUrl ? (
                       <img
                         key={`${chat.userId}-${chat.photoUrl}`}
-                        src={`${chat.photoUrl}?t=${Date.now()}`}
+                        src={chat.photoUrl}
                         alt={getDisplayName(chat)}
                         className="w-14 h-14 rounded-full object-cover border-2 border-gray-700"
                         loading="lazy"
+                        onError={(e) => {
+                          // Скрываем изображение при ошибке загрузки
+                          e.currentTarget.style.display = 'none'
+                        }}
                       />
                     ) : (
                       <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center border-2 border-gray-700 shadow-lg">
