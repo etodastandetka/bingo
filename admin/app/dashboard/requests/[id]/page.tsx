@@ -81,6 +81,8 @@ export default function RequestDetailPage() {
   const [isEditingAmount, setIsEditingAmount] = useState(false)
   const [editAmount, setEditAmount] = useState('')
   const [updatingAmount, setUpdatingAmount] = useState(false)
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const searchCacheRef = useRef<Map<string, any[]>>(new Map())
 
   const pushToast = (message: string, type: 'success' | 'error' | 'info' = 'info', timeout = 4000) => {
     setToast({ message, type })
@@ -801,19 +803,68 @@ export default function RequestDetailPage() {
     setSearchId('')
   }
 
-  const handleSearchPaymentsWithAmount = async (amountStr?: string) => {
+  const handleSearchPaymentsWithAmount = async (amountStr?: string, useCache = true) => {
     const amountToSearch = amountStr || searchAmount
     if (!amountToSearch || !amountToSearch.trim()) {
       pushToast('Введите сумму для поиска', 'error')
       return
     }
 
-    // Парсим сумму с поддержкой формата с запятыми (1,000.67)
+    // Парсим сумму с поддержкой формата с запятыми (1,000.67) и точками
     // Убираем все запятые (разделители тысяч), оставляем точку для десятичных
-    const cleanedAmount = amountToSearch.toString().replace(/,/g, '').trim()
+    // Также поддерживаем формат с точкой как разделителем тысяч (1.000,67)
+    let cleanedAmount = amountToSearch.toString().trim()
+    
+    // Определяем формат: если есть и запятая, и точка - определяем какой разделитель тысяч
+    const hasComma = cleanedAmount.includes(',')
+    const hasDot = cleanedAmount.includes('.')
+    
+    if (hasComma && hasDot) {
+      // Если оба есть, определяем по позиции: последний символ перед последними 3 цифрами - разделитель тысяч
+      const lastCommaPos = cleanedAmount.lastIndexOf(',')
+      const lastDotPos = cleanedAmount.lastIndexOf('.')
+      if (lastCommaPos > lastDotPos) {
+        // Запятая последняя - это десятичный разделитель (1.000,67)
+        cleanedAmount = cleanedAmount.replace(/\./g, '').replace(',', '.')
+      } else {
+        // Точка последняя - это десятичный разделитель (1,000.67)
+        cleanedAmount = cleanedAmount.replace(/,/g, '')
+      }
+    } else if (hasComma && !hasDot) {
+      // Только запятая - может быть разделитель тысяч (1,000) или десятичный (1,67)
+      // Если после запятой 3 цифры - это разделитель тысяч, иначе - десятичный
+      const commaPos = cleanedAmount.indexOf(',')
+      const afterComma = cleanedAmount.substring(commaPos + 1)
+      if (afterComma.length === 3 && /^\d{3}$/.test(afterComma)) {
+        // Разделитель тысяч
+        cleanedAmount = cleanedAmount.replace(',', '')
+      } else {
+        // Десятичный разделитель
+        cleanedAmount = cleanedAmount.replace(',', '.')
+      }
+    } else if (!hasComma && hasDot) {
+      // Только точка - может быть разделитель тысяч (1.000) или десятичный (1.67)
+      // Если после точки 3 цифры - это разделитель тысяч, иначе - десятичный
+      const dotPos = cleanedAmount.indexOf('.')
+      const afterDot = cleanedAmount.substring(dotPos + 1)
+      if (afterDot.length === 3 && /^\d{3}$/.test(afterDot) && cleanedAmount.split('.').length === 2) {
+        // Разделитель тысяч (1.000)
+        cleanedAmount = cleanedAmount.replace('.', '')
+      }
+      // Иначе точка остается как десятичный разделитель
+    }
+    
     const amount = parseFloat(cleanedAmount)
     if (isNaN(amount) || amount <= 0) {
       pushToast('Введите корректную сумму', 'error')
+      return
+    }
+
+    // Проверяем кеш
+    const cacheKey = `${amount}_${exactAmount}_${processedOnly}_${request?.id || ''}`
+    if (useCache && searchCacheRef.current.has(cacheKey)) {
+      const cached = searchCacheRef.current.get(cacheKey)!
+      setSimilarPayments(cached)
       return
     }
 
@@ -831,8 +882,12 @@ export default function RequestDetailPage() {
         params.append('requestId', request.id.toString())
       }
 
-      const response = await fetch(`/api/incoming-payments/search?${params.toString()}`)
+      const startTime = performance.now()
+      const response = await fetch(`/api/incoming-payments/search?${params.toString()}`, {
+        cache: 'no-store', // Отключаем кеш браузера
+      })
       const data = await response.json()
+      const endTime = performance.now()
 
       if (data.success) {
         const incoming = data.data.payments || []
@@ -844,17 +899,29 @@ export default function RequestDetailPage() {
           return db - da
         })
         setSimilarPayments(sortedPayments)
+        
+        // Кешируем результат (максимум 10 записей в кеше)
+        if (searchCacheRef.current.size >= 10) {
+          const firstKey = searchCacheRef.current.keys().next().value
+          searchCacheRef.current.delete(firstKey)
+        }
+        searchCacheRef.current.set(cacheKey, sortedPayments)
+        
         // Не сбрасываем выбор, если выбранный платеж ещё существует
         const stillExists = selectedPaymentId && incoming.some((p: any) => p.id === selectedPaymentId)
         if (!stillExists) {
           setSelectedPaymentPreview(null)
         }
+        
+        console.log(`✅ Search completed in ${(endTime - startTime).toFixed(2)}ms`)
       } else {
         // Если ошибка поиска — не сбрасываем текущий список/выбор
+        pushToast(data.error || 'Ошибка поиска', 'error')
       }
     } catch (error) {
       console.error('Failed to search payments:', error)
       setSimilarPayments([])
+      pushToast('Ошибка при поиске пополнений', 'error')
     } finally {
       setSearching(false)
     }
@@ -869,8 +936,31 @@ export default function RequestDetailPage() {
       return
     }
 
-    await handleSearchPaymentsWithAmount()
+    // Очищаем предыдущий debounce
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current)
+    }
+
+    // Выполняем поиск сразу (без debounce для кнопки "Найти")
+    await handleSearchPaymentsWithAmount(undefined, false)
   }
+
+  // Debounced поиск при изменении суммы (опционально, если нужно)
+  useEffect(() => {
+    // Очищаем предыдущий таймер при изменении суммы или фильтров
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current)
+    }
+    
+    // Не выполняем автоматический поиск при изменении - только по кнопке
+    // Это предотвращает лишние запросы
+    
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current)
+      }
+    }
+  }, [searchAmount, exactAmount, processedOnly])
 
   const handleConfirmPayment = async () => {
     if (!request) {
@@ -1719,14 +1809,28 @@ export default function RequestDetailPage() {
                   placeholder="Поиск по сумме..."
                   value={searchAmount}
                   onChange={(e) => setSearchAmount(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !searching) {
+                      handleSearchPayments()
+                    }
+                  }}
+                  disabled={searching}
+                  className="w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
               <button 
                 onClick={handleSearchPayments}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                disabled={searching}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
-              Найти
+                {searching ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Поиск...</span>
+                  </>
+                ) : (
+                  <span>Найти</span>
+                )}
               </button>
             </div>
             <div className="flex space-x-4">
@@ -1734,7 +1838,11 @@ export default function RequestDetailPage() {
                 <input
                   type="checkbox"
                   checked={exactAmount}
-                  onChange={(e) => setExactAmount(e.target.checked)}
+                  onChange={(e) => {
+                    setExactAmount(e.target.checked)
+                    // Очищаем кеш при изменении фильтра
+                    searchCacheRef.current.clear()
+                  }}
                   className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
                 />
                 <span className="text-sm text-gray-300">Точная сумма</span>
@@ -1747,6 +1855,8 @@ export default function RequestDetailPage() {
                     // Когда чекбокс включен - показываем только обработанные (true)
                     // Когда выключен - показываем все (undefined, не отправляем параметр)
                     setProcessedOnly(e.target.checked ? true : undefined)
+                    // Очищаем кеш при изменении фильтра
+                    searchCacheRef.current.clear()
                   }}
                   className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
                 />

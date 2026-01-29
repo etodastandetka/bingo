@@ -79,11 +79,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Получаем похожие пополнения (без лимита, чтобы показать все пополнения на эту сумму)
+    // Оптимизация: используем select вместо include для уменьшения объема данных
     const payments = await prisma.incomingPayment.findMany({
       where,
       orderBy: { paymentDate: 'desc' },
       // Убрали take: 50, чтобы показать все пополнения на эту сумму
-      include: {
+      select: {
+        id: true,
+        amount: true,
+        bank: true,
+        paymentDate: true,
+        createdAt: true,
+        notificationText: true,
+        isProcessed: true,
+        requestId: true,
         request: {
           select: {
             id: true,
