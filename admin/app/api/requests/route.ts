@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
     if (status && status !== 'left') {
       if (status === 'pending') {
         // Для "Ожидающие" показываем все незавершенные заявки
-        // Исключаем завершенные статусы: completed, approved, auto_completed, autodeposit_success, rejected, declined
+        // Исключаем завершенные статусы и отложенные: completed, approved, auto_completed, autodeposit_success, rejected, declined, deferred
         where.status = {
-          notIn: ['completed', 'approved', 'auto_completed', 'autodeposit_success', 'rejected', 'declined']
+          notIn: ['completed', 'approved', 'auto_completed', 'autodeposit_success', 'rejected', 'declined', 'deferred']
         }
       } else {
         // Для других статусов (например, 'deferred') используем точное совпадение
