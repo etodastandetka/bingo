@@ -44,9 +44,9 @@ export async function GET(request: NextRequest) {
 
     if (exactAmount) {
       // Когда "Точная сумма" включена - ищем ТОЧНОЕ совпадение суммы (500.52 = 500.52)
-      // Используем диапазон с минимальной погрешностью для точного сравнения Decimal
-      // Decimal(10, 2) хранит 2 знака после запятой, поэтому погрешность 0.001 достаточна
-      const tolerance = 0.001
+      // ОПТИМИЗАЦИЯ: Используем более точное сравнение для Decimal
+      // Decimal(10, 2) хранит 2 знака после запятой, поэтому погрешность 0.0001 достаточна
+      const tolerance = 0.0001
       where.amount = {
         gte: amountValue - tolerance,
         lte: amountValue + tolerance,
@@ -55,11 +55,12 @@ export async function GET(request: NextRequest) {
       // Когда "Точная сумма" выключена - ищем по целой части (например, все пополнения на 3000.XX)
       // Это позволяет найти все варианты с разными копейками (3000.00, 3000.01, 3000.82, 3000.99 и т.д.)
       const wholePart = Math.floor(amountValue)
+      // ОПТИМИЗАЦИЯ: Используем более точный диапазон для лучшей производительности индекса
       // Используем диапазон, который включает все суммы от wholePart.00 до (wholePart+1).00 (не включая)
       // Это гарантирует, что суммы с .00 (например, 10.00, 1000.00) тоже будут найдены
       where.amount = {
-        gte: wholePart - 0.001, // Немного меньше, чтобы точно включить wholePart.00
-        lt: wholePart + 1,
+        gte: wholePart, // Начинаем с целой части (включая .00)
+        lt: wholePart + 1, // До следующего целого числа (не включая)
       }
     }
 
@@ -78,12 +79,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Получаем похожие пополнения (без лимита, чтобы показать все пополнения на эту сумму)
+    // ОПТИМИЗАЦИЯ: Ограничиваем количество результатов для производительности
+    // Показываем максимум 200 результатов (этого достаточно для большинства случаев)
+    const MAX_RESULTS = 200
+    
+    // Получаем похожие пополнения с лимитом для производительности
     // Оптимизация: используем select вместо include для уменьшения объема данных
     const payments = await prisma.incomingPayment.findMany({
       where,
       orderBy: { paymentDate: 'desc' },
-      // Убрали take: 50, чтобы показать все пополнения на эту сумму
+      take: MAX_RESULTS, // Ограничиваем количество результатов
       select: {
         id: true,
         amount: true,
@@ -107,11 +112,14 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    // ОПТИМИЗАЦИЯ: Сортируем результаты только если нужно
     // Если exactAmount=false, сортируем результаты: сначала все варианты с разными копейками
     // Сортируем по сумме (чтобы варианты с разными копейками были вместе), затем по дате
     let sortedPayments = payments
-    if (!exactAmount) {
-      sortedPayments = [...payments].sort((a, b) => {
+    if (!exactAmount && payments.length > 0) {
+      // ОПТИМИЗАЦИЯ: Используем более эффективную сортировку
+      // Создаем массив только один раз
+      sortedPayments = payments.sort((a, b) => {
         const amountA = parseFloat(a.amount.toString())
         const amountB = parseFloat(b.amount.toString())
         // Сначала сортируем по сумме (чтобы все 3000.XX были вместе)
