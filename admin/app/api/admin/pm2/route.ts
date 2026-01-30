@@ -6,6 +6,7 @@ import { promisify } from 'util'
 const execAsync = promisify(exec)
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60 // Увеличиваем максимальное время выполнения до 60 секунд
 
 // Управление PM2 процессами
 export async function POST(request: NextRequest) {
@@ -78,10 +79,11 @@ export async function POST(request: NextRequest) {
       'bingo-payment'
     ]
     
-    // Выполняем команды для каждого процесса отдельно, чтобы игнорировать ошибки для несуществующих
+    // Выполняем команды для каждого процесса параллельно для ускорения
     const results: Array<{ process: string; success: boolean; stdout: string; stderr: string; error?: string }> = []
     
-    for (const processName of processesToManage) {
+    // Создаем промисы для всех процессов
+    const processPromises = processesToManage.map(async (processName) => {
       let command: string
       switch (action) {
         case 'stop':
@@ -94,35 +96,42 @@ export async function POST(request: NextRequest) {
           command = `pm2 start ${processName} || true`
           break
         default:
-          return NextResponse.json(
-            createApiResponse(null, 'Invalid action'),
-            { status: 400 }
-          )
+          return {
+            process: processName,
+            success: false,
+            stdout: '',
+            stderr: '',
+            error: 'Invalid action'
+          }
       }
       
       try {
         const { stdout, stderr } = await execAsync(command, {
-          timeout: 30000, // 30 секунд на каждый процесс (увеличено для надежности)
-          maxBuffer: 1024 * 1024 * 5 // 5MB буфер
+          timeout: 20000, // 20 секунд на каждый процесс
+          maxBuffer: 1024 * 1024 * 2 // 2MB буфер
         })
         
-        results.push({
+        return {
           process: processName,
           success: true,
           stdout: stdout || '',
           stderr: stderr || '',
-        })
+        }
       } catch (error: any) {
         // Игнорируем ошибки для отдельных процессов (могут быть не запущены)
-        results.push({
+        return {
           process: processName,
           success: false,
           stdout: '',
           stderr: '',
           error: error.message || 'Unknown error'
-        })
+        }
       }
-    }
+    })
+    
+    // Ждем выполнения всех команд параллельно
+    const processResults = await Promise.all(processPromises)
+    results.push(...processResults)
     
     // Считаем успешными, если хотя бы один процесс обработан
     const successCount = results.filter(r => r.success).length
