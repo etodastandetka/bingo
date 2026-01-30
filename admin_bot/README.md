@@ -40,6 +40,20 @@ python bot.py
 
 ### Запуск через PM2:
 
+**Вариант 1: Через команду (без ecosystem.config.js):**
+
+```bash
+cd /var/www/bingo_bot/admin_bot
+pm2 start venv/bin/python3 --name admin-bot -- bot.py
+```
+
+Или с полным путем:
+```bash
+pm2 start /var/www/bingo_bot/admin_bot/venv/bin/python3 --name admin-bot -- /var/www/bingo_bot/admin_bot/bot.py
+```
+
+**Вариант 2: Через ecosystem.config.js:**
+
 Добавьте в `ecosystem.config.js`:
 
 ```javascript
@@ -47,7 +61,7 @@ python bot.py
   name: 'admin-bot',
   script: 'bot.py',
   cwd: '/var/www/bingo_bot/admin_bot',
-  interpreter: '/var/www/bingo_bot/admin_bot/venv/bin/python3',  // Путь к Python из venv
+  interpreter: '/var/www/bingo_bot/admin_bot/venv/bin/python3',
   autorestart: true,
   watch: false,
   max_memory_restart: '200M',
@@ -57,9 +71,9 @@ python bot.py
 }
 ```
 
-Или используйте полный путь к Python из venv:
+Затем запустите:
 ```bash
-pm2 start /var/www/bingo_bot/admin_bot/venv/bin/python3 --name admin-bot -- /var/www/bingo_bot/admin_bot/bot.py
+pm2 start ecosystem.config.js --only admin-bot
 ```
 
 ## Функционал
