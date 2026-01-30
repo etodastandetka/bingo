@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 ADMIN_BOT_TOKEN = os.getenv('ADMIN_BOT_TOKEN')
 ADMIN_IDS = [int(id.strip()) for id in os.getenv('ADMIN_IDS', '').split(',') if id.strip().isdigit()]
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:3001/api')
+ADMIN_API_KEY = os.getenv('ADMIN_API_KEY')  # API ключ для доступа к /admin/pm2
 
 # Проверка токена
 if not ADMIN_BOT_TOKEN:
@@ -47,13 +48,23 @@ ssl_context.verify_mode = ssl.CERT_NONE
 async def manage_pm2(action: str) -> dict:
     """Управление PM2 процессами через API"""
     connector = aiohttp.TCPConnector(ssl=ssl_context)
+    
+    # Получаем API ключ из переменных окружения
+    admin_api_key = os.getenv('ADMIN_API_KEY')
+    
     async with aiohttp.ClientSession(connector=connector) as session:
         url = f"{API_BASE_URL}/admin/pm2"
+        
+        # Формируем заголовки
+        headers = {'Content-Type': 'application/json'}
+        if admin_api_key:
+            headers['X-API-Key'] = admin_api_key
         
         try:
             async with session.post(
                 url,
                 json={'action': action},
+                headers=headers,
                 timeout=aiohttp.ClientTimeout(total=35),
                 ssl=ssl_context
             ) as response:

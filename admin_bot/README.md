@@ -23,7 +23,10 @@ pip install -r requirements.txt
 ADMIN_BOT_TOKEN=ваш_токен_бота
 ADMIN_IDS=123456789,987654321
 API_BASE_URL=http://localhost:3001/api
+ADMIN_API_KEY=ваш_секретный_ключ_для_api  # Сгенерируйте случайный ключ (например, через openssl rand -hex 32)
 ```
+
+**Важно:** `ADMIN_API_KEY` должен быть одинаковым в `admin/.env` и использоваться для аутентификации админ-бота в API.
 
 ## Запуск
 

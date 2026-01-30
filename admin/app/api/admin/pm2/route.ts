@@ -10,7 +10,30 @@ export const dynamic = 'force-dynamic'
 // Управление PM2 процессами
 export async function POST(request: NextRequest) {
   try {
-    requireAuth(request)
+    // Проверяем аутентификацию: либо через cookie (для веб-интерфейса), либо через API ключ (для админ-бота)
+    const authToken = request.cookies.get('auth_token')?.value
+    const apiKey = request.headers.get('X-API-Key') || request.headers.get('Authorization')?.replace('Bearer ', '')
+    const adminApiKey = process.env.ADMIN_API_KEY
+    
+    // Если есть API ключ и он совпадает с ADMIN_API_KEY - разрешаем доступ
+    if (apiKey && adminApiKey && apiKey === adminApiKey) {
+      // Доступ разрешен через API ключ
+    } else if (authToken) {
+      // Проверяем обычную аутентификацию через cookie
+      try {
+        requireAuth(request)
+      } catch {
+        return NextResponse.json(
+          createApiResponse(null, 'Unauthorized'),
+          { status: 401 }
+        )
+      }
+    } else {
+      return NextResponse.json(
+        createApiResponse(null, 'Unauthorized'),
+        { status: 401 }
+      )
+    }
 
     const body = await request.json()
     const { action } = body
