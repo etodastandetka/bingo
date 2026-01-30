@@ -102,8 +102,8 @@ export async function POST(request: NextRequest) {
       
       try {
         const { stdout, stderr } = await execAsync(command, {
-          timeout: 10000, // 10 секунд на каждый процесс
-          maxBuffer: 1024 * 1024 // 1MB буфер
+          timeout: 30000, // 30 секунд на каждый процесс (увеличено для надежности)
+          maxBuffer: 1024 * 1024 * 5 // 5MB буфер
         })
         
         results.push({

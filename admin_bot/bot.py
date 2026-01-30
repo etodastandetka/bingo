@@ -70,36 +70,74 @@ async def manage_pm2(action: str) -> dict:
             logger.error("[PM2] Cannot send request: ADMIN_API_KEY is missing!")
         
         try:
+            # Увеличиваем таймаут до 60 секунд, так как остановка/перезапуск процессов может занять время
             async with session.post(
                 url,
                 json={'action': action},
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=35),
+                timeout=aiohttp.ClientTimeout(total=60, connect=10),
                 ssl=ssl_context
             ) as response:
+                # Проверяем статус ответа
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"[PM2] API returned status {response.status}: {error_text[:200]}")
+                    return {
+                        'success': False,
+                        'message': f'API returned status {response.status}: {error_text[:200]}',
+                        'error': error_text
+                    }
+                
                 content_type = response.headers.get('Content-Type', '')
                 if 'application/json' not in content_type:
                     text = await response.text()
+                    logger.warning(f"[PM2] Non-JSON response: {text[:200]}")
                     return {
                         'success': False,
                         'message': f'Non-JSON response: {text[:200]}',
                         'error': text
                     }
                 try:
-                    return await response.json()
+                    result = await response.json()
+                    logger.info(f"[PM2] API response received: success={result.get('success')}")
+                    return result
                 except Exception as e:
+                    logger.error(f"[PM2] Failed to parse JSON: {e}")
                     return {
                         'success': False,
                         'message': f'Failed to parse JSON: {str(e)}',
                         'error': str(e)
                     }
         except asyncio.TimeoutError:
+            logger.error(f"[PM2] Timeout while trying to {action} PM2 processes")
             return {
                 'success': False,
-                'message': f'Timeout while trying to {action} PM2 processes',
+                'message': f'Timeout while trying to {action} PM2 processes (60s timeout exceeded)',
                 'error': 'Request timeout'
             }
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"[PM2] Connection error: {e}")
+            return {
+                'success': False,
+                'message': f'Cannot connect to API server. Check API_BASE_URL: {API_BASE_URL}',
+                'error': str(e)
+            }
+        except aiohttp.ServerDisconnectedError as e:
+            logger.error(f"[PM2] Server disconnected: {e}")
+            return {
+                'success': False,
+                'message': f'Server disconnected during request. The request may have taken too long or the server restarted.',
+                'error': str(e)
+            }
+        except aiohttp.ClientError as e:
+            logger.error(f"[PM2] Client error: {e}")
+            return {
+                'success': False,
+                'message': f'Network error: {str(e)}',
+                'error': str(e)
+            }
         except Exception as e:
+            logger.error(f"[PM2] Unexpected error: {e}", exc_info=True)
             return {
                 'success': False,
                 'message': f'Error managing PM2: {str(e)}',
