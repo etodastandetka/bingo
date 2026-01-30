@@ -143,15 +143,25 @@ async def pm2_stop_callback(callback: CallbackQuery):
         result = await manage_pm2('stop')
         
         if result.get('success'):
+            processed = result.get('processed', 0)
+            total = result.get('total', 0)
+            results = result.get('results', '')
             stdout = result.get('stdout', '')
-            response_text = '✅ Боты успешно отключены!\n\nКоманда: `pm2 stop all`'
-            if stdout:
+            
+            response_text = f'✅ Боты отключены!\n\nОбработано: {processed}/{total}'
+            if results:
+                response_text += f'\n\nДетали:\n```\n{results}\n```'
+            elif stdout:
                 response_text += f'\n\nВывод:\n```\n{stdout}\n```'
             await callback.message.answer(response_text, parse_mode='Markdown')
-            logger.info(f"[PM2] User {callback.from_user.id} stopped all PM2 processes")
+            logger.info(f"[PM2] User {callback.from_user.id} stopped PM2 processes: {processed}/{total}")
         else:
-            error_msg = result.get('message', 'Неизвестная ошибка')
-            await callback.message.answer(f'❌ Ошибка при отключении ботов:\n\n{error_msg}')
+            error_msg = result.get('message') or result.get('error') or 'Неизвестная ошибка'
+            error_details = result.get('stderr', '')
+            response = f'❌ Ошибка при отключении ботов:\n\n{error_msg}'
+            if error_details:
+                response += f'\n\nДетали:\n```\n{error_details}\n```'
+            await callback.message.answer(response, parse_mode='Markdown')
             logger.error(f"[PM2] Failed to stop PM2: {error_msg}")
     except Exception as e:
         logger.error(f"[PM2] Error stopping PM2: {e}", exc_info=True)
@@ -179,15 +189,25 @@ async def pm2_restart_callback(callback: CallbackQuery):
         result = await manage_pm2('restart')
         
         if result.get('success'):
+            processed = result.get('processed', 0)
+            total = result.get('total', 0)
+            results = result.get('results', '')
             stdout = result.get('stdout', '')
-            response_text = '✅ Боты успешно перезапущены!\n\nКоманда: `pm2 restart all`'
-            if stdout:
+            
+            response_text = f'✅ Боты перезапущены!\n\nОбработано: {processed}/{total}'
+            if results:
+                response_text += f'\n\nДетали:\n```\n{results}\n```'
+            elif stdout:
                 response_text += f'\n\nВывод:\n```\n{stdout}\n```'
             await callback.message.answer(response_text, parse_mode='Markdown')
-            logger.info(f"[PM2] User {callback.from_user.id} restarted all PM2 processes")
+            logger.info(f"[PM2] User {callback.from_user.id} restarted PM2 processes: {processed}/{total}")
         else:
-            error_msg = result.get('message', 'Неизвестная ошибка')
-            await callback.message.answer(f'❌ Ошибка при перезапуске ботов:\n\n{error_msg}')
+            error_msg = result.get('message') or result.get('error') or 'Неизвестная ошибка'
+            error_details = result.get('stderr', '')
+            response = f'❌ Ошибка при перезапуске ботов:\n\n{error_msg}'
+            if error_details:
+                response += f'\n\nДетали:\n```\n{error_details}\n```'
+            await callback.message.answer(response, parse_mode='Markdown')
             logger.error(f"[PM2] Failed to restart PM2: {error_msg}")
     except Exception as e:
         logger.error(f"[PM2] Error restarting PM2: {e}", exc_info=True)

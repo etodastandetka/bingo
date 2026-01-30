@@ -33,49 +33,72 @@ export async function POST(request: NextRequest) {
       'bingo-payment'
     ]
     
-    let command: string
-    switch (action) {
-      case 'stop':
-        // Останавливаем каждый процесс отдельно, исключая админ-бота
-        command = processesToManage.map(name => `pm2 stop ${name}`).join(' && ')
-        break
-      case 'restart':
-        // Перезапускаем каждый процесс отдельно, исключая админ-бота
-        command = processesToManage.map(name => `pm2 restart ${name}`).join(' && ')
-        break
-      case 'start':
-        // Запускаем каждый процесс отдельно, исключая админ-бота
-        command = processesToManage.map(name => `pm2 start ${name}`).join(' && ')
-        break
-      default:
-        return NextResponse.json(
-          createApiResponse(null, 'Invalid action'),
-          { status: 400 }
-        )
-    }
-
-    try {
-      // Выполняем команду PM2
-      const { stdout, stderr } = await execAsync(command, {
-        timeout: 30000, // 30 секунд таймаут
-        maxBuffer: 1024 * 1024 * 10 // 10MB буфер
-      })
-
-      return NextResponse.json(
-        createApiResponse({
+    // Выполняем команды для каждого процесса отдельно, чтобы игнорировать ошибки для несуществующих
+    const results: Array<{ process: string; success: boolean; stdout: string; stderr: string; error?: string }> = []
+    
+    for (const processName of processesToManage) {
+      let command: string
+      switch (action) {
+        case 'stop':
+          command = `pm2 stop ${processName} || true` // || true игнорирует ошибки
+          break
+        case 'restart':
+          command = `pm2 restart ${processName} || true`
+          break
+        case 'start':
+          command = `pm2 start ${processName} || true`
+          break
+        default:
+          return NextResponse.json(
+            createApiResponse(null, 'Invalid action'),
+            { status: 400 }
+          )
+      }
+      
+      try {
+        const { stdout, stderr } = await execAsync(command, {
+          timeout: 10000, // 10 секунд на каждый процесс
+          maxBuffer: 1024 * 1024 // 1MB буфер
+        })
+        
+        results.push({
+          process: processName,
           success: true,
-          action,
           stdout: stdout || '',
           stderr: stderr || '',
         })
-      )
-    } catch (error: any) {
-      console.error(`PM2 ${action} error:`, error)
-      return NextResponse.json(
-        createApiResponse(null, error.message || `Failed to ${action} PM2 processes`),
-        { status: 500 }
-      )
+      } catch (error: any) {
+        // Игнорируем ошибки для отдельных процессов (могут быть не запущены)
+        results.push({
+          process: processName,
+          success: false,
+          stdout: '',
+          stderr: '',
+          error: error.message || 'Unknown error'
+        })
+      }
     }
+    
+    // Считаем успешными, если хотя бы один процесс обработан
+    const successCount = results.filter(r => r.success).length
+    const allOutput = results.map(r => 
+      `${r.process}: ${r.success ? 'OK' : 'SKIPPED' + (r.error ? ` (${r.error})` : '')}`
+    ).join('\n')
+    
+    const combinedStdout = results.map(r => r.stdout).filter(s => s).join('\n')
+    const combinedStderr = results.map(r => r.stderr).filter(s => s).join('\n')
+
+    return NextResponse.json(
+      createApiResponse({
+        success: successCount > 0,
+        action,
+        processed: successCount,
+        total: processesToManage.length,
+        results: allOutput,
+        stdout: combinedStdout || allOutput,
+        stderr: combinedStderr || '',
+      })
+    )
   } catch (error: any) {
     console.error('PM2 management API error:', error)
     return NextResponse.json(
