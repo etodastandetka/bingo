@@ -94,12 +94,13 @@ pm2 start ecosystem.config.js --only admin-bot
 
 ## Управляемые процессы
 
-Админ-бот управляет следующими процессами (исключая себя):
-- bingo-admin
+Админ-бот управляет следующими процессами (исключая себя и админку):
 - bingo-bot
 - bingo-bot-1xbet
 - bingo-bot-mostbet
 - bingo-email-watcher
 - bingo-operator-bot
 - bingo-payment
+
+**Важно:** `bingo-admin` (админка) и `admin-bot` (админ-бот) **всегда остаются активными**, чтобы API был доступен для включения остальных процессов обратно.
 
