@@ -146,4 +146,8 @@ class Config:
         {'code': 'ky', 'name': '🇰🇬 Кыргызча'},
         {'code': 'uz', 'name': '🇺🇿 O\'zbekcha'},
     ]
+    
+    # Админы (ID пользователей Telegram, которые могут управлять PM2)
+    # Добавьте свои ID через запятую, например: [123456789, 987654321]
+    ADMIN_IDS = [int(id.strip()) for id in os.getenv('ADMIN_IDS', '').split(',') if id.strip().isdigit()]
 
