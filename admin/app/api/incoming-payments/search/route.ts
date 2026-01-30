@@ -82,17 +82,12 @@ export async function GET(request: NextRequest) {
     // ОПТИМИЗАЦИЯ: Без лимита - показываем все результаты для поиска старых пополнений
     // Используем select вместо include для уменьшения объема данных
     // Сортировка выполняется в БД для максимальной производительности
+    // ОПТИМИЗАЦИЯ: Сначала получаем только основные данные без join для скорости
     const payments = await prisma.incomingPayment.findMany({
       where,
-      // ОПТИМИЗАЦИЯ: Сортируем в БД для лучшей производительности
-      // Если exactAmount=false, сортируем сначала по сумме, затем по дате
-      // Если exactAmount=true, сортируем только по дате
-      orderBy: exactAmount 
-        ? { paymentDate: 'desc' }
-        : [
-            { amount: 'asc' },  // Сначала по сумме (чтобы все 3000.XX были вместе)
-            { paymentDate: 'desc' }  // Затем по дате (новые сначала)
-          ],
+      // ОПТИМИЗАЦИЯ: Упрощенная сортировка - только по дате для максимальной скорости
+      // Индекс на paymentDate обеспечит быструю сортировку
+      orderBy: { paymentDate: 'desc' },
       // БЕЗ ЛИМИТА - показываем все результаты для поиска старых пополнений
       select: {
         id: true,
@@ -103,7 +98,15 @@ export async function GET(request: NextRequest) {
         notificationText: true,
         isProcessed: true,
         requestId: true,
-        request: {
+      },
+    })
+
+    // ОПТИМИЗАЦИЯ: Загружаем данные request только для тех записей, где requestId не null
+    // Это избегает ненужных join для всех записей
+    const requestIds = payments.filter(p => p.requestId).map(p => p.requestId!)
+    const requests = requestIds.length > 0 
+      ? await prisma.request.findMany({
+          where: { id: { in: requestIds } },
           select: {
             id: true,
             userId: true,
@@ -113,31 +116,51 @@ export async function GET(request: NextRequest) {
             requestType: true,
             status: true,
           },
-        },
-      },
-    })
+        })
+      : []
+    
+    const requestMap = new Map(requests.map(r => [r.id, r]))
+
+    // ОПТИМИЗАЦИЯ: Если exactAmount=false, сортируем по сумме в памяти (только для отображения)
+    // Это быстрее чем сложная сортировка в БД
+    let sortedPayments = payments
+    if (!exactAmount) {
+      sortedPayments = [...payments].sort((a, b) => {
+        const amountA = parseFloat(a.amount.toString())
+        const amountB = parseFloat(b.amount.toString())
+        if (amountA !== amountB) {
+          return amountA - amountB
+        }
+        const dateA = a.paymentDate ? new Date(a.paymentDate).getTime() : 0
+        const dateB = b.paymentDate ? new Date(b.paymentDate).getTime() : 0
+        return dateB - dateA
+      })
+    }
 
     return NextResponse.json(
       createApiResponse({
-        payments: payments.map(p => ({
-          id: p.id,
-          amount: p.amount.toString(),
-          bank: p.bank,
-          paymentDate: p.paymentDate ? p.paymentDate.toISOString() : null,
-          createdAt: p.createdAt ? p.createdAt.toISOString() : null,
-          notificationText: p.notificationText,
-          isProcessed: p.isProcessed,
-          requestId: p.requestId,
-          request: p.request ? {
-            id: p.request.id,
-            userId: p.request.userId.toString(),
-            username: p.request.username,
-            firstName: p.request.firstName,
-            lastName: p.request.lastName,
-            requestType: p.request.requestType,
-            status: p.request.status,
-          } : null,
-        })),
+        payments: sortedPayments.map(p => {
+          const request = p.requestId ? requestMap.get(p.requestId) : null
+          return {
+            id: p.id,
+            amount: p.amount.toString(),
+            bank: p.bank,
+            paymentDate: p.paymentDate ? p.paymentDate.toISOString() : null,
+            createdAt: p.createdAt ? p.createdAt.toISOString() : null,
+            notificationText: p.notificationText,
+            isProcessed: p.isProcessed,
+            requestId: p.requestId,
+            request: request ? {
+              id: request.id,
+              userId: request.userId.toString(),
+              username: request.username,
+              firstName: request.firstName,
+              lastName: request.lastName,
+              requestType: request.requestType,
+              status: request.status,
+            } : null,
+          }
+        }),
       })
     )
   } catch (error: any) {
