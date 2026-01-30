@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Список процессов для управления (исключаем админ-бота, чтобы он всегда работал)
+    // ВАЖНО: Все процессы должны быть в этом списке, иначе они не будут управляться
     const processesToManage = [
       'bingo-admin',
       'bingo-bot',
@@ -79,6 +80,11 @@ export async function POST(request: NextRequest) {
       'bingo-payment'
     ]
     
+    // Логируем список процессов для отладки
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[PM2 API] Managing ${processesToManage.length} processes:`, processesToManage)
+    }
+    
     // Выполняем команды для каждого процесса параллельно для ускорения
     const results: Array<{ process: string; success: boolean; stdout: string; stderr: string; error?: string }> = []
     
@@ -87,13 +93,14 @@ export async function POST(request: NextRequest) {
       let command: string
       switch (action) {
         case 'stop':
-          command = `pm2 stop ${processName} || true` // || true игнорирует ошибки
+          // Убираем || true, чтобы видеть реальные ошибки
+          command = `pm2 stop ${processName}`
           break
         case 'restart':
-          command = `pm2 restart ${processName} || true`
+          command = `pm2 restart ${processName}`
           break
         case 'start':
-          command = `pm2 start ${processName} || true`
+          command = `pm2 start ${processName}`
           break
         default:
           return {
@@ -106,10 +113,13 @@ export async function POST(request: NextRequest) {
       }
       
       try {
+        console.log(`[PM2 API] Executing: ${command}`)
         const { stdout, stderr } = await execAsync(command, {
           timeout: 20000, // 20 секунд на каждый процесс
           maxBuffer: 1024 * 1024 * 2 // 2MB буфер
         })
+        
+        console.log(`[PM2 API] ${processName} ${action} result:`, { stdout: stdout?.substring(0, 100), stderr: stderr?.substring(0, 100) })
         
         return {
           process: processName,
@@ -118,13 +128,23 @@ export async function POST(request: NextRequest) {
           stderr: stderr || '',
         }
       } catch (error: any) {
-        // Игнорируем ошибки для отдельных процессов (могут быть не запущены)
+        // Логируем ошибки, но не прерываем выполнение других процессов
+        const errorMessage = error.message || 'Unknown error'
+        const errorStderr = error.stderr || ''
+        console.error(`[PM2 API] Error ${action} ${processName}:`, errorMessage, errorStderr)
+        
+        // Если процесс не существует или уже остановлен, это не критично
+        const isNonCritical = errorMessage.includes('not found') || 
+                              errorMessage.includes('doesn\'t exist') ||
+                              errorStderr.includes('not found') ||
+                              (action === 'stop' && errorMessage.includes('already stopped'))
+        
         return {
           process: processName,
-          success: false,
-          stdout: '',
-          stderr: '',
-          error: error.message || 'Unknown error'
+          success: isNonCritical, // Считаем успешным, если процесс не найден (уже остановлен)
+          stdout: error.stdout || '',
+          stderr: errorStderr,
+          error: isNonCritical ? undefined : errorMessage
         }
       }
     })
