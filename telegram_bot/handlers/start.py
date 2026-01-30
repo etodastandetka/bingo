@@ -203,36 +203,6 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
         try:
             await message.answer(text, reply_markup=keyboard)
             logger.info(f"[Start] Sent main menu to user {message.from_user.id}")
-            
-            # Если пользователь админ - отправляем кнопки управления PM2
-            if message.from_user.id in Config.ADMIN_IDS:
-                await asyncio.sleep(0.5)  # Небольшая задержка между сообщениями
-                
-                # Сообщение 1: Отключить ботов
-                keyboard_stop = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(
-                        text='🛑 Отключить ботов',
-                        callback_data='pm2_stop'
-                    )]
-                ])
-                await message.answer(
-                    '🛑 Управление сервером\n\nНажмите кнопку для отключения всех ботов (pm2 stop all)',
-                    reply_markup=keyboard_stop
-                )
-                
-                await asyncio.sleep(0.5)  # Небольшая задержка между сообщениями
-                
-                # Сообщение 2: Включить ботов
-                keyboard_start = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(
-                        text='▶️ Включить ботов',
-                        callback_data='pm2_restart'
-                    )]
-                ])
-                await message.answer(
-                    '▶️ Управление сервером\n\nНажмите кнопку для включения/перезапуска всех ботов (pm2 restart all)',
-                    reply_markup=keyboard_start
-                )
         except Exception as send_error:
             logger.error(f"[Start] Failed to send message to user {message.from_user.id}: {send_error}", exc_info=True)
             # Пытаемся отправить простое сообщение без клавиатуры
@@ -322,34 +292,6 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
         )
         
         await callback.message.answer(text, reply_markup=keyboard)
-        
-        # Если пользователь админ - отправляем кнопки управления PM2
-        if callback.from_user.id in Config.ADMIN_IDS:
-            await asyncio.sleep(0.5)
-            
-            keyboard_stop = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text='🛑 Отключить ботов',
-                    callback_data='pm2_stop'
-                )]
-            ])
-            await callback.message.answer(
-                '🛑 Управление сервером\n\nНажмите кнопку для отключения всех ботов (pm2 stop all)',
-                reply_markup=keyboard_stop
-            )
-            
-            await asyncio.sleep(0.5)
-            
-            keyboard_start = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text='▶️ Включить ботов',
-                    callback_data='pm2_restart'
-                )]
-            ])
-            await callback.message.answer(
-                '▶️ Управление сервером\n\nНажмите кнопку для включения/перезапуска всех ботов (pm2 restart all)',
-                reply_markup=keyboard_start
-            )
     else:
         # Еще не подписан
         try:
@@ -417,84 +359,4 @@ async def main_menu_callback(callback: CallbackQuery, state: FSMContext, bot: Bo
     )
     
     await callback.message.answer(text, reply_markup=keyboard)
-
-@router.callback_query(F.data == 'pm2_stop')
-async def pm2_stop_callback(callback: CallbackQuery, bot: Bot):
-    """Обработка кнопки 'Отключить ботов'"""
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    # Проверяем, является ли пользователь админом
-    if callback.from_user.id not in Config.ADMIN_IDS:
-        try:
-            await callback.answer('❌ У вас нет прав для выполнения этого действия', show_alert=True)
-        except:
-            pass
-        return
-    
-    try:
-        await callback.answer('⏳ Выполняется команда pm2 stop all...')
-    except:
-        pass
-    
-    try:
-        result = await APIClient.manage_pm2('stop')
-        
-        if result.get('success'):
-            await callback.message.answer(
-                '✅ Боты успешно отключены!\n\nКоманда: `pm2 stop all`\n\n' + 
-                (f'Вывод:\n```\n{result.get("stdout", "")}\n```' if result.get("stdout") else ''),
-                parse_mode='Markdown'
-            )
-            logger.info(f"[PM2] User {callback.from_user.id} stopped all PM2 processes")
-        else:
-            error_msg = result.get('message', 'Неизвестная ошибка')
-            await callback.message.answer(f'❌ Ошибка при отключении ботов:\n\n{error_msg}')
-            logger.error(f"[PM2] Failed to stop PM2: {error_msg}")
-    except Exception as e:
-        logger.error(f"[PM2] Error stopping PM2: {e}", exc_info=True)
-        try:
-            await callback.message.answer(f'❌ Ошибка при выполнении команды: {str(e)}')
-        except:
-            pass
-
-@router.callback_query(F.data == 'pm2_restart')
-async def pm2_restart_callback(callback: CallbackQuery, bot: Bot):
-    """Обработка кнопки 'Включить ботов'"""
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    # Проверяем, является ли пользователь админом
-    if callback.from_user.id not in Config.ADMIN_IDS:
-        try:
-            await callback.answer('❌ У вас нет прав для выполнения этого действия', show_alert=True)
-        except:
-            pass
-        return
-    
-    try:
-        await callback.answer('⏳ Выполняется команда pm2 restart all...')
-    except:
-        pass
-    
-    try:
-        result = await APIClient.manage_pm2('restart')
-        
-        if result.get('success'):
-            await callback.message.answer(
-                '✅ Боты успешно перезапущены!\n\nКоманда: `pm2 restart all`\n\n' + 
-                (f'Вывод:\n```\n{result.get("stdout", "")}\n```' if result.get("stdout") else ''),
-                parse_mode='Markdown'
-            )
-            logger.info(f"[PM2] User {callback.from_user.id} restarted all PM2 processes")
-        else:
-            error_msg = result.get('message', 'Неизвестная ошибка')
-            await callback.message.answer(f'❌ Ошибка при перезапуске ботов:\n\n{error_msg}')
-            logger.error(f"[PM2] Failed to restart PM2: {error_msg}")
-    except Exception as e:
-        logger.error(f"[PM2] Error restarting PM2: {e}", exc_info=True)
-        try:
-            await callback.message.answer(f'❌ Ошибка при выполнении команды: {str(e)}')
-        except:
-            pass
 

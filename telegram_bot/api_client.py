@@ -43,41 +43,6 @@ class APIClient:
             return {'success': False, 'message': default_message, 'error': str(e)}
 
     @staticmethod
-    async def manage_pm2(action: str) -> Dict[str, Any]:
-        """Управление PM2 процессами (stop, restart, start)"""
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        async with aiohttp.ClientSession(connector=connector) as session:
-            api_url = Config.API_BASE_URL
-            if api_url.startswith('http://localhost'):
-                api_url = 'http://localhost:3001/api'
-            
-            url = f"{api_url}/admin/pm2"
-            
-            try:
-                async with session.post(
-                    url,
-                    json={'action': action},
-                    timeout=aiohttp.ClientTimeout(total=35),
-                    ssl=ssl_context
-                ) as response:
-                    return await APIClient._read_json_or_error(
-                        response,
-                        f'Failed to {action} PM2 processes'
-                    )
-            except asyncio.TimeoutError:
-                return {
-                    'success': False,
-                    'message': f'Timeout while trying to {action} PM2 processes',
-                    'error': 'Request timeout'
-                }
-            except Exception as e:
-                return {
-                    'success': False,
-                    'message': f'Error managing PM2: {str(e)}',
-                    'error': str(e)
-                }
-
-    @staticmethod
     async def create_request(
         telegram_user_id: str,
         request_type: str,
