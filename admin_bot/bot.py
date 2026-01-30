@@ -52,6 +52,12 @@ async def manage_pm2(action: str) -> dict:
     # Получаем API ключ из переменных окружения
     admin_api_key = os.getenv('ADMIN_API_KEY')
     
+    # Логирование для отладки
+    if admin_api_key:
+        logger.info(f"[PM2] API key found: {admin_api_key[:10]}... (length: {len(admin_api_key)})")
+    else:
+        logger.warning("[PM2] ADMIN_API_KEY not found in environment variables!")
+    
     async with aiohttp.ClientSession(connector=connector) as session:
         url = f"{API_BASE_URL}/admin/pm2"
         
@@ -59,6 +65,9 @@ async def manage_pm2(action: str) -> dict:
         headers = {'Content-Type': 'application/json'}
         if admin_api_key:
             headers['X-API-Key'] = admin_api_key
+            logger.info(f"[PM2] Sending request to {url} with API key")
+        else:
+            logger.error("[PM2] Cannot send request: ADMIN_API_KEY is missing!")
         
         try:
             async with session.post(

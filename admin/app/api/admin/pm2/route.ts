@@ -15,20 +15,42 @@ export async function POST(request: NextRequest) {
     const apiKey = request.headers.get('X-API-Key') || request.headers.get('Authorization')?.replace('Bearer ', '')
     const adminApiKey = process.env.ADMIN_API_KEY
     
+    // Логирование для отладки (только в development)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[PM2 API] Auth check:', {
+        hasAuthToken: !!authToken,
+        hasApiKey: !!apiKey,
+        hasAdminApiKey: !!adminApiKey,
+        apiKeyMatch: apiKey && adminApiKey ? apiKey === adminApiKey : false
+      })
+    }
+    
     // Если есть API ключ и он совпадает с ADMIN_API_KEY - разрешаем доступ
     if (apiKey && adminApiKey && apiKey === adminApiKey) {
       // Доступ разрешен через API ключ
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[PM2 API] Access granted via API key')
+      }
     } else if (authToken) {
       // Проверяем обычную аутентификацию через cookie
       try {
         requireAuth(request)
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[PM2 API] Access granted via auth token')
+        }
       } catch {
+        console.error('[PM2 API] Auth token validation failed')
         return NextResponse.json(
           createApiResponse(null, 'Unauthorized'),
           { status: 401 }
         )
       }
     } else {
+      console.error('[PM2 API] No authentication provided', {
+        hasApiKey: !!apiKey,
+        hasAdminApiKey: !!adminApiKey,
+        hasAuthToken: !!authToken
+      })
       return NextResponse.json(
         createApiResponse(null, 'Unauthorized'),
         { status: 401 }
