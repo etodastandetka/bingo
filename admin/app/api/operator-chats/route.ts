@@ -24,9 +24,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
 
     // ОПТИМИЗАЦИЯ: Ограничиваем количество пользователей для производительности
-    // Получаем только пользователей с недавними сообщениями (за последние 30 дней)
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    // Получаем только пользователей с недавними сообщениями (за последние 7 дней для скорости)
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
     
     const usersWithMessages = await (prisma.chatMessage.groupBy as any)({
       by: ['userId'],
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
         botType: 'operator',
         direction: 'in',
         createdAt: {
-          gte: thirtyDaysAgo, // Только недавние сообщения
+          gte: sevenDaysAgo, // Только недавние сообщения (7 дней)
         },
       },
       _count: {
@@ -43,7 +43,8 @@ export async function GET(request: NextRequest) {
     })
     
     // Ограничиваем количество пользователей после получения (groupBy не поддерживает take)
-    const limitedUsers = usersWithMessages.slice(0, 500)
+    // Уменьшаем до 200 для более быстрой обработки
+    const limitedUsers = usersWithMessages.slice(0, 200)
 
     if (limitedUsers.length === 0) {
       return NextResponse.json(
@@ -93,6 +94,9 @@ export async function GET(request: NextRequest) {
         where: {
           userId: { in: userIdsBigInt },
           botType: 'operator',
+          createdAt: {
+            gte: sevenDaysAgo, // Только сообщения за последние 7 дней
+          },
         },
         select: {
           userId: true,
@@ -104,8 +108,8 @@ export async function GET(request: NextRequest) {
           createdAt: 'desc',
         },
         // Ограничиваем количество сообщений для производительности
-        // Берем только последние 10000 сообщений (это должно покрыть последние сообщения для всех пользователей)
-        take: 10000,
+        // Уменьшаем до 5000 для более быстрой обработки
+        take: 5000,
       }),
     ])
 
@@ -116,33 +120,39 @@ export async function GET(request: NextRequest) {
     
     // ОПТИМИЗАЦИЯ: Обрабатываем сообщения в памяти для получения последних сообщений
     // Группируем по userId и находим последнее сообщение для каждого пользователя
-    const messagesByUser = new Map<string, Array<{ messageText: string; direction: string; createdAt: Date }>>()
-    for (const msg of allMessages) {
-      const userIdStr = msg.userId.toString()
-      if (!messagesByUser.has(userIdStr)) {
-        messagesByUser.set(userIdStr, [])
-      }
-      messagesByUser.get(userIdStr)!.push({
-        messageText: msg.messageText || '',
-        direction: msg.direction,
-        createdAt: msg.createdAt,
-      })
-    }
-    
-    // Получаем последнее сообщение для каждого пользователя
+    // Используем более эффективный подход - проходим один раз и сохраняем только последние сообщения
     const lastMessageMap = new Map<string, { messageText: string; direction: string; createdAt: Date }>()
     const lastOperatorMessagesMap = new Map<string, { createdAt: Date }>()
+    const messagesByUser = new Map<string, Array<{ messageText: string; direction: string; createdAt: Date }>>()
     
-    for (const [userIdStr, messages] of messagesByUser.entries()) {
-      // Последнее сообщение (любое)
-      if (messages.length > 0) {
-        lastMessageMap.set(userIdStr, messages[0]) // Уже отсортированы по createdAt desc
+    // Проходим по сообщениям один раз и сохраняем только последнее сообщение для каждого пользователя
+    for (const msg of allMessages) {
+      const userIdStr = msg.userId.toString()
+      
+      // Сохраняем последнее сообщение (любое)
+      if (!lastMessageMap.has(userIdStr)) {
+        lastMessageMap.set(userIdStr, {
+          messageText: msg.messageText || '',
+          direction: msg.direction,
+          createdAt: msg.createdAt,
+        })
       }
       
-      // Последнее сообщение оператора
-      const lastOpMsg = messages.find(m => m.direction === 'out')
-      if (lastOpMsg) {
-        lastOperatorMessagesMap.set(userIdStr, { createdAt: lastOpMsg.createdAt })
+      // Сохраняем последнее сообщение оператора
+      if (msg.direction === 'out' && !lastOperatorMessagesMap.has(userIdStr)) {
+        lastOperatorMessagesMap.set(userIdStr, { createdAt: msg.createdAt })
+      }
+      
+      // Сохраняем сообщения для подсчета непрочитанных (только входящие)
+      if (msg.direction === 'in') {
+        if (!messagesByUser.has(userIdStr)) {
+          messagesByUser.set(userIdStr, [])
+        }
+        messagesByUser.get(userIdStr)!.push({
+          messageText: msg.messageText || '',
+          direction: msg.direction,
+          createdAt: msg.createdAt,
+        })
       }
     }
 
@@ -267,8 +277,8 @@ export async function GET(request: NextRequest) {
       return new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime()
     })
 
-    // ОПТИМИЗАЦИЯ: Ограничиваем количество возвращаемых чатов (максимум 200)
-    const limitedChats = filteredChats.slice(0, 200)
+    // ОПТИМИЗАЦИЯ: Ограничиваем количество возвращаемых чатов (максимум 100 для скорости)
+    const limitedChats = filteredChats.slice(0, 100)
 
     return NextResponse.json(
       createApiResponse({
