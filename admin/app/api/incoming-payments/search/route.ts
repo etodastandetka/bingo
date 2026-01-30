@@ -79,16 +79,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ОПТИМИЗАЦИЯ: Ограничиваем количество результатов для производительности
-    // Показываем максимум 200 результатов (этого достаточно для большинства случаев)
-    const MAX_RESULTS = 200
-    
-    // Получаем похожие пополнения с лимитом для производительности
-    // Оптимизация: используем select вместо include для уменьшения объема данных
+    // ОПТИМИЗАЦИЯ: Без лимита - показываем все результаты для поиска старых пополнений
+    // Используем select вместо include для уменьшения объема данных
+    // Сортировка выполняется в БД для максимальной производительности
     const payments = await prisma.incomingPayment.findMany({
       where,
-      orderBy: { paymentDate: 'desc' },
-      take: MAX_RESULTS, // Ограничиваем количество результатов
+      // ОПТИМИЗАЦИЯ: Сортируем в БД для лучшей производительности
+      // Если exactAmount=false, сортируем сначала по сумме, затем по дате
+      // Если exactAmount=true, сортируем только по дате
+      orderBy: exactAmount 
+        ? { paymentDate: 'desc' }
+        : [
+            { amount: 'asc' },  // Сначала по сумме (чтобы все 3000.XX были вместе)
+            { paymentDate: 'desc' }  // Затем по дате (новые сначала)
+          ],
+      // БЕЗ ЛИМИТА - показываем все результаты для поиска старых пополнений
       select: {
         id: true,
         amount: true,
@@ -112,30 +117,9 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // ОПТИМИЗАЦИЯ: Сортируем результаты только если нужно
-    // Если exactAmount=false, сортируем результаты: сначала все варианты с разными копейками
-    // Сортируем по сумме (чтобы варианты с разными копейками были вместе), затем по дате
-    let sortedPayments = payments
-    if (!exactAmount && payments.length > 0) {
-      // ОПТИМИЗАЦИЯ: Используем более эффективную сортировку
-      // Создаем массив только один раз
-      sortedPayments = payments.sort((a, b) => {
-        const amountA = parseFloat(a.amount.toString())
-        const amountB = parseFloat(b.amount.toString())
-        // Сначала сортируем по сумме (чтобы все 3000.XX были вместе)
-        if (amountA !== amountB) {
-          return amountA - amountB
-        }
-        // Если суммы равны, сортируем по дате (новые сначала)
-        const dateA = a.paymentDate ? new Date(a.paymentDate).getTime() : 0
-        const dateB = b.paymentDate ? new Date(b.paymentDate).getTime() : 0
-        return dateB - dateA
-      })
-    }
-
     return NextResponse.json(
       createApiResponse({
-        payments: sortedPayments.map(p => ({
+        payments: payments.map(p => ({
           id: p.id,
           amount: p.amount.toString(),
           bank: p.bank,
