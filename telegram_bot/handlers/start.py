@@ -418,3 +418,83 @@ async def main_menu_callback(callback: CallbackQuery, state: FSMContext, bot: Bo
     
     await callback.message.answer(text, reply_markup=keyboard)
 
+@router.callback_query(F.data == 'pm2_stop')
+async def pm2_stop_callback(callback: CallbackQuery, bot: Bot):
+    """Обработка кнопки 'Отключить ботов'"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Проверяем, является ли пользователь админом
+    if callback.from_user.id not in Config.ADMIN_IDS:
+        try:
+            await callback.answer('❌ У вас нет прав для выполнения этого действия', show_alert=True)
+        except:
+            pass
+        return
+    
+    try:
+        await callback.answer('⏳ Выполняется команда pm2 stop all...')
+    except:
+        pass
+    
+    try:
+        result = await APIClient.manage_pm2('stop')
+        
+        if result.get('success'):
+            await callback.message.answer(
+                '✅ Боты успешно отключены!\n\nКоманда: `pm2 stop all`\n\n' + 
+                (f'Вывод:\n```\n{result.get("stdout", "")}\n```' if result.get("stdout") else ''),
+                parse_mode='Markdown'
+            )
+            logger.info(f"[PM2] User {callback.from_user.id} stopped all PM2 processes")
+        else:
+            error_msg = result.get('message', 'Неизвестная ошибка')
+            await callback.message.answer(f'❌ Ошибка при отключении ботов:\n\n{error_msg}')
+            logger.error(f"[PM2] Failed to stop PM2: {error_msg}")
+    except Exception as e:
+        logger.error(f"[PM2] Error stopping PM2: {e}", exc_info=True)
+        try:
+            await callback.message.answer(f'❌ Ошибка при выполнении команды: {str(e)}')
+        except:
+            pass
+
+@router.callback_query(F.data == 'pm2_restart')
+async def pm2_restart_callback(callback: CallbackQuery, bot: Bot):
+    """Обработка кнопки 'Включить ботов'"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Проверяем, является ли пользователь админом
+    if callback.from_user.id not in Config.ADMIN_IDS:
+        try:
+            await callback.answer('❌ У вас нет прав для выполнения этого действия', show_alert=True)
+        except:
+            pass
+        return
+    
+    try:
+        await callback.answer('⏳ Выполняется команда pm2 restart all...')
+    except:
+        pass
+    
+    try:
+        result = await APIClient.manage_pm2('restart')
+        
+        if result.get('success'):
+            await callback.message.answer(
+                '✅ Боты успешно перезапущены!\n\nКоманда: `pm2 restart all`\n\n' + 
+                (f'Вывод:\n```\n{result.get("stdout", "")}\n```' if result.get("stdout") else ''),
+                parse_mode='Markdown'
+            )
+            logger.info(f"[PM2] User {callback.from_user.id} restarted all PM2 processes")
+        else:
+            error_msg = result.get('message', 'Неизвестная ошибка')
+            await callback.message.answer(f'❌ Ошибка при перезапуске ботов:\n\n{error_msg}')
+            logger.error(f"[PM2] Failed to restart PM2: {error_msg}")
+    except Exception as e:
+        logger.error(f"[PM2] Error restarting PM2: {e}", exc_info=True)
+        try:
+            await callback.message.answer(f'❌ Ошибка при выполнении команды: {str(e)}')
+        except:
+            pass
+
