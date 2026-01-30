@@ -22,16 +22,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Список процессов для управления (исключаем админ-бота, чтобы он всегда работал)
+    const processesToManage = [
+      'bingo-admin',
+      'bingo-bot',
+      'bingo-bot-1xbet',
+      'bingo-bot-mostbet',
+      'bingo-email-watcher',
+      'bingo-operator-bot',
+      'bingo-payment'
+    ]
+    
     let command: string
     switch (action) {
       case 'stop':
-        command = 'pm2 stop all'
+        // Останавливаем каждый процесс отдельно, исключая админ-бота
+        command = processesToManage.map(name => `pm2 stop ${name}`).join(' && ')
         break
       case 'restart':
-        command = 'pm2 restart all'
+        // Перезапускаем каждый процесс отдельно, исключая админ-бота
+        command = processesToManage.map(name => `pm2 restart ${name}`).join(' && ')
         break
       case 'start':
-        command = 'pm2 start all'
+        // Запускаем каждый процесс отдельно, исключая админ-бота
+        command = processesToManage.map(name => `pm2 start ${name}`).join(' && ')
         break
       default:
         return NextResponse.json(
