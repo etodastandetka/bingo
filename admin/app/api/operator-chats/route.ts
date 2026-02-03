@@ -23,28 +23,49 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'open' // 'open' или 'closed'
     const search = searchParams.get('search') || ''
 
-    // ОПТИМИЗАЦИЯ: Ограничиваем количество пользователей для производительности
-    // Получаем только пользователей с недавними сообщениями (за последние 7 дней для скорости)
+    // ОПТИМИЗАЦИЯ: Получаем пользователей по последнему сообщению (не по количеству)
+    // Это гарантирует, что новые чаты всегда попадут в список
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
     
-    const usersWithMessages = await (prisma.chatMessage.groupBy as any)({
-      by: ['userId'],
+    // Получаем последние сообщения для каждого пользователя (только входящие)
+    // Используем DISTINCT ON через raw SQL для производительности
+    // Но сначала получаем все уникальные userId с недавними сообщениями
+    const recentMessages = await prisma.chatMessage.findMany({
       where: {
         botType: 'operator',
         direction: 'in',
         createdAt: {
-          gte: sevenDaysAgo, // Только недавние сообщения (7 дней)
+          gte: sevenDaysAgo,
         },
       },
-      _count: {
-        id: true,
+      select: {
+        userId: true,
+        createdAt: true,
       },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      // Увеличиваем лимит для получения всех активных пользователей
+      take: 10000,
     })
     
-    // Ограничиваем количество пользователей после получения (groupBy не поддерживает take)
-    // Уменьшаем до 200 для более быстрой обработки
-    const limitedUsers = usersWithMessages.slice(0, 200)
+    // Группируем по userId и находим последнее сообщение для каждого
+    const userIdToLastMessage = new Map<string, Date>()
+    for (const msg of recentMessages) {
+      const userIdStr = msg.userId.toString()
+      if (!userIdToLastMessage.has(userIdStr)) {
+        userIdToLastMessage.set(userIdStr, msg.createdAt)
+      }
+    }
+    
+    // Сортируем по времени последнего сообщения и берем топ-500 самых активных
+    const sortedUsers = Array.from(userIdToLastMessage.entries())
+      .sort((a, b) => b[1].getTime() - a[1].getTime())
+      .slice(0, 500)
+      .map(([userIdStr]) => ({ userId: BigInt(userIdStr) }))
+    
+    const limitedUsers = sortedUsers
 
     if (limitedUsers.length === 0) {
       return NextResponse.json(
@@ -57,11 +78,11 @@ export async function GET(request: NextRequest) {
     }
 
     const userIds = limitedUsers.map((u: any) => u.userId)
+    const userIdsStr = userIds.map((id: any) => id.toString())
 
     // ОПТИМИЗАЦИЯ: Используем один SQL-запрос с оконными функциями для получения последних сообщений
     // Это намного быстрее чем отдельные запросы для каждого пользователя
-    const userIdsBigInt = userIds.map((id: any) => BigInt(id))
-    const userIdsStr = userIds.map((id: any) => id.toString())
+    const userIdsBigInt = userIds
     
     // Получаем все данные параллельно
     const [chatStatuses, users, allMessages] = await Promise.all([
@@ -201,11 +222,27 @@ export async function GET(request: NextRequest) {
       unreadCountMap.set(userIdStr, unreadCount)
     }
 
+    // Получаем количество сообщений для каждого пользователя
+    const messageCounts = await prisma.chatMessage.groupBy({
+      by: ['userId'],
+      where: {
+        userId: { in: userIdsBigInt },
+        botType: 'operator',
+        direction: 'in',
+      },
+      _count: {
+        id: true,
+      },
+    })
+    
+    const messageCountMap = new Map(
+      messageCounts.map(mc => [mc.userId.toString(), mc._count.id])
+    )
+    
     // Формируем результат
-    const chats = limitedUsers
-      .map((userGroup: any) => {
-        const userId = userGroup.userId
-        const userIdStr = userId.toString()
+    const chats = userIdsStr
+      .map((userIdStr: string) => {
+        const userId = BigInt(userIdStr)
         const isClosed = statusMap.get(userIdStr) || false
 
         // Фильтруем по статусу
@@ -262,7 +299,7 @@ export async function GET(request: NextRequest) {
                 : (lastMessage.createdAt as Date).toISOString())
             : null,
           unreadCount,
-          totalMessages: typeof userGroup._count === 'object' && userGroup._count?.id ? userGroup._count.id : 0,
+          totalMessages: messageCountMap.get(userIdStr) || 0,
           isClosed,
         }
       })
@@ -352,4 +389,5 @@ export async function PATCH(request: NextRequest) {
     )
   }
 }
+
 
