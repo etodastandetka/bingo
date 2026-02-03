@@ -31,6 +31,9 @@ async def save_message_to_db(
     last_name: str = None
 ):
     """Сохранить сообщение в БД через API"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
@@ -58,6 +61,7 @@ async def save_message_to_db(
             # Пробуем сначала локальный API, если не доступен - используем продакшн
             if api_url.startswith('http://localhost'):
                 try:
+                    logger.info(f"📨 Saving message to local API: {api_url}/chat-message, userId={user_id}, direction={direction}")
                     async with session.post(
                         f'{api_url}/chat-message',
                         json=data,
@@ -67,47 +71,78 @@ async def save_message_to_db(
                         content_type = response.headers.get('Content-Type', '')
                         if 'application/json' in content_type:
                             try:
-                                return await response.json()
-                            except Exception:
+                                result = await response.json()
+                                if result.get('success'):
+                                    logger.info(f"✅ Message saved successfully via local API: userId={user_id}")
+                                    return result
+                                else:
+                                    logger.error(f"❌ API returned error: {result.get('message', 'Unknown error')}")
+                                    return None
+                            except Exception as e:
+                                logger.error(f"❌ Error parsing JSON response from local API: {e}")
                                 return None
                         else:
-                            # Если не JSON, возвращаем None (тихая ошибка)
+                            text = await response.text()
+                            logger.error(f"❌ Local API returned non-JSON response (status {response.status}): {text[:200]}")
                             return None
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"⚠️ Local API not available: {e}, trying fallback")
                     from config import Config
                     api_url = Config.API_FALLBACK_URL
             
             try:
+                logger.info(f"📨 Saving message to API: {api_url}/chat-message, userId={user_id}, direction={direction}")
                 async with session.post(
                     f'{api_url}/chat-message',
                     json=data,
-                    timeout=aiohttp.ClientTimeout(total=5)
+                    timeout=aiohttp.ClientTimeout(total=10)
                 ) as response:
                     # Проверяем Content-Type перед парсингом JSON
                     content_type = response.headers.get('Content-Type', '')
                     if 'application/json' in content_type:
                         try:
-                            return await response.json()
-                        except Exception:
+                            result = await response.json()
+                            if result.get('success'):
+                                logger.info(f"✅ Message saved successfully: userId={user_id}")
+                                return result
+                            else:
+                                logger.error(f"❌ API returned error: {result.get('message', 'Unknown error')}")
+                                return None
+                        except Exception as e:
+                            logger.error(f"❌ Error parsing JSON response: {e}")
                             return None
                     else:
-                        # Если не JSON, возвращаем None (тихая ошибка)
+                        text = await response.text()
+                        logger.error(f"❌ API returned non-JSON response (status {response.status}): {text[:200]}")
                         return None
-            except Exception:
-                # При любой ошибке возвращаем None (тихая ошибка)
+            except aiohttp.ClientError as e:
+                logger.error(f"❌ Network error saving message to API {api_url}: {e}")
+                return None
+            except Exception as e:
+                logger.error(f"❌ Unexpected error saving message to API {api_url}: {e}")
                 return None
     except Exception as e:
-        # Тихая обработка ошибок - не логируем, чтобы не засорять логи
+        logger.error(f"❌ Critical error in save_message_to_db: {e}")
         return None
 
 @router.message(F.text)
 async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
     """Обработка текстовых сообщений в чате (автоматически для всех сообщений)"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Проверяем, что пользователь не находится в процессе депозита или вывода
     current_state = await state.get_state()
     if current_state:
-        # Если есть активное состояние (депозит/вывод), не обрабатываем как сообщение чата
-        return
+        # Проверяем, находится ли пользователь в активном состоянии ожидания ввода
+        # Если да - это часть процесса депозита/вывода, игнорируем
+        # Если нет - это может быть обычное сообщение, сохраняем его
+        state_str = str(current_state) if current_state else ''
+        if 'waiting_for' in state_str.lower() or 'deposit' in state_str.lower() or 'withdraw' in state_str.lower():
+            logger.debug(f"⏭️ Skipping chat message - user in active state: {state_str}")
+            return
+        # Если состояние есть, но это не активное ожидание ввода - сохраняем сообщение
+        logger.info(f"💬 Processing chat message despite state: {state_str}")
     
     # Проверяем, что это не команда и не кнопка меню
     text = message.text
@@ -190,7 +225,8 @@ async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
         # Продолжаем работу, если проверка не удалась
     
     # Сохраняем сообщение пользователя в БД
-    await save_message_to_db(
+    logger.info(f"💬 Saving user message: userId={user_id}, text={text[:50]}...")
+    result = await save_message_to_db(
         user_id=user_id,
         message_text=text,
         message_type='text',
@@ -201,14 +237,20 @@ async def chat_message_text(message: Message, state: FSMContext, bot: Bot):
         first_name=message.from_user.first_name,
         last_name=message.from_user.last_name
     )
+    if not result:
+        logger.error(f"❌ Failed to save message to DB: userId={user_id}, text={text[:50]}...")
 
 @router.message(F.photo)
 async def chat_message_photo(message: Message, state: FSMContext, bot: Bot):
     """Обработка фото в чате"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Проверяем, что пользователь не находится в процессе вывода (где требуется фото QR)
     current_state = await state.get_state()
-    if current_state and 'withdraw' in str(current_state).lower():
-        # Если пользователь в процессе вывода, не обрабатываем как сообщение чата
+    if current_state and 'withdraw' in str(current_state).lower() and 'waiting_for_qr' in str(current_state).lower():
+        # Если пользователь в процессе вывода и ожидает QR фото, не обрабатываем как сообщение чата
+        logger.debug(f"⏭️ Skipping photo - user in withdraw QR state: {current_state}")
         return
     
     user_id = message.from_user.id
@@ -219,7 +261,8 @@ async def chat_message_photo(message: Message, state: FSMContext, bot: Bot):
     media_url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
     
     # Сохраняем сообщение пользователя в БД
-    await save_message_to_db(
+    logger.info(f"📷 Saving photo message: userId={user_id}")
+    result = await save_message_to_db(
         user_id=user_id,
         message_text=message.caption,
         message_type='photo',
@@ -231,10 +274,15 @@ async def chat_message_photo(message: Message, state: FSMContext, bot: Bot):
         first_name=message.from_user.first_name,
         last_name=message.from_user.last_name
     )
+    if not result:
+        logger.error(f"❌ Failed to save photo message to DB: userId={user_id}")
 
 @router.message(F.video)
 async def chat_message_video(message: Message, state: FSMContext, bot: Bot):
     """Обработка видео в чате"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     user_id = message.from_user.id
     
     # Получаем URL видео
@@ -243,7 +291,8 @@ async def chat_message_video(message: Message, state: FSMContext, bot: Bot):
     media_url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
     
     # Сохраняем сообщение пользователя в БД
-    await save_message_to_db(
+    logger.info(f"🎥 Saving video message: userId={user_id}")
+    result = await save_message_to_db(
         user_id=user_id,
         message_text=message.caption,
         message_type='video',
@@ -255,4 +304,6 @@ async def chat_message_video(message: Message, state: FSMContext, bot: Bot):
         first_name=message.from_user.first_name,
         last_name=message.from_user.last_name
     )
+    if not result:
+        logger.error(f"❌ Failed to save video message to DB: userId={user_id}")
 
