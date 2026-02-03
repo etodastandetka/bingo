@@ -1,7 +1,7 @@
 'use client'
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -29,6 +29,9 @@ export default function OperatorChatsPage() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [isFetching, setIsFetching] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [photoUrls, setPhotoUrls] = useState<Map<string, string>>(new Map())
+  const [loadingPhotos, setLoadingPhotos] = useState<Set<string>>(new Set())
+  const loadedPhotosRef = useRef<Set<string>>(new Set())
 
   const fetchChats = async (showLoading = false) => {
     // Защита от множественных одновременных запросов
@@ -154,6 +157,54 @@ export default function OperatorChatsPage() {
     // В крайнем случае показываем ID
     return `ID: ${chat.userId}`
   }
+
+  // Загрузка фото профиля для пользователя
+  const loadProfilePhoto = async (userId: string) => {
+    // Если фото уже загружается или загружено, пропускаем
+    if (loadingPhotos.has(userId) || photoUrls.has(userId) || loadedPhotosRef.current.has(userId)) {
+      return
+    }
+
+    setLoadingPhotos(prev => new Set(prev).add(userId))
+
+    try {
+      const response = await fetch(`/api/users/${userId}/profile-photo`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data?.photoUrl) {
+          setPhotoUrls(prev => new Map(prev).set(userId, data.data.photoUrl))
+          loadedPhotosRef.current.add(userId)
+        } else {
+          // Помечаем как загруженное даже если фото нет, чтобы не запрашивать снова
+          loadedPhotosRef.current.add(userId)
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to load photo for user ${userId}:`, error)
+      // Помечаем как загруженное при ошибке, чтобы не повторять запросы
+      loadedPhotosRef.current.add(userId)
+    } finally {
+      setLoadingPhotos(prev => {
+        const next = new Set(prev)
+        next.delete(userId)
+        return next
+      })
+    }
+  }
+
+  // Загружаем фото для всех чатов после загрузки списка
+  useEffect(() => {
+    if (chats.length > 0) {
+      // Загружаем фото для первых 20 чатов сразу, остальные - лениво
+      const chatsToLoad = chats.slice(0, 20)
+      chatsToLoad.forEach(chat => {
+        if (!loadedPhotosRef.current.has(chat.userId)) {
+          loadProfilePhoto(chat.userId)
+        }
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chats.length])
 
   const handleCloseChat = async (e: React.MouseEvent, userId: string) => {
     e.preventDefault()
@@ -310,25 +361,38 @@ export default function OperatorChatsPage() {
                 <div className="flex items-start space-x-3">
                   {/* Аватар с обновлением при изменении */}
                   <div className="relative flex-shrink-0">
-                    {chat.photoUrl ? (
-                      <img
-                        key={`${chat.userId}-${chat.photoUrl}`}
-                        src={chat.photoUrl}
-                        alt={getDisplayName(chat)}
-                        className="w-14 h-14 rounded-full object-cover border-2 border-gray-700"
-                        loading="lazy"
-                        onError={(e) => {
-                          // Скрываем изображение при ошибке загрузки
-                          e.currentTarget.style.display = 'none'
-                        }}
-                      />
-                    ) : (
-                      <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center border-2 border-gray-700 shadow-lg">
-                        <span className="text-white text-lg font-bold">
-                          {getDisplayName(chat).charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                    )}
+                    {(() => {
+                      const photoUrl = photoUrls.get(chat.userId) || chat.photoUrl
+                      // Загружаем фото, если еще не загружено
+                      if (!photoUrl && !loadedPhotosRef.current.has(chat.userId) && !loadingPhotos.has(chat.userId)) {
+                        loadProfilePhoto(chat.userId)
+                      }
+                      
+                      return photoUrl ? (
+                        <img
+                          key={`${chat.userId}-${photoUrl}`}
+                          src={photoUrl}
+                          alt={getDisplayName(chat)}
+                          className="w-14 h-14 rounded-full object-cover border-2 border-gray-700"
+                          loading="lazy"
+                          onError={(e) => {
+                            // При ошибке загрузки удаляем из кеша и показываем инициал
+                            setPhotoUrls(prev => {
+                              const next = new Map(prev)
+                              next.delete(chat.userId)
+                              return next
+                            })
+                            e.currentTarget.style.display = 'none'
+                          }}
+                        />
+                      ) : (
+                        <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center border-2 border-gray-700 shadow-lg">
+                          <span className="text-white text-lg font-bold">
+                            {getDisplayName(chat).charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      )
+                    })()}
                     {/* Индикатор онлайн (можно добавить позже) */}
                     {chat.unreadCount > 0 && (
                       <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-gray-900 flex items-center justify-center">
