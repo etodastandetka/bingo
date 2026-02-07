@@ -22,7 +22,7 @@ module.exports = {
       name: 'bingo-bot',
       cwd: './telegram_bot',
       script: 'bot.py',
-      interpreter: 'python3',
+      interpreter: './venv/bin/python3',
       interpreter_args: '-u',
       env: {
         PYTHONUNBUFFERED: '1'
@@ -40,7 +40,7 @@ module.exports = {
       name: 'bingo-bot-1xbet',
       cwd: './telegram_bot_1xbet',
       script: 'bot.py',
-      interpreter: 'python3',
+      interpreter: './venv/bin/python3',
       interpreter_args: '-u',
       env: {
         PYTHONUNBUFFERED: '1'
@@ -58,7 +58,7 @@ module.exports = {
       name: 'bingo-bot-mostbet',
       cwd: './telegram_bot_mostbet',
       script: 'bot.py',
-      interpreter: 'python3',
+      interpreter: './venv/bin/python3',
       interpreter_args: '-u',
       env: {
         PYTHONUNBUFFERED: '1'
@@ -76,7 +76,7 @@ module.exports = {
       name: 'bingo-payment',
       cwd: './payment_site',
       script: 'gunicorn',
-      interpreter: 'python3',
+      interpreter: './venv/bin/python3',
       interpreter_args: '-u',
       args: '-w 4 -b 0.0.0.0:3002 --timeout 120 --access-logfile - --error-logfile - app:app',
       env: {
@@ -97,7 +97,7 @@ module.exports = {
       name: 'bingo-operator-bot',
       cwd: './telegram_bot',
       script: 'operator_bot.py',
-      interpreter: 'python3',
+      interpreter: './venv/bin/python3',
       interpreter_args: '-u',
       env: {
         PYTHONUNBUFFERED: '1'
@@ -132,9 +132,7 @@ module.exports = {
       name: 'admin-bot',
       cwd: './admin_bot',
       script: 'bot.py',
-      // Используем виртуальное окружение, если оно есть, иначе обычный python3
-      // На сервере путь может быть: /var/www/bingo_bot/admin_bot/venv/bin/python3
-      interpreter: 'python3',
+      interpreter: './venv/bin/python3',
       interpreter_args: '-u',
       env: {
         PYTHONUNBUFFERED: '1'

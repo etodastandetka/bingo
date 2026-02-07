@@ -75,18 +75,25 @@ pm2 delete ecosystem.config.js
 pm2 delete all
 ```
 
-## Настройка admin-bot с виртуальным окружением
+## Виртуальные окружения
 
-Если у вас есть виртуальное окружение для `admin-bot`, обновите путь к интерпретатору в `ecosystem.config.js`:
+Все Python процессы используют виртуальные окружения из своих директорий:
+- `telegram_bot/venv/bin/python3` - для основного бота
+- `telegram_bot_1xbet/venv/bin/python3` - для бота 1xbet
+- `telegram_bot_mostbet/venv/bin/python3` - для бота Mostbet
+- `telegram_bot/venv/bin/python3` - для операторского бота (использует тот же venv)
+- `payment_site/venv/bin/python3` - для сайта оплаты
+- `admin_bot/venv/bin/python3` - для админ-бота
 
-```javascript
-{
-  name: 'admin-bot',
-  cwd: './admin_bot',
-  script: 'bot.py',
-  interpreter: '/var/www/bingo_bot/admin_bot/venv/bin/python3', // Укажите полный путь
-  // ...
-}
+**Важно:** Убедитесь, что виртуальные окружения созданы и зависимости установлены в каждой директории:
+
+```bash
+# Для каждого бота
+cd telegram_bot && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+cd ../telegram_bot_1xbet && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+cd ../telegram_bot_mostbet && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+cd ../payment_site && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+cd ../admin_bot && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
 ```
 
 ## Логи
