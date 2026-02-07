@@ -92,6 +92,61 @@ module.exports = {
       max_memory_restart: '500M',
       instances: 1,
       exec_mode: 'fork'
+    },
+    {
+      name: 'bingo-operator-bot',
+      cwd: './telegram_bot',
+      script: 'operator_bot.py',
+      interpreter: 'python3',
+      interpreter_args: '-u',
+      env: {
+        PYTHONUNBUFFERED: '1'
+      },
+      error_file: './logs/operator-bot-error.log',
+      out_file: './logs/operator-bot-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_memory_restart: '300M',
+      instances: 1,
+      exec_mode: 'fork'
+    },
+    {
+      name: 'bingo-email-watcher',
+      cwd: './admin',
+      script: 'npm',
+      args: 'run start:email-watcher',
+      env: {
+        NODE_ENV: 'production'
+      },
+      error_file: './logs/email-watcher-error.log',
+      out_file: './logs/email-watcher-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_memory_restart: '300M',
+      instances: 1,
+      exec_mode: 'fork'
+    },
+    {
+      name: 'admin-bot',
+      cwd: './admin_bot',
+      script: 'bot.py',
+      // Используем виртуальное окружение, если оно есть, иначе обычный python3
+      // На сервере путь может быть: /var/www/bingo_bot/admin_bot/venv/bin/python3
+      interpreter: 'python3',
+      interpreter_args: '-u',
+      env: {
+        PYTHONUNBUFFERED: '1'
+      },
+      error_file: './logs/admin-bot-error.log',
+      out_file: './logs/admin-bot-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_memory_restart: '200M',
+      instances: 1,
+      exec_mode: 'fork'
     }
   ]
 };
