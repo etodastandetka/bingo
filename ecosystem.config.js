@@ -75,15 +75,13 @@ module.exports = {
     {
       name: 'bingo-payment',
       cwd: './payment_site',
-      script: 'gunicorn',
-      interpreter: 'python3',
-      interpreter_args: '-u',
-      args: '-w 4 -b 0.0.0.0:3002 --timeout 120 --access-logfile - --error-logfile - app:app',
+      script: './venv/bin/python3',
+      args: '-u -m gunicorn -w 4 -b 0.0.0.0:3002 --timeout 120 --access-logfile - --error-logfile - app:app',
+      interpreter: 'none',
       env: {
         FLASK_ENV: 'production',
         PYTHONUNBUFFERED: '1',
-        PYTHONIOENCODING: 'utf-8',
-        PATH: './venv/bin:${PATH}'
+        PYTHONIOENCODING: 'utf-8'
       },
       error_file: './logs/payment-error.log',
       out_file: './logs/payment-out.log',
