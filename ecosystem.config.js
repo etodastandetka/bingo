@@ -77,7 +77,8 @@ module.exports = {
       cwd: './payment_site',
       script: './venv/bin/python3',
       args: '-m gunicorn -w 4 -b 0.0.0.0:3002 --timeout 120 --access-logfile - --error-logfile - app:app',
-      interpreter: 'none',
+      interpreter: './venv/bin/python3',
+      interpreter_args: '-u',
       env: {
         FLASK_ENV: 'production',
         PYTHONUNBUFFERED: '1',
