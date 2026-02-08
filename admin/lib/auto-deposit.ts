@@ -489,8 +489,26 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
   
   console.log(`🎯 [Auto-Deposit] Found ${exactMatches.length} exact match(es) for payment ${paymentId}`)
 
+  // КРИТИЧЕСКАЯ ПРОВЕРКА: Проверяем, не обработан ли уже платеж
+  // Если платеж уже обработан - не обрабатываем никакие заявки
+  const paymentCheck = await prisma.incomingPayment.findUnique({
+    where: { id: paymentId },
+    select: { isProcessed: true, requestId: true },
+  })
+  
+  if (paymentCheck?.isProcessed) {
+    console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} already processed (requestId: ${paymentCheck.requestId}), skipping all ${exactMatches.length} matching requests`)
+    return null
+  }
+
   // Берем самую первую заявку (самую старую по времени создания)
+  // ВАЖНО: Обрабатываем только ОДНУ заявку на платеж
   const request = exactMatches[0]
+  
+  // Если найдено несколько заявок с одинаковой суммой - логируем предупреждение
+  if (exactMatches.length > 1) {
+    console.warn(`⚠️ [Auto-Deposit] WARNING: Found ${exactMatches.length} requests with same amount ${amount} for payment ${paymentId}. Processing only the oldest one (request ${request.id}). Other requests: ${exactMatches.slice(1).map(r => r.id).join(', ')}`)
+  }
   
   // Быстрая проверка обязательных полей
   if (!request.accountId || !request.bookmaker || !request.amount) {
@@ -502,9 +520,9 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
   
   console.log(`💸 [Auto-Deposit] Processing: Request ${request.id}, ${request.bookmaker}, Account ${request.accountId}, Amount ${requestAmount}`)
 
-  // КРИТИЧЕСКАЯ ЗАЩИТА: Блокируем заявку через SELECT FOR UPDATE в транзакции
-  // Это гарантирует, что только ОДИН процесс сможет обработать заявку
-  // Другие процессы будут ждать завершения транзакции и увидят, что заявка уже обработана
+  // КРИТИЧЕСКАЯ ЗАЩИТА: Блокируем И платеж И заявку через SELECT FOR UPDATE в транзакции
+  // Это гарантирует, что только ОДИН процесс сможет обработать платеж и заявку
+  // Другие процессы будут ждать завершения транзакции и увидят, что платеж/заявка уже обработаны
   
   // Retry логика для транзакций при ошибках пула соединений
   const maxRetries = 3
@@ -513,7 +531,30 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const depositResult = await prisma.$transaction(async (tx) => {
-      // Блокируем заявку через SELECT FOR UPDATE - только один процесс может получить блокировку
+      // КРИТИЧЕСКИ ВАЖНО: Сначала блокируем ПЛАТЕЖ через SELECT FOR UPDATE
+      // Это гарантирует, что только ОДИН процесс сможет обработать этот платеж
+      // Если платеж уже обработан - сразу выходим
+      const lockedPayment = await tx.$queryRaw<Array<{ id: number; is_processed: boolean; request_id: number | null }>>`
+        SELECT id, is_processed, request_id 
+        FROM incoming_payments 
+        WHERE id = ${paymentId} 
+        FOR UPDATE
+      `
+      
+      if (!lockedPayment || lockedPayment.length === 0) {
+        console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} not found, skipping`)
+        return { success: false, message: 'Payment not found', skipped: true }
+      }
+      
+      const currentPayment = lockedPayment[0]
+      
+      // Если платеж уже обработан - сразу выходим (другой процесс уже обработал)
+      if (currentPayment.is_processed) {
+        console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} already processed (requestId: ${currentPayment.request_id}), skipping - another process handled it`)
+        return { success: false, message: 'Payment already processed', skipped: true }
+      }
+      
+      // Теперь блокируем заявку через SELECT FOR UPDATE - только один процесс может получить блокировку
       const lockedRequest = await tx.$queryRaw<Array<{ id: number; status: string; processed_by: string | null }>>`
         SELECT id, status, processed_by 
         FROM requests 
@@ -532,17 +573,6 @@ export async function matchAndProcessPayment(paymentId: number, amount: number) 
       if (currentRequest.status !== 'pending' || currentRequest.processed_by === 'автопополнение') {
         console.log(`⚠️ [Auto-Deposit] Request ${request.id} already processed (status: ${currentRequest.status}), skipping - another process handled it`)
         return { success: false, message: 'Request already processed', skipped: true }
-      }
-      
-      // Проверяем, что платеж еще не обработан
-      const currentPayment = await tx.incomingPayment.findUnique({
-        where: { id: paymentId },
-        select: { isProcessed: true },
-      })
-      
-      if (currentPayment?.isProcessed) {
-        console.log(`⚠️ [Auto-Deposit] Payment ${paymentId} already processed, skipping`)
-        return { success: false, message: 'Payment already processed', skipped: true }
       }
       
       // Заявка заблокирована и готова к обработке - вызываем API казино

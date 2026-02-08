@@ -74,8 +74,12 @@ export function getBotTokenByBotType(botType: string | null | undefined): string
   }
 
   // Для основного бота или если botType не указан
-  console.log(`[getBotTokenByBotType] Using main BOT_TOKEN`)
-  return process.env.BOT_TOKEN || null
+  const token = process.env.BOT_TOKEN || null
+  console.log(`[getBotTokenByBotType] Using main BOT_TOKEN: ${token ? 'configured (' + token.substring(0, 10) + '...)' : 'NOT configured'}`)
+  if (!token) {
+    console.error(`❌ [getBotTokenByBotType] BOT_TOKEN is NOT configured in environment variables!`)
+  }
+  return token
 }
 
 /**
@@ -112,8 +116,12 @@ export function getBotTokenByBookmaker(bookmaker: string | null | undefined): st
   }
 
   // Для остальных казино используем основной бот
-  console.log(`[getBotTokenByBookmaker] No match, using main BOT_TOKEN`)
-  return process.env.BOT_TOKEN || null
+  const token = process.env.BOT_TOKEN || null
+  console.log(`[getBotTokenByBookmaker] No match, using main BOT_TOKEN: ${token ? 'configured (' + token.substring(0, 10) + '...)' : 'NOT configured'}`)
+  if (!token) {
+    console.error(`❌ [getBotTokenByBookmaker] BOT_TOKEN is NOT configured in environment variables!`)
+  }
+  return token
 }
 
 /**
@@ -226,7 +234,10 @@ export async function sendNotificationToUser(
       console.log(`[sendNotificationToUser] Using bookmaker: ${bookmaker}`)
     } else {
       botToken = process.env.BOT_TOKEN || null
-      console.log(`[sendNotificationToUser] Using default main bot`)
+      console.log(`[sendNotificationToUser] Using default main bot: ${botToken ? 'configured (' + botToken.substring(0, 10) + '...)' : 'NOT configured'}`)
+      if (!botToken) {
+        console.error(`❌ [sendNotificationToUser] BOT_TOKEN is NOT configured in environment variables!`)
+      }
     }
 
     console.log(`[sendNotificationToUser] botToken: ${botToken ? 'configured' : 'NOT configured'}, bookmaker: ${bookmaker}`)
@@ -575,7 +586,10 @@ export async function sendMessageWithMainMenuButton(
       console.log(`📤 [sendMessageWithMainMenuButton] Using bookmaker: ${bookmaker}`)
     } else {
       botToken = process.env.BOT_TOKEN || null
-      console.log(`📤 [sendMessageWithMainMenuButton] Using default main bot`)
+      console.log(`📤 [sendMessageWithMainMenuButton] Using default main bot: ${botToken ? 'configured (' + botToken.substring(0, 10) + '...)' : 'NOT configured'}`)
+      if (!botToken) {
+        console.error(`❌ [sendMessageWithMainMenuButton] BOT_TOKEN is NOT configured in environment variables!`)
+      }
     }
     
     console.log(`📤 [sendMessageWithMainMenuButton] Bot token: ${botToken ? 'configured (' + botToken.substring(0, 10) + '...)' : 'NOT configured'}`)
@@ -651,9 +665,12 @@ export async function sendMainMenuToUser(
     const botToken = bookmaker ? getBotTokenByBookmaker(bookmaker) : (process.env.BOT_TOKEN || null)
     
     if (!botToken) {
-      console.error('BOT_TOKEN not configured')
+      console.error('❌ [sendMainMenuToUser] BOT_TOKEN not configured')
+      console.error(`❌ [sendMainMenuToUser] BOT_TOKEN from env: ${process.env.BOT_TOKEN ? 'exists' : 'NOT SET'}`)
       return { success: false, error: 'BOT_TOKEN not configured' }
     }
+    
+    console.log(`✅ [sendMainMenuToUser] Using botToken: ${botToken.substring(0, 10)}...`)
     
     // Тексты главного меню
     const greeting = lang === 'ky' ? `Салам, ${firstName}` : `Привет, ${firstName}`
